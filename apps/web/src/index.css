@@ -1,68 +1,94 @@
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --bg:#0b0b0b; --fg:#fff; --muted:#9ca3af; --brand:#0ea5e9;
+  --radius:16px;
+  --tabbar-h: 64px; /* min-højde på bottom nav */
+  --gap: 12px;
+  /* Typografi der skalerer: */
+  --text: clamp(15px, 1.6vw, 16px);
+  --h1: clamp(18px, 4vw, 22px);
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
+html,
+body,
+#root {
+  height: 100%;
 }
 
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+html, body, #root { height: 100%; }
+body { margin:0; background:linear-gradient(135deg,#0ea5e933,#0b0b0b); color:var(--fg);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+  font-size: var(--text);
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  /* undgå utilsigtede back/forward swipes i webview */
+  overscroll-behavior-y: none;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+.app {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  max-width: 430px;               /* iPhone Pro max-ish */
+  margin: 0 auto;                 /* center på bred skærm */
+  background: transparent;
+}
+/* Sikrer at children ikke sprænger telefonbredden */
+.app * { max-width: 100%; box-sizing: border-box; }
+img, video { max-width: 100%; height: auto; display: block; }
+
+.content {
+  padding: 16px;
+  padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 8px);
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
+/* Tabbar – mobilvenlig med safe-area */
+.tabbar {
+  position: sticky;
+  bottom: 0;
+  left: 0; right: 0;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  min-height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  background: #0b0b0bEE;
+  backdrop-filter: blur(6px);
+  border-top: 1px solid #111;
 }
-button:hover {
-  border-color: #646cff;
+.tab {
+  display: grid; place-items: center;
+  min-height: 44px;               /* touch target */
+  border-radius: 12px;
+  text-decoration: none;
+  color: var(--muted);
+  background: #111;
 }
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
+.tab.active { color:#fff; background:#16222a; outline:1px solid #1f2937; }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+/* Page layout */
+.page-header { display:flex; align-items:center; justify-content:space-between; margin: 6px 4px 12px; }
+.page-header h1 { margin:0; font-size: var(--h1); }
+.page-body { display:block; gap: var(--gap); }
+
+/* Auth/Onboarding */
+.auth, .onboarding { padding: 18px; }
+.form { display:grid; gap: 10px; }
+.form input {
+  padding: 14px; border-radius: 12px; border:1px solid #222;
+  background:#0f0f10; color:#fff; font-size: 16px; /* 16px for at undgå iOS zoom */
+}
+.form button, button {
+  padding: 14px 16px; border-radius: 12px; border: 0;
+  background: var(--brand); color:#001018; font-weight: 700;
+}
+button:active, .tab:active { transform: translateY(1px); }
+
+/* Splash */
+.splash { display:grid; place-items:center; height:100dvh; }
+.logo { font-weight:800; font-size: 20px; letter-spacing:.4px; }
+.spinner { margin-top:8px; width:28px; height:28px; border:3px solid #ffffff44; border-top-color: var(--brand); border-radius:50%; animation:spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg) } }
+
+/* Desktop “preview” baggrund uden for telefonens max-width */
+@media (min-width: 800px) {
+  body { background: radial-gradient(60% 60% at 50% 0%, #0b0b0b 0, #050505 100%); }
 }
