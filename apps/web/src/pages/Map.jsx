@@ -1,8 +1,8 @@
-import { Page } from './Home'
-export default function Map() {
+export default function MapPage() {
   return (
-    <Page title="Map">
-      <p>Kort/kanaler i nærheden (placeholder).</p>
-    </Page>
+    <div className="px-5 py-6">
+      
+    </div>
   )
 }
+

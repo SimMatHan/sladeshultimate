@@ -1,23 +1,132 @@
 import { NavLink } from 'react-router-dom'
 
-const Item = ({ to, label }) => (
-  <NavLink
-    to={to}
-    aria-label={label}
-    className={({ isActive }) => 'tab' + (isActive ? ' active' : '')}
-  >
-    {label}
-  </NavLink>
-)
+const tabs = [
+  { to: '/home', label: 'Home', Icon: HomeIcon, end: true },
+  { to: '/leaderboard', label: 'Leaderboard', Icon: TrophyIcon },
+  { to: '/sladesh', label: 'Sladesh', Icon: SparkIcon },
+  { to: '/map', label: 'Map', Icon: MapIcon },
+  { to: '/more', label: 'More', Icon: MenuIcon },
+]
+
+function Item({ to, label, Icon, end }) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      aria-label={label}
+      className={({ isActive }) =>
+        ['tab', isActive ? 'active' : ''].filter(Boolean).join(' ')
+      }
+    >
+      <span className="tab__icon" aria-hidden="true">
+        <Icon className="tab__icon-svg" focusable="false" />
+      </span>
+      <span className="tab__label">{label}</span>
+    </NavLink>
+  )
+}
 
 export default function TabBar() {
   return (
-    <nav className="tabbar">
-      <Item to="/home" label="Home" />
-      <Item to="/leaderboard" label="Score" />
-      <Item to="/sladesh" label="Sladesh" />
-      <Item to="/map" label="Map" />
-      <Item to="/more" label="More" />
+    <nav className="tabbar" aria-label="Primary navigation">
+      <div className="tabbar__container">
+        <div className="tabbar__items">
+          {tabs.map((tab) => (
+            <Item key={tab.to} {...tab} />
+          ))}
+        </div>
+      </div>
     </nav>
+  )
+}
+
+function HomeIcon(props) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M3.5 11 12 4l8.5 7" />
+      <path d="M6.5 12.5v7a1.5 1.5 0 0 0 1.5 1.5H11v-4.5h2V21h3a1.5 1.5 0 0 0 1.5-1.5v-7" />
+    </svg>
+  )
+}
+
+function TrophyIcon(props) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M7 4h10v2.2a4 4 0 0 1-4 4h-2a4 4 0 0 1-4-4V4Z" />
+      <path d="M5 6a3 3 0 0 0 3 3" />
+      <path d="M19 6a3 3 0 0 1-3 3" />
+      <path d="M12 10v4.5" />
+      <path d="M9.5 14.5h5" />
+      <path d="M9 19h6" />
+    </svg>
+  )
+}
+
+function SparkIcon(props) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M12 5.2 13.4 9l4.1 1.2-4.1 1.2L12 15.2 10.6 11.4 6.5 10.2l4.1-1.2Z" />
+      <path d="m7.5 18.5 1.8-1.6" />
+      <path d="m16.5 18.5-1.8-1.6" />
+      <path d="m5.8 6.2 1.6 1.5" />
+      <path d="m18.2 6.2-1.6 1.5" />
+    </svg>
+  )
+}
+
+function MapIcon(props) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="m9 4.5-5.5 2.5v12.5l5.5-2.5L15 19.5l5.5-2.5V4.5L15 7Z" />
+      <path d="M9 4.5v12.5" />
+      <path d="M15 7v12.5" />
+      <path d="m9 9.5 6-2.5" />
+    </svg>
+  )
+}
+
+function MenuIcon(props) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      {...props}
+    >
+      <circle cx="5.5" cy="12" r="1.4" />
+      <circle cx="12" cy="12" r="1.4" />
+      <circle cx="18.5" cy="12" r="1.4" />
+    </svg>
   )
 }

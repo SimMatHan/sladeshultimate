@@ -1,0 +1,78 @@
+/* src/tokens.css */
+/* ==============  DESIGN TOKENS  ================= */
+:root {
+  /* Brand (Airbnb-ish) */
+  --brand: #ff385c;
+  --brand-ink: #ffffff;
+  --brand-rgb: 255 56 92;
+
+  /* Secondary / Accent */
+  --accent: #00a699;          /* “teal” */
+  --accent-ink: #ffffff;
+  --accent-rgb: 0 166 153;
+
+  /* Content */
+  --ink: #222222;
+  --muted: #717171;
+
+  /* Surfaces */
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --subtle: #f7f7f7;
+  --line: #ebebeb;
+
+  /* Status */
+  --success: #10b981;
+  --success-rgb: 16 185 129;
+  --warning: #ff6e3a;
+  --warning-rgb: 255 110 58;
+  --danger: #e11d48;
+  --danger-rgb: 225 29 72;
+
+  /* Radii, spacing, shadow */
+  --radius: 16px;
+  --radius-sm: 10px;
+  --shadow-soft: 0 8px 20px rgba(0,0,0,.08);
+
+  /* Layout tokens */
+  --tabbar-h: 64px;
+
+  /* Typography scale (kan udbygges) */
+  --h1: 20px;
+  --text: 16px;
+}
+
+/* Optional: mørkt tema */
+[data-theme="dark"] {
+  --brand: #ff4f6d;
+  --brand-ink: #0b0b0b;
+  --brand-rgb: 255 79 109;
+
+  --accent: #00b5a5;
+  --accent-ink: #0b0b0b;
+  --accent-rgb: 0 181 165;
+
+  --ink: #f5f5f5;
+  --muted: #bcbcbc;
+
+  --bg: #0b0b0b;
+  --surface: #111111;
+  --subtle: #171717;
+  --line: #242424;
+
+  --success: #34d399;
+  --success-rgb: 52 211 153;
+  --warning: #ff8a57;
+  --warning-rgb: 255 138 87;
+  --danger: #fb7185;
+  --danger-rgb: 251 113 133;
+
+  --shadow-soft: 0 10px 30px rgba(0,0,0,.35);
+}
+
+/* (Valgfrit) følg systemtema første gang */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+  }
+}
