@@ -1,22 +1,26 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 
 const tabs = [
   { to: '/home', label: 'Home', Icon: HomeIcon, end: true },
   { to: '/leaderboard', label: 'Leaderboard', Icon: TrophyIcon },
   { to: '/sladesh', label: 'Sladesh', Icon: SparkIcon },
   { to: '/map', label: 'Map', Icon: MapIcon },
-  { to: '/more', label: 'More', Icon: MenuIcon },
+  { to: '/more', label: 'More', Icon: MenuIcon, additionalActivePaths: ['/manage-channels', '/manage-profile'] },
 ]
 
-function Item({ to, label, Icon, end }) {
+function Item({ to, label, Icon, end, additionalActivePaths = [] }) {
+  const location = useLocation()
+  
   return (
     <NavLink
       to={to}
       end={end}
       aria-label={label}
-      className={({ isActive }) =>
-        ['tab', isActive ? 'active' : ''].filter(Boolean).join(' ')
-      }
+      className={({ isActive }) => {
+        const isAdditionalActive = additionalActivePaths.some(path => location.pathname === path)
+        const shouldBeActive = isActive || isAdditionalActive
+        return ['tab', shouldBeActive ? 'active' : ''].filter(Boolean).join(' ')
+      }}
     >
       <span className="tab__icon" aria-hidden="true">
         <Icon className="tab__icon-svg" focusable="false" />

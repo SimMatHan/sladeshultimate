@@ -254,7 +254,7 @@ export default function Leaderboard() {
     <Page title="Leaderboard">
       <div className="flex h-full min-h-0 flex-col gap-4">
         <div ref={topSectionRef} className="shrink-0 space-y-4 pb-2 pt-1">
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm" style={{ color: 'var(--muted)' }}>
             Følg med i hvem der har tracket flest drinks i Sladesh Crew. Tryk på et kort for at se deres
             seneste aktivitet.
           </p>
@@ -302,8 +302,24 @@ function SortToggle({ options, active, onChange }) {
               type="button"
               onClick={() => onChange(option.id)}
               className={`rounded-2xl px-3 py-2 text-sm font-medium transition ${
-                isActive ? 'bg-white text-[var(--brand)] shadow-sm' : 'text-neutral-500 hover:text-neutral-700'
+                isActive ? 'shadow-sm' : ''
               }`}
+              style={isActive ? {
+                backgroundColor: 'var(--surface)',
+                color: 'var(--brand)'
+              } : {
+                color: 'var(--muted)'
+              }}
+              onMouseEnter={(e) => {
+                if (!isActive) {
+                  e.target.style.color = 'var(--ink)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) {
+                  e.target.style.color = 'var(--muted)';
+                }
+              }}
             >
               {option.label}
             </button>
@@ -325,21 +341,30 @@ function ProfileCard({ profile, rank, onSelect, isActive }) {
       className={`w-full text-left transition ${isActive ? '-translate-y-0.5' : 'hover:-translate-y-0.5'}`}
     >
       <div
-        className={`relative grid grid-cols-[auto_auto_1fr_auto] items-center gap-4 rounded-3xl border border-[var(--line)] bg-white/95 p-4 shadow-sm transition ${
-          isActive ? 'ring-2 ring-[var(--brand)] ring-offset-2 ring-offset-white' : 'hover:shadow-md'
+        className={`relative grid grid-cols-[auto_auto_1fr_auto] items-center gap-4 rounded-3xl border border-[var(--line)] p-4 shadow-sm transition ${
+          isActive ? 'ring-2 ring-[var(--brand)] ring-offset-2' : 'hover:shadow-md'
         }`}
+        style={{
+          backgroundColor: 'var(--surface)',
+        }}
       >
-        <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[color:rgba(0,0,0,0.05)] bg-[var(--subtle)] text-[13px] font-semibold text-neutral-600">
+        <span 
+          className="flex h-10 w-10 items-center justify-center rounded-full border bg-[var(--subtle)] text-[13px] font-semibold"
+          style={{ 
+            borderColor: 'var(--line)',
+            color: 'var(--ink)'
+          }}
+        >
           {rankBadge}
         </span>
 
         <Avatar initials={profile.initials} gradient={profile.avatarGradient} />
 
-        <span className="min-w-0 truncate text-sm font-semibold text-neutral-900">{profile.name}</span>
+        <span className="min-w-0 truncate text-sm font-semibold" style={{ color: 'var(--ink)' }}>{profile.name}</span>
 
         <div className="text-right leading-tight">
-          <span className="block text-base font-semibold text-neutral-900 tabular-nums">{totalFormatted}</span>
-          <span className="block text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Drinks</span>
+          <span className="block text-base font-semibold tabular-nums" style={{ color: 'var(--ink)' }}>{totalFormatted}</span>
+          <span className="block text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>Drinks</span>
         </div>
       </div>
     </button>
@@ -373,16 +398,22 @@ function ProfileDetailSheet({ profile, onClose }) {
 
       <div className="relative z-10 flex w-full max-w-[430px] justify-center">
         <div
-          className={`relative flex h-full w-full flex-col overflow-hidden rounded-b-[32px] bg-white shadow-2xl transition-transform duration-300 ease-out ${
+          className={`relative flex h-full w-full flex-col overflow-hidden rounded-b-[32px] shadow-2xl transition-transform duration-300 ease-out ${
             isVisible ? 'translate-y-0' : '-translate-y-full'
           }`}
-          style={{ height: 'min(88vh, 640px)' }}
+          style={{ 
+            height: 'min(88vh, 640px)',
+            backgroundColor: 'var(--surface)'
+          }}
           onClick={(event) => event.stopPropagation()}
         >
-          <header className="flex items-start justify-between gap-3 border-b border-[var(--line)] bg-white/90 px-6 pb-4 pt-6">
+          <header 
+            className="flex items-start justify-between gap-3 border-b border-[var(--line)] px-6 pb-4 pt-6"
+            style={{ backgroundColor: 'var(--surface)' }}
+          >
             <div>
-              <h2 className="text-lg font-semibold text-neutral-900">{profile.name}</h2>
-              <p className="text-sm text-neutral-500">
+              <h2 className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>{profile.name}</h2>
+              <p className="text-sm" style={{ color: 'var(--muted)' }}>
                 {profile.totalDrinks.toLocaleString('da-DK')} drinks totalt · {profile.weeklyAverage} pr. uge ·{' '}
                 {profile.streakDays} dages streak
               </p>
@@ -391,7 +422,18 @@ function ProfileDetailSheet({ profile, onClose }) {
               type="button"
               aria-label="Luk detaljer"
               onClick={onClose}
-              className="rounded-full border border-transparent p-2 text-xl leading-none text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-600"
+              className="rounded-full border border-transparent p-2 text-xl leading-none transition"
+              style={{ 
+                color: 'var(--muted)'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.backgroundColor = 'var(--subtle)';
+                e.target.style.color = 'var(--ink)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.backgroundColor = 'transparent';
+                e.target.style.color = 'var(--muted)';
+              }}
             >
               ×
             </button>
@@ -399,20 +441,20 @@ function ProfileDetailSheet({ profile, onClose }) {
 
           <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
             <section className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Fordeling af drinks</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>Fordeling af drinks</h3>
               <ul className="space-y-3">
                 {profile.drinkBreakdown.map((item) => {
                   const percentage = breakdownTotal ? Math.round((item.count / breakdownTotal) * 100) : 0;
                   return (
                     <li key={item.id} className="rounded-2xl border border-[var(--line)] bg-[var(--subtle)] p-3">
-                      <div className="flex items-center justify-between text-sm font-medium text-neutral-700">
+                      <div className="flex items-center justify-between text-sm font-medium" style={{ color: 'var(--ink)' }}>
                         <span>{item.label}</span>
                         <span>{item.count}</span>
                       </div>
-                      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/60">
+                      <div className="mt-2 h-2 w-full overflow-hidden rounded-full" style={{ backgroundColor: 'var(--line)' }}>
                         <div className="h-full rounded-full bg-[var(--brand)]" style={{ width: `${percentage}%` }} />
                       </div>
-                      <p className="mt-1 text-xs text-neutral-500">{percentage}% af trackede drinks</p>
+                      <p className="mt-1 text-xs" style={{ color: 'var(--muted)' }}>{percentage}% af trackede drinks</p>
                     </li>
                   );
                 })}
@@ -420,26 +462,34 @@ function ProfileDetailSheet({ profile, onClose }) {
             </section>
 
             <section className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Seneste aktivitet</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>Seneste aktivitet</h3>
               <ul className="space-y-2">
                 {profile.recentDrinks.map((item) => (
                   <li
                     key={item.id}
-                    className="flex items-center justify-between rounded-2xl border border-[var(--line)] bg-white px-3 py-2"
+                    className="flex items-center justify-between rounded-2xl border border-[var(--line)] px-3 py-2"
+                    style={{ backgroundColor: 'var(--surface)' }}
                   >
-                    <span className="text-sm text-neutral-700">{item.label}</span>
-                    <span className="text-xs text-neutral-500">{item.timestamp}</span>
+                    <span className="text-sm" style={{ color: 'var(--ink)' }}>{item.label}</span>
+                    <span className="text-xs" style={{ color: 'var(--muted)' }}>{item.timestamp}</span>
                   </li>
                 ))}
               </ul>
             </section>
           </div>
 
-          <div className="border-t border-[var(--line)] bg-white/90 px-6 py-5">
+          <div 
+            className="border-t border-[var(--line)] px-6 py-5"
+            style={{ backgroundColor: 'var(--surface)' }}
+          >
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex w-full justify-center rounded-2xl bg-[var(--brand)] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+              className="inline-flex w-full justify-center rounded-2xl px-4 py-3 text-sm font-semibold shadow-sm transition hover:opacity-90"
+              style={{ 
+                backgroundColor: 'var(--brand)',
+                color: 'var(--brand-ink)'
+              }}
             >
               Luk
             </button>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Card from "../components/Card";
+import { useLocation } from "../contexts/LocationContext";
 
 const CATEGORIES = [
   { id: "beer", name: "Beer", icon: "🍺" },
@@ -107,7 +108,7 @@ function Countdown({ target, onExpire }) {
   const pad = (value) => value.toString().padStart(2, "0");
 
   return (
-    <div className="mt-3 flex items-center gap-2 text-[11px] uppercase tracking-wide text-emerald-600">
+    <div className="mt-3 flex items-center gap-2 text-[11px] uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
       <span>
         Resets in {pad(hours)}:{pad(minutes)}:{pad(seconds)}
@@ -117,6 +118,7 @@ function Countdown({ target, onExpire }) {
 }
 
 export default function Home() {
+  const { updateLocation } = useLocation();
   const [checkedIn, setCheckedIn] = useState(false);
   const [expiresAt, setExpiresAt] = useState(null);
   const [selected, setSelected] = useState("beer");
@@ -201,6 +203,12 @@ export default function Home() {
       const current = category[variantName] ?? 0;
       const next = Math.max(0, current + delta);
       if (next === current) return prev;
+      
+      // Track location when beverage count changes (only when adding, not removing)
+      if (delta > 0) {
+        updateLocation();
+      }
+      
       return {
         ...prev,
         [catId]: {
@@ -286,18 +294,18 @@ export default function Home() {
   }, [sheetFor]);
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-white">
-      <div className="flex flex-1 flex-col overflow-x-hidden overflow-y-hidden bg-white pt-3 pb-6">
+    <div className="mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden" style={{ backgroundColor: 'var(--bg)' }}>
+      <div className="flex flex-1 flex-col overflow-x-hidden overflow-y-hidden pt-3 pb-6" style={{ backgroundColor: 'var(--bg)' }}>
         {/* Header */}
         <div className="px-4 space-y-4">
           <div className="grid grid-cols-2 gap-6">
             <Card
               bare
-              className={`px-5 py-4 transition-colors ${
-                checkedIn
-                  ? "border-[color:rgba(16,185,129,0.6)] bg-[color:color-mix(in_srgb,rgb(16,185,129)_12%,#fff_88%)]"
-                  : ""
-              }`}
+              className="px-5 py-4 transition-colors"
+              style={checkedIn ? {
+                borderColor: 'rgba(16,185,129,0.6)',
+                backgroundColor: 'color-mix(in srgb, rgb(16,185,129) 12%, var(--surface) 88%)'
+              } : {}}
               role="button"
               tabIndex={0}
               onClick={() => {
@@ -306,6 +314,8 @@ export default function Home() {
                     setExpiresAt(null);
                     return false;
                   }
+                  // Track location when checking in
+                  updateLocation();
                   setExpiresAt(computeMidnight());
                   return true;
                 });
@@ -318,19 +328,21 @@ export default function Home() {
                       setExpiresAt(null);
                       return false;
                     }
+                    // Track location when checking in
+                    updateLocation();
                     setExpiresAt(computeMidnight());
                     return true;
                   });
                 }
               }}
             >
-              <div className="text-xs font-medium uppercase tracking-wide text-neutral-400">
+              <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
                 Check-in status
               </div>
               <div
                 className={`mt-2 flex items-center gap-2 text-sm font-semibold ${
                   checkedIn
-                    ? "text-emerald-600"
+                    ? "text-emerald-600 dark:text-emerald-400"
                     : "text-[color:var(--brand,#FF385C)]"
                 }`}
               >
@@ -343,9 +355,9 @@ export default function Home() {
                 />
                 {checkedIn ? "Checked in" : "Not checked in"}
               </div>
-              <p className="mt-3 text-xs leading-relaxed text-neutral-500">
+              <p className="mt-3 text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
                 {checkedIn
-                  ? "Great! You’re checked in."
+                  ? "Great! You're checked in."
                   : "Tap to check in when you arrive."}
               </p>
               {checkedIn && expiresAt && (
@@ -360,16 +372,16 @@ export default function Home() {
             </Card>
 
             <Card bare className="px-5 py-4">
-              <div className="text-xs font-medium uppercase tracking-wide text-neutral-400">
+              <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
                 Drinks logged
               </div>
               <div className="mt-2 flex items-end gap-2">
-                <span className="text-3xl font-semibold text-neutral-900">{total}</span>
-                <span className="pb-1 text-xs uppercase tracking-wide text-neutral-400">
+                <span className="text-3xl font-semibold" style={{ color: 'var(--ink)' }}>{total}</span>
+                <span className="pb-1 text-xs uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
                   total
                 </span>
               </div>
-              <p className="mt-3 text-xs leading-relaxed text-neutral-500">
+              <p className="mt-3 text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
                 Track each variation with the drink selector below.
               </p>
             </Card>
@@ -416,10 +428,10 @@ export default function Home() {
 
           {/* Titel + subtitel + progress-dots */}
           <div className="px-6">
-            <div className="flex items-center gap-2 text-lg font-semibold">
+            <div className="flex items-center gap-2 text-lg font-semibold" style={{ color: 'var(--ink)' }}>
               <span>{selectedCat.name}</span>
             </div>
-            <div className="text-xs text-neutral-500">Select your drink</div>
+            <div className="text-xs" style={{ color: 'var(--muted)' }}>Select your drink</div>
             <div className="mt-4 flex justify-center gap-2">
               {CATEGORIES.map((cat) => (
                 <span
@@ -427,8 +439,9 @@ export default function Home() {
                   className={`h-2 rounded-full transition-all duration-200 ${
                     cat.id === selected
                       ? "w-7 bg-[color:var(--brand,#FF385C)]"
-                      : "w-2 bg-neutral-300"
+                      : "w-2"
                   }`}
+                  style={cat.id !== selected ? { backgroundColor: 'var(--line)' } : {}}
                 />
               ))}
             </div>
@@ -445,28 +458,31 @@ export default function Home() {
             />
             <div className="relative z-50 w-full">
               <div
-                className={`relative rounded-t-[32px] bg-white shadow-2xl transition-transform duration-300 ease-out ${
+                className={`relative rounded-t-[32px] shadow-2xl transition-transform duration-300 ease-out ${
                   isSheetVisible ? "translate-y-0" : "translate-y-full"
                 }`}
-                style={{ height: "75vh" }}
+                style={{ height: "75vh", backgroundColor: 'var(--surface)' }}
               >
                 <button
                   type="button"
                   onClick={closeSheet}
-                  className="absolute right-6 top-6 text-2xl text-neutral-400 transition-colors hover:text-neutral-600"
+                  className="absolute right-6 top-6 text-2xl transition-colors"
+                  style={{ color: 'var(--muted)' }}
+                  onMouseEnter={(e) => e.target.style.color = 'var(--ink)'}
+                  onMouseLeave={(e) => e.target.style.color = 'var(--muted)'}
                   aria-label="Close"
                 >
                   ×
                 </button>
                 <div className="h-full overflow-hidden pt-6">
                   <div className="px-6">
-                    <div className="flex items-center gap-2 text-lg font-semibold">
+                    <div className="flex items-center gap-2 text-lg font-semibold" style={{ color: 'var(--ink)' }}>
                       <span className="text-2xl leading-none">
                         {sheetCat?.icon ?? "🍹"}
                       </span>
                       <span>{sheetCat?.name ?? "Drinks"}</span>
                     </div>
-                    <div className="text-xs text-neutral-500">
+                    <div className="text-xs" style={{ color: 'var(--muted)' }}>
                       Pick your favourite variation
                     </div>
                   </div>
@@ -477,14 +493,18 @@ export default function Home() {
                         return (
                           <div
                             key={item.name}
-                            className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4 shadow-sm"
+                            className="rounded-2xl border p-4 shadow-sm"
+                            style={{ 
+                              borderColor: 'var(--line)',
+                              backgroundColor: 'var(--subtle)'
+                            }}
                           >
                             <div className="flex items-center justify-between gap-4">
                               <div>
-                                <div className="text-sm font-semibold text-neutral-800">
+                                <div className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
                                   {item.name}
                                 </div>
-                                <div className="mt-1 text-xs text-neutral-500">
+                                <div className="mt-1 text-xs" style={{ color: 'var(--muted)' }}>
                                   {item.description}
                                 </div>
                               </div>
@@ -493,18 +513,26 @@ export default function Home() {
                                   type="button"
                                   onClick={() => adjustVariantCount(sheetFor, item.name, -1)}
                                   disabled={count === 0}
-                                  className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-200 text-base font-semibold text-neutral-600 disabled:opacity-40"
+                                  className="flex h-9 w-9 items-center justify-center rounded-full text-base font-semibold disabled:opacity-40"
+                                  style={{ 
+                                    backgroundColor: 'var(--line)',
+                                    color: 'var(--ink)'
+                                  }}
                                   aria-label={`Remove one ${item.name}`}
                                 >
                                   &minus;
                                 </button>
-                                <span className="min-w-[28px] text-center text-base font-semibold text-neutral-800">
+                                <span className="min-w-[28px] text-center text-base font-semibold" style={{ color: 'var(--ink)' }}>
                                   {count}
                                 </span>
                                 <button
                                   type="button"
                                   onClick={() => adjustVariantCount(sheetFor, item.name, 1)}
-                                  className="flex h-9 w-9 items-center justify-center rounded-full bg-[color:var(--brand,#FF385C)] text-base font-semibold text-[color:var(--brand-ink,#fff)]"
+                                  className="flex h-9 w-9 items-center justify-center rounded-full text-base font-semibold"
+                                  style={{ 
+                                    backgroundColor: 'var(--brand)',
+                                    color: 'var(--brand-ink)'
+                                  }}
                                   aria-label={`Add one ${item.name}`}
                                 >
                                   +
@@ -515,7 +543,13 @@ export default function Home() {
                         );
                       })}
                       {sheetItems.length === 0 && (
-                        <div className="rounded-2xl border border-dashed border-neutral-300 p-4 text-center text-sm text-neutral-500">
+                        <div 
+                          className="rounded-2xl border border-dashed p-4 text-center text-sm"
+                          style={{ 
+                            borderColor: 'var(--line)',
+                            color: 'var(--muted)'
+                          }}
+                        >
                           Variations coming soon.
                         </div>
                       )}

@@ -8,11 +8,20 @@ export default function Card({
   ...props
 }) {
   const baseClasses = bare
-    ? "rounded-[28px] border border-neutral-200 bg-white"
-    : "rounded-[28px] border border-neutral-200 bg-white shadow-[0_20px_40px_rgba(15,23,42,0.05)]";
+    ? "rounded-[28px] border"
+    : "rounded-[28px] border shadow-[0_20px_40px_rgba(15,23,42,0.05)]";
+
+  const baseStyles = {
+    borderColor: 'var(--line)',
+    backgroundColor: 'var(--surface)',
+  };
 
   return (
-    <Component className={`${baseClasses} ${className}`} {...props}>
+    <Component 
+      className={`${baseClasses} ${className}`} 
+      style={{ ...baseStyles, ...props.style }}
+      {...props}
+    >
       {children}
     </Component>
   );

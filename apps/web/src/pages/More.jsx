@@ -32,15 +32,18 @@ function ActionCard({
           <span className="text-2xl">{icon}</span>
         </div>
         <div className="space-y-1.5">
-          <div className="text-xs font-medium uppercase tracking-wide text-neutral-400">
+          <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
             {actionLabel}
           </div>
-          <div className="text-base font-semibold text-neutral-900">{title}</div>
-          <p className="text-sm leading-relaxed text-neutral-500">{description}</p>
+          <div className="text-base font-semibold" style={{ color: 'var(--ink)' }}>{title}</div>
+          <p className="text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>{description}</p>
         </div>
       </div>
       <svg
-        className="mt-1 h-5 w-5 shrink-0 text-neutral-400 transition-colors group-hover:text-neutral-600"
+        className="mt-1 h-5 w-5 shrink-0 transition-colors"
+        style={{ color: 'var(--muted)' }}
+        onMouseEnter={(e) => e.target.style.color = 'var(--ink)'}
+        onMouseLeave={(e) => e.target.style.color = 'var(--muted)'}
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -113,7 +116,7 @@ export default function More() {
         </div>
 
         <div className="space-y-3">
-          <div className="text-xs font-medium uppercase tracking-wide text-neutral-400">
+          <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
             Account
           </div>
           <ActionCard

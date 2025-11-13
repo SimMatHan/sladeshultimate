@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
 import Card from "../components/Card";
 import Page from "../components/Page";
+import { useLocation } from "../contexts/LocationContext";
+import { useTheme } from "../contexts/ThemeContext";
 
 const PARTICIPANTS = [
   {
@@ -96,9 +98,12 @@ export default function Sladesh() {
           </div>
         </div>
 
-        <Card className="w-full max-w-[420px] border border-neutral-100/70 bg-white/70 p-5 text-center backdrop-blur-sm">
-          <h2 className="text-base font-semibold text-neutral-900">Vælg en deltager</h2>
-          <p className="mt-2 text-sm leading-relaxed text-neutral-500">
+        <Card className="w-full max-w-[420px] p-5 text-center backdrop-blur-sm" style={{ 
+          borderColor: 'color-mix(in srgb, var(--line) 70%, transparent)',
+          backgroundColor: 'color-mix(in srgb, var(--surface) 70%, transparent)'
+        }}>
+          <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>Vælg en deltager</h2>
+          <p className="mt-2 text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
             Profilbillederne svæver omkring dig. Tryk på én af dem for at åbne en request og sende
             din næste challenge.
           </p>
@@ -116,22 +121,53 @@ export default function Sladesh() {
 }
 
 function OrbitBackdrop() {
+  // Enhanced brand color intensity for dark mode
+  const { isDarkMode } = useTheme();
+  
+  const brandOpacity1 = isDarkMode ? 0.65 : 0.28;
+  const brandOpacity2 = isDarkMode ? 0.55 : 0.24;
+  const brandOpacity3 = isDarkMode ? 0.45 : 0.18;
+  const surfaceOpacity = isDarkMode ? 0.3 : 0.85;
+  
   const ringStyle = {
     background:
-      "conic-gradient(from -90deg, rgba(var(--brand-rgb) / 0.28) 0deg, rgba(var(--brand-rgb) / 0.24) 150deg, rgba(255 255 255 / 0.85) 240deg, rgba(var(--brand-rgb) / 0.18) 330deg, rgba(var(--brand-rgb) / 0.28) 360deg)",
+      `conic-gradient(from -90deg, rgba(var(--brand-rgb) / ${brandOpacity1}) 0deg, rgba(var(--brand-rgb) / ${brandOpacity2}) 150deg, color-mix(in srgb, var(--surface) ${surfaceOpacity}%, transparent) 240deg, rgba(var(--brand-rgb) / ${brandOpacity3}) 330deg, rgba(var(--brand-rgb) / ${brandOpacity1}) 360deg)`,
     mask: "radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 4px))",
     WebkitMask:
       "radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 4px))",
+    filter: isDarkMode ? 'drop-shadow(0 0 20px rgba(var(--brand-rgb) / 0.4)) drop-shadow(0 0 40px rgba(var(--brand-rgb) / 0.2))' : 'none',
   };
 
   return (
     <>
-      <div className="pointer-events-none absolute left-1/2 top-1/2 h-[320px] w-[320px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/80 shadow-[0_40px_80px_rgba(15,23,42,0.12)]" />
+      {/* Outer glow layer for dark mode */}
+      {isDarkMode && (
+        <div 
+          className="pointer-events-none absolute left-1/2 top-1/2 h-[340px] w-[340px] -translate-x-1/2 -translate-y-1/2 rounded-full"
+          style={{
+            background: `radial-gradient(circle, rgba(var(--brand-rgb) / 0.15) 0%, transparent 70%)`,
+            filter: 'blur(20px)',
+          }}
+        />
+      )}
+      <div 
+        className="pointer-events-none absolute left-1/2 top-1/2 h-[320px] w-[320px] -translate-x-1/2 -translate-y-1/2 rounded-full shadow-[0_40px_80px_rgba(15,23,42,0.12)]" 
+        style={{ backgroundColor: 'color-mix(in srgb, var(--surface) 80%, transparent)' }}
+      />
       <div
         className="pointer-events-none absolute left-1/2 top-1/2 h-[320px] w-[320px] -translate-x-1/2 -translate-y-1/2 rounded-full"
         style={ringStyle}
       />
-      <div className="pointer-events-none absolute left-1/2 top-1/2 h-[180px] w-[180px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/60 bg-white/40 backdrop-blur-sm" />
+      <div 
+        className="pointer-events-none absolute left-1/2 top-1/2 h-[180px] w-[180px] -translate-x-1/2 -translate-y-1/2 rounded-full border backdrop-blur-sm" 
+        style={{ 
+          borderColor: 'color-mix(in srgb, var(--surface) 60%, transparent)',
+          backgroundColor: 'color-mix(in srgb, var(--surface) 40%, transparent)',
+          ...(isDarkMode ? {
+            boxShadow: `0 0 30px rgba(var(--brand-rgb) / 0.3), inset 0 0 20px rgba(var(--brand-rgb) / 0.1)`
+          } : {})
+        }}
+      />
     </>
   );
 }
@@ -146,10 +182,10 @@ function OrbitAvatar({ participant, onSelect }) {
       <button
         type="button"
         onClick={() => onSelect(participant)}
-        className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2 text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+        className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2 text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
       >
         <AvatarBadge participant={participant} size={size} textSize={textSize} />
-        <span className="text-xs font-medium text-neutral-600 drop-shadow-sm">
+        <span className="text-xs font-medium drop-shadow-sm" style={{ color: 'var(--ink)' }}>
           {participant.name}
         </span>
       </button>
@@ -172,10 +208,10 @@ function OrbitAvatar({ participant, onSelect }) {
         <button
           type="button"
           onClick={() => onSelect(participant)}
-          className="orbit-item__payload focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+          className="orbit-item__payload focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
         >
           <AvatarBadge participant={participant} size={size} textSize={textSize} />
-          <span className="text-xs font-medium text-neutral-600 drop-shadow-sm">
+          <span className="text-xs font-medium drop-shadow-sm" style={{ color: 'var(--ink)' }}>
             {participant.name}
           </span>
         </button>
@@ -195,17 +231,29 @@ function AvatarBadge({ participant, size = "h-16 w-16", textSize = "text-lg" }) 
 }
 
 function RequestOverlay({ participant, onClose }) {
+  const { updateLocation } = useLocation();
   const firstName = participant.name.split(" ")[0] ?? participant.name;
+  
+  const handleSendSladesh = () => {
+    // Track location when sending sladesh
+    updateLocation();
+    // TODO: Implement actual sladesh sending functionality
+    console.log(`Sending sladesh to ${participant.name}`);
+    onClose();
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B1120]/60 px-6 py-8 backdrop-blur-sm">
-      <div className="w-full max-w-[360px] rounded-[28px] bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.25)]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-6 py-8 backdrop-blur-sm" style={{ backgroundColor: 'rgba(11, 17, 32, 0.6)' }}>
+      <div 
+        className="w-full max-w-[360px] rounded-[28px] p-6 shadow-[0_24px_60px_rgba(15,23,42,0.25)]"
+        style={{ backgroundColor: 'var(--surface)' }}
+      >
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             <OverlayAvatar participant={participant} />
             <div>
-              <h3 className="text-sm font-semibold text-neutral-900">{participant.name}</h3>
-              <p className="text-xs text-neutral-500">
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>{participant.name}</h3>
+              <p className="text-xs" style={{ color: 'var(--muted)' }}>
                 Får en notifikation med din request og har 10 minutter til at svare.
               </p>
             </div>
@@ -213,11 +261,18 @@ function RequestOverlay({ participant, onClose }) {
         </div>
 
         <div className="mt-5 space-y-4">
-          <div className="rounded-2xl border border-neutral-100 bg-neutral-50 px-4 py-3 text-xs leading-relaxed text-neutral-500">
-            <span className="font-semibold text-neutral-800">10 minutter:</span> Vi giver dig besked,
+          <div 
+            className="rounded-2xl border px-4 py-3 text-xs leading-relaxed"
+            style={{ 
+              borderColor: 'var(--line)',
+              backgroundColor: 'var(--subtle)',
+              color: 'var(--muted)'
+            }}
+          >
+            <span className="font-semibold" style={{ color: 'var(--ink)' }}>10 minutter:</span> Vi giver dig besked,
             så snart {firstName} bekræfter – eller hvis tiden løber ud.
           </div>
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm" style={{ color: 'var(--muted)' }}>
             Du sender kun en sladesh request. Ingen ekstra besked – bare ren udfordring.
           </p>
         </div>
@@ -225,14 +280,31 @@ function RequestOverlay({ participant, onClose }) {
         <div className="mt-6 flex flex-wrap gap-3">
           <button
             type="button"
-            className="inline-flex flex-1 min-w-[140px] items-center justify-center rounded-2xl bg-brand px-4 py-3 text-sm font-semibold text-white shadow-soft transition active:translate-y-[1px] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+            onClick={handleSendSladesh}
+            className="inline-flex flex-1 min-w-[140px] items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold shadow-soft transition active:translate-y-[1px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+            style={{ 
+              backgroundColor: 'var(--brand)',
+              color: 'var(--brand-ink)',
+            }}
           >
             Send sladesh
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center justify-center rounded-2xl border border-neutral-200 px-4 py-3 text-sm font-semibold text-neutral-600 transition hover:border-neutral-300 hover:text-neutral-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-300 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+            className="inline-flex items-center justify-center rounded-2xl border px-4 py-3 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--line)] focus-visible:ring-offset-2"
+            style={{ 
+              borderColor: 'var(--line)',
+              color: 'var(--ink)',
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.borderColor = 'var(--line)';
+              e.target.style.color = 'var(--ink)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.borderColor = 'var(--line)';
+              e.target.style.color = 'var(--ink)';
+            }}
           >
             Luk
           </button>
@@ -244,7 +316,14 @@ function RequestOverlay({ participant, onClose }) {
 
 function OverlayAvatar({ participant }) {
   return (
-    <span className="relative inline-flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 text-neutral-400 ring-2 ring-white shadow-[0_14px_30px_rgba(15,23,42,0.16)] overflow-hidden">
+    <span 
+      className="relative inline-flex h-12 w-12 items-center justify-center rounded-full ring-2 shadow-[0_14px_30px_rgba(15,23,42,0.16)] overflow-hidden"
+      style={{ 
+        backgroundColor: 'var(--subtle)',
+        color: 'var(--muted)',
+        '--tw-ring-color': 'var(--surface)'
+      }}
+    >
       <svg
         width="26"
         height="26"
