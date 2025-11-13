@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Sheet from "./Sheet";
+import { useChannel } from "../hooks/useChannel";
+import { USE_MOCK_DATA } from "../config/env";
 
 const DEFAULT_NOTIFICATIONS = [
   {
@@ -66,11 +68,75 @@ function OverlayPanel({ open, onClose, title, description, items }) {
   );
 }
 
+function ChannelPickerSheet({ open, onClose, channels, selectedChannel, onSelectChannel }) {
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      position="top"
+      title="Select Channel"
+      description="Choose a channel to filter content"
+      height="min(60vh, 400px)"
+      animationDuration={300}
+    >
+      {channels.length > 0 ? (
+        <ul className="divide-y divide-neutral-100">
+          {channels.map((channel) => (
+            <li key={channel.id}>
+              <button
+                type="button"
+                onClick={() => onSelectChannel(channel.id)}
+                className={`w-full py-4 text-left transition-colors ${
+                  selectedChannel?.id === channel.id
+                    ? 'bg-neutral-50'
+                    : 'hover:bg-neutral-50'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-neutral-900">
+                      {channel.name}
+                    </div>
+                    {channel.isDefault && (
+                      <div className="mt-1 text-xs text-neutral-500">
+                        Default channel
+                      </div>
+                    )}
+                  </div>
+                  {selectedChannel?.id === channel.id && (
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="text-[color:var(--brand,#FF385C)]"
+                    >
+                      <path d="M20 6L9 17l-5-5" />
+                    </svg>
+                  )}
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="py-10 text-center text-xs text-neutral-500">
+          No channels available
+        </div>
+      )}
+    </Sheet>
+  );
+}
+
 export default function TopBar({
   subtitle,
   title,
-  notifications = DEFAULT_NOTIFICATIONS,
-  messages = DEFAULT_MESSAGES,
+  notifications: propNotifications,
+  messages: propMessages,
   onProfileClick,
   actions,
   className = "",
@@ -79,11 +145,23 @@ export default function TopBar({
   const location = useLocation();
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [messageOpen, setMessageOpen] = useState(false);
+  const [channelPickerOpen, setChannelPickerOpen] = useState(false);
+  const { selectedChannel, setSelectedChannel, channels, loading: channelsLoading } = useChannel();
+  
+  // Use mock data in development, empty arrays in production (unless explicitly provided)
+  const notifications = USE_MOCK_DATA 
+    ? (propNotifications ?? DEFAULT_NOTIFICATIONS)
+    : (propNotifications ?? []);
+  const messages = USE_MOCK_DATA
+    ? (propMessages ?? DEFAULT_MESSAGES)
+    : (propMessages ?? []);
 
   useEffect(() => {
     setNotificationOpen(false);
     setMessageOpen(false);
+    setChannelPickerOpen(false);
   }, [location.pathname]);
+
 
   const handleProfileClick =
     onProfileClick ??
@@ -92,11 +170,12 @@ export default function TopBar({
     });
 
   return (
-    <div className={`flex items-center gap-3 ${className}`}>
+    <div className={`flex items-center gap-3 h-12 ${className}`}>
       <button
         type="button"
         onClick={handleProfileClick}
-        className="grid h-12 w-12 place-items-center rounded-2xl border border-neutral-200 bg-white text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+        className="grid h-12 w-12 place-items-center rounded-2xl border text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+        style={{ borderColor: 'var(--line)', backgroundColor: 'var(--surface)', color: 'var(--muted)' }}
         aria-label="Open profile settings"
       >
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -116,8 +195,61 @@ export default function TopBar({
             {subtitle}
           </div>
         ) : null}
-        <h1 className="text-xl font-semibold leading-tight text-neutral-900">{title}</h1>
+        <h1 className="text-xl font-semibold leading-tight" style={{ color: 'var(--ink)' }}>{title}</h1>
       </div>
+
+      {selectedChannel && !channelsLoading && (
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => {
+              setChannelPickerOpen((prev) => !prev);
+              setNotificationOpen(false);
+              setMessageOpen(false);
+            }}
+            aria-haspopup="dialog"
+            aria-expanded={channelPickerOpen}
+            aria-label="Select channel"
+            className="grid h-10 w-10 place-items-center rounded-full border transition-colors"
+            style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
+            onMouseEnter={(e) => {
+              e.target.style.borderColor = 'var(--line)';
+              e.target.style.color = 'var(--ink)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.borderColor = 'var(--line)';
+              e.target.style.color = 'var(--muted)';
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M9 22V12h6v10"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+          <ChannelPickerSheet
+            open={channelPickerOpen}
+            onClose={() => setChannelPickerOpen(false)}
+            channels={channels}
+            selectedChannel={selectedChannel}
+            onSelectChannel={(channelId) => {
+              setSelectedChannel(channelId);
+              setChannelPickerOpen(false);
+            }}
+          />
+        </div>
+      )}
 
       <div className="flex items-center gap-2">
         <div className="relative">
@@ -130,9 +262,18 @@ export default function TopBar({
             aria-haspopup="dialog"
             aria-expanded={notificationOpen}
             aria-label="Open notifications"
-            className="grid h-10 w-10 place-items-center rounded-full border border-neutral-200 text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-700"
+            className="grid h-10 w-10 place-items-center rounded-full border transition-colors"
+            style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
+            onMouseEnter={(e) => {
+              e.target.style.borderColor = 'var(--line)';
+              e.target.style.color = 'var(--ink)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.borderColor = 'var(--line)';
+              e.target.style.color = 'var(--muted)';
+            }}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
               <path
                 d="M12 5a3 3 0 00-3 3v1.268c0 .43-.166.845-.463 1.155L7 12.06V13h10v-.94l-1.537-1.637a1.67 1.67 0 01-.463-1.155V8a3 3 0 00-3-3z"
                 stroke="currentColor"
@@ -167,9 +308,18 @@ export default function TopBar({
             aria-haspopup="dialog"
             aria-expanded={messageOpen}
             aria-label="Open messages"
-            className="grid h-10 w-10 place-items-center rounded-full border border-neutral-200 text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-700"
+            className="grid h-10 w-10 place-items-center rounded-full border transition-colors"
+            style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
+            onMouseEnter={(e) => {
+              e.target.style.borderColor = 'var(--line)';
+              e.target.style.color = 'var(--ink)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.borderColor = 'var(--line)';
+              e.target.style.color = 'var(--muted)';
+            }}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
               <path
                 d="M6 8.5c0-1.38 1.343-2.5 3-2.5h6c1.657 0 3 1.12 3 2.5v3c0 1.38-1.343 2.5-3 2.5H9.75L6 17.5V8.5z"
                 stroke="currentColor"

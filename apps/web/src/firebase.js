@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 
 const cfg = {
   apiKey: import.meta.env.VITE_FB_API_KEY,
@@ -12,3 +13,4 @@ const cfg = {
 
 export const fbApp = initializeApp(cfg);
 export const db = getFirestore(fbApp);
+export const auth = getAuth(fbApp);

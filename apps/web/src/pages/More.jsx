@@ -95,7 +95,7 @@ export default function More() {
 
   return (
     <Page title="More">
-      <div className="space-y-6">
+      <div className="flex flex-1 flex-col space-y-6">
         <div className="space-y-4">
           <ActionCard
             icon="📡"

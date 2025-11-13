@@ -1,40 +1,84 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
 
 export default function Auth() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { signUp, signIn, currentUser, loading, error: authError } = useAuth();
   const [mode, setMode] = useState(() =>
     searchParams.get("mode") === "signup" ? "signup" : "signin"
   );
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Redirect if already signed in
+  useEffect(() => {
+    if (currentUser && !loading) {
+      navigate("/home", { replace: true });
+    }
+  }, [currentUser, loading, navigate]);
 
   useEffect(() => {
     const paramMode = searchParams.get("mode") === "signup" ? "signup" : "signin";
     setMode((current) => (current === paramMode ? current : paramMode));
   }, [searchParams]);
 
+  // Update error when authError changes
+  useEffect(() => {
+    if (authError) {
+      setError(authError);
+    }
+  }, [authError]);
+
   const handleModeChange = (nextMode) => {
     if (mode === nextMode) return;
     setMode(nextMode);
+    setError("");
+    setEmail("");
+    setPassword("");
+    setFullName("");
     const updated = new URLSearchParams(searchParams);
     updated.set("mode", nextMode);
     setSearchParams(updated, { replace: true });
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
+    setError("");
+    setIsSubmitting(true);
+
     try {
-      localStorage.setItem("signedIn", "1");
-      localStorage.setItem("onboarded", "1");
+      if (mode === "signup") {
+        if (!fullName.trim()) {
+          setError("Full name is required");
+          setIsSubmitting(false);
+          return;
+        }
+        await signUp(email, password, fullName.trim());
+        // User will be automatically created in Firestore via useAuth hook
+        // Navigate after successful signup
+        navigate("/onboarding", { replace: true });
+      } else {
+        await signIn(email, password);
+        // Navigate after successful signin
+        navigate("/home", { replace: true });
+      }
     } catch (error) {
-      console.warn("Unable to persist auth state during dev flow", error);
+      // Error is handled by useAuth hook and set via authError
+      console.error("Authentication error:", error);
+      setError(error.message || "An error occurred. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
-    navigate("/home", { replace: true });
   };
 
   return (
     <div className="min-h-screen bg-bg text-ink flex items-center">
-      <div className="w-full max-w-[430px] mx-auto px-6">
+      <div className="w-full max-w-full mx-auto px-6">
         {/* Header */}
         <h1 className="text-[28px] font-extrabold tracking-tight mb-2">Sladesh</h1>
         <p className="text-muted mb-6">{mode === "signin" ? "Welcome back 👋" : "Create your account to get started"}</p>
@@ -65,33 +109,58 @@ export default function Auth() {
           </button>
         </div>
 
+        {/* Error message */}
+        {error && (
+          <div className="mb-4 p-3 rounded-md bg-red-50 border border-red-200 text-red-800 text-sm">
+            {error}
+          </div>
+        )}
+
         {/* Form */}
         <form className="space-y-4" onSubmit={handleSubmit}>
           {mode === "signup" && (
             <input
               type="text"
               placeholder="Full name"
-              className="w-full px-4 py-3 rounded-md border border-line bg-surface text-ink placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              required
+              disabled={isSubmitting}
+              className="w-full px-4 py-3 rounded-md border border-line bg-surface text-ink placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-50 disabled:cursor-not-allowed"
             />
           )}
 
           <input
             type="email"
             placeholder="Email"
-            className="w-full px-4 py-3 rounded-md border border-line bg-surface text-ink placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            disabled={isSubmitting}
+            className="w-full px-4 py-3 rounded-md border border-line bg-surface text-ink placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-50 disabled:cursor-not-allowed"
           />
 
           <input
             type="password"
             placeholder="Password"
-            className="w-full px-4 py-3 rounded-md border border-line bg-surface text-ink placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            disabled={isSubmitting}
+            minLength={6}
+            className="w-full px-4 py-3 rounded-md border border-line bg-surface text-ink placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-50 disabled:cursor-not-allowed"
           />
 
           <button
             type="submit"
-            className="w-full py-3 rounded-md bg-brand text-white font-semibold shadow-soft active:scale-95"
+            disabled={isSubmitting || loading}
+            className="w-full py-3 rounded-md bg-brand text-white font-semibold shadow-soft active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {mode === "signin" ? "Continue" : "Create account"}
+            {isSubmitting || loading
+              ? "Please wait..."
+              : mode === "signin"
+              ? "Continue"
+              : "Create account"}
           </button>
         </form>
 

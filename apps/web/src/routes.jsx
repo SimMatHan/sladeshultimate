@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
+import { useAuth } from './hooks/useAuth'
 
 import AppShell from './components/AppShell'
 
@@ -14,30 +15,50 @@ import More from './pages/More'
 import ManageChannels from './pages/ManageChannels'
 import ManageProfile from './pages/ManageProfile'
 
-/** Simple “guards” baseret på localStorage – KUN til skald/test */
-const isSignedIn = () => localStorage.getItem('signedIn') === '1'
-const isOnboarded = () => localStorage.getItem('onboarded') === '1'
+/** Firebase Auth guards - check if user is authenticated */
+function useAuthGuard() {
+  const { currentUser, loading } = useAuth()
+  return { isSignedIn: !!currentUser, loading }
+}
 
 function SplashRouter() {
   const navigate = useNavigate()
+  const { isSignedIn, loading } = useAuthGuard()
+  
   useEffect(() => {
+    if (loading) return // Wait for auth to load
+    
     const t = setTimeout(() => {
-      if (!isSignedIn()) return navigate('/auth?mode=signin', { replace: true })
-      if (!isOnboarded()) return navigate('/onboarding', { replace: true })
+      // Check localStorage for onboarding status (can be updated later to use Firestore)
+      const isOnboarded = localStorage.getItem('onboarded') === '1'
+      
+      if (!isSignedIn) return navigate('/auth?mode=signin', { replace: true })
+      if (!isOnboarded) return navigate('/onboarding', { replace: true })
       return navigate('/home', { replace: true })
     }, 900)
     return () => clearTimeout(t)
-  }, [navigate])
+  }, [navigate, isSignedIn, loading])
   return <Splash />
 }
 
 function GuardOnboard({ children }) {
-  if (!isSignedIn()) return <Navigate to="/auth?mode=signin" replace />
+  const { isSignedIn, loading } = useAuthGuard()
+  
+  if (loading) return <div>Loading...</div> // Or a loading component
+  if (!isSignedIn) return <Navigate to="/auth?mode=signin" replace />
   return children
 }
+
 function GuardApp({ children }) {
-  if (!isSignedIn()) return <Navigate to="/auth?mode=signin" replace />
-  if (!isOnboarded()) return <Navigate to="/onboarding" replace />
+  const { isSignedIn, loading } = useAuthGuard()
+  
+  if (loading) return <div>Loading...</div> // Or a loading component
+  if (!isSignedIn) return <Navigate to="/auth?mode=signin" replace />
+  
+  // Check localStorage for onboarding status (can be updated later to use Firestore)
+  const isOnboarded = localStorage.getItem('onboarded') === '1'
+  if (!isOnboarded) return <Navigate to="/onboarding" replace />
+  
   return children
 }
 

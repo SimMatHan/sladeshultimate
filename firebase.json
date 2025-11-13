@@ -7,5 +7,9 @@
       "npm --prefix apps/web ci",
       "npm --prefix apps/web run build"
     ]
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
   }
 }

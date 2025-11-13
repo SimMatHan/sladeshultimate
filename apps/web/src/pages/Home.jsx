@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Card from "../components/Card";
 import { useLocation } from "../contexts/LocationContext";
+import { useAuth } from "../hooks/useAuth";
+import { addDrink, addCheckIn, updateUserLocation, getUser } from "../services/userService";
+import { incrementDrinkCount, incrementCheckInCount } from "../services/statsService";
 
 const CATEGORIES = [
   { id: "beer", name: "Beer", icon: "🍺" },
@@ -118,12 +121,15 @@ function Countdown({ target, onExpire }) {
 }
 
 export default function Home() {
-  const { updateLocation } = useLocation();
+  const { updateLocation, userLocation } = useLocation();
+  const { currentUser } = useAuth();
   const [checkedIn, setCheckedIn] = useState(false);
   const [expiresAt, setExpiresAt] = useState(null);
   const [selected, setSelected] = useState("beer");
   const [sheetFor, setSheetFor] = useState(null);
   const [isSheetVisible, setIsSheetVisible] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [userTotalDrinks, setUserTotalDrinks] = useState(0);
 
   const [variantCounts, setVariantCounts] = useState(() =>
     Object.fromEntries(
@@ -197,17 +203,12 @@ export default function Home() {
     scrollFrame.current = requestAnimationFrame(updateSelectionFromScroll);
   };
 
-  const adjustVariantCount = (catId, variantName, delta) => {
+  const adjustVariantCount = async (catId, variantName, delta) => {
     setVariantCounts((prev) => {
       const category = prev[catId] ?? {};
       const current = category[variantName] ?? 0;
       const next = Math.max(0, current + delta);
       if (next === current) return prev;
-      
-      // Track location when beverage count changes (only when adding, not removing)
-      if (delta > 0) {
-        updateLocation();
-      }
       
       return {
         ...prev,
@@ -217,13 +218,66 @@ export default function Home() {
         },
       };
     });
-  };
 
-  const computeMidnight = () => {
-    const now = new Date();
-    const midnight = new Date(now);
-    midnight.setHours(24, 0, 0, 0);
-    return midnight;
+    // Only save to Firestore when adding drinks (delta > 0)
+    if (delta > 0 && currentUser) {
+      try {
+        setIsSaving(true);
+        
+        // Update location locally
+        updateLocation();
+        
+        // Get venue name (for now using a placeholder - can be enhanced with geocoding)
+        const venue = "Current Location"; // TODO: Get actual venue name from location
+        
+        // Get current location or use default
+        const location = userLocation || {
+          lat: 55.6761, // Copenhagen default
+          lng: 12.5683
+        };
+        
+        // Save drink to Firestore
+        await addDrink(currentUser.uid, {
+          type: catId,
+          label: variantName,
+          venue: venue,
+          location: {
+            lat: location.lat,
+            lng: location.lng
+          }
+        });
+        
+        // Update user location in Firestore
+        await updateUserLocation(currentUser.uid, {
+          lat: location.lat,
+          lng: location.lng,
+          venue: venue
+        });
+        
+        // Update stats (with variation tracking)
+        await incrementDrinkCount(catId, variantName);
+        
+        // Update local total drinks count
+        setUserTotalDrinks(prev => prev + 1);
+        
+      } catch (error) {
+        console.error("Error saving drink to Firestore:", error);
+        // Revert the count if save failed
+        setVariantCounts((prev) => {
+          const category = prev[catId] ?? {};
+          const current = category[variantName] ?? 0;
+          return {
+            ...prev,
+            [catId]: {
+              ...category,
+              [variantName]: Math.max(0, current - delta),
+            },
+          };
+        });
+      } finally {
+        setIsSaving(false);
+      }
+    }
   };
 
   const openSheet = (id) => {
@@ -246,6 +300,44 @@ export default function Home() {
     },
     []
   );
+
+  const computeMidnight = () => {
+    const now = new Date();
+    const midnight = new Date(now);
+    midnight.setHours(24, 0, 0, 0);
+    return midnight;
+  };
+
+  // Load user data from Firestore on mount
+  useEffect(() => {
+    const loadUserData = async () => {
+      if (!currentUser) return;
+      
+      try {
+        const userData = await getUser(currentUser.uid);
+        if (userData) {
+          setUserTotalDrinks(userData.totalDrinks || 0);
+          setCheckedIn(userData.checkInStatus || false);
+          // Set expiresAt based on lastCheckIn if needed
+          if (userData.lastCheckIn && userData.checkInStatus) {
+            const lastCheckInTime = userData.lastCheckIn.toDate?.() || 
+              (userData.lastCheckIn.seconds ? new Date(userData.lastCheckIn.seconds * 1000) : new Date());
+            const midnight = computeMidnight();
+            if (lastCheckInTime < midnight) {
+              setExpiresAt(midnight);
+            } else {
+              // Check-in expired
+              setCheckedIn(false);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error loading user data:", error);
+      }
+    };
+
+    loadUserData();
+  }, [currentUser]);
 
   useEffect(() => {
     if (!sheetFor) return undefined;
@@ -294,11 +386,10 @@ export default function Home() {
   }, [sheetFor]);
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden" style={{ backgroundColor: 'var(--bg)' }}>
-      <div className="flex flex-1 flex-col overflow-x-hidden overflow-y-hidden pt-3 pb-6" style={{ backgroundColor: 'var(--bg)' }}>
+    <div className="w-full">
         {/* Header */}
-        <div className="px-4 space-y-4">
-          <div className="grid grid-cols-2 gap-6">
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
             <Card
               bare
               className="px-5 py-4 transition-colors"
@@ -308,31 +399,69 @@ export default function Home() {
               } : {}}
               role="button"
               tabIndex={0}
-              onClick={() => {
-                setCheckedIn((prev) => {
-                  if (prev) {
-                    setExpiresAt(null);
-                    return false;
+              onClick={async () => {
+                if (checkedIn) {
+                  // Check out
+                  setCheckedIn(false);
+                  setExpiresAt(null);
+                } else {
+                  // Check in
+                  if (!currentUser) {
+                    console.error("User not authenticated");
+                    return;
                   }
-                  // Track location when checking in
-                  updateLocation();
-                  setExpiresAt(computeMidnight());
-                  return true;
-                });
+                  
+                  try {
+                    setIsSaving(true);
+                    
+                    // Update location locally
+                    updateLocation();
+                    
+                    // Get venue name (for now using a placeholder - can be enhanced with geocoding)
+                    const venue = "Current Location"; // TODO: Get actual venue name from location
+                    
+                    // Get current location or use default
+                    const location = userLocation || {
+                      lat: 55.6761, // Copenhagen default
+                      lng: 12.5683
+                    };
+                    
+                    // Save check-in to Firestore
+                    await addCheckIn(currentUser.uid, {
+                      venue: venue,
+                      location: {
+                        lat: location.lat,
+                        lng: location.lng
+                      }
+                    });
+                    
+                    // Update user location in Firestore
+                    await updateUserLocation(currentUser.uid, {
+                      lat: location.lat,
+                      lng: location.lng,
+                      venue: venue
+                    });
+                    
+                    // Update stats
+                    await incrementCheckInCount();
+                    
+                    // Update UI state
+                    setCheckedIn(true);
+                    setExpiresAt(computeMidnight());
+                    
+                  } catch (error) {
+                    console.error("Error saving check-in to Firestore:", error);
+                    // Don't update UI state if save failed
+                  } finally {
+                    setIsSaving(false);
+                  }
+                }
               }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
-                  setCheckedIn((prev) => {
-                    if (prev) {
-                      setExpiresAt(null);
-                      return false;
-                    }
-                    // Track location when checking in
-                    updateLocation();
-                    setExpiresAt(computeMidnight());
-                    return true;
-                  });
+                  // Trigger the same onClick logic
+                  event.target.click();
                 }
               }}
             >
@@ -376,13 +505,15 @@ export default function Home() {
                 Drinks logged
               </div>
               <div className="mt-2 flex items-end gap-2">
-                <span className="text-3xl font-semibold" style={{ color: 'var(--ink)' }}>{total}</span>
+                <span className="text-3xl font-semibold" style={{ color: 'var(--ink)' }}>
+                  {userTotalDrinks + total}
+                </span>
                 <span className="pb-1 text-xs uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
                   total
                 </span>
               </div>
               <p className="mt-3 text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
-                Track each variation with the drink selector below.
+                {total > 0 ? `${total} this session` : "Track each variation with the drink selector below."}
               </p>
             </Card>
           </div>
@@ -409,8 +540,8 @@ export default function Home() {
                 }`}
                 style={{
                   width: "100%",
-                  maxWidth: "440px",
-                  minHeight: "min(56vh, 440px)",
+                  maxWidth: "min(100%, 440px)",
+                  minHeight: "min(32vh, 280px)",
                 }}
                 aria-label={cat.name}
               >
@@ -560,7 +691,6 @@ export default function Home() {
             </div>
           </div>
         )}
-      </div>
     </div>
   );
 }

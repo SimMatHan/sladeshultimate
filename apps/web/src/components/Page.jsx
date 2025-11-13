@@ -1,27 +1,8 @@
-export default function Page({
-  title,
-  subtitle,
-  actions,
-  notifications,
-  messages,
-  onProfileClick,
-  children,
-  allowScroll = false,
-}) {
-  return (
-    <section 
-      className="mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden"
-      style={{ backgroundColor: 'var(--bg)' }}
-    >
-      <div 
-        className={`flex flex-1 flex-col overflow-x-hidden px-4 pt-3 ${allowScroll ? 'overflow-y-auto' : 'overflow-y-hidden'}`}
-        style={{
-          backgroundColor: 'var(--bg)',
-          ...(allowScroll ? { scrollBehavior: 'smooth', paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' } : {})
-        }}
-      >
-        <div className={allowScroll ? '' : 'flex-1'}>{children}</div>
-      </div>
-    </section>
-  );
+import AppShell from "./AppShell";
+
+export default function Page({ title, children, TopRight }) {
+  // Note: AppShell is already used in routes.jsx, so this component
+  // is kept for backward compatibility and just renders children.
+  // The title is handled by AppShell via route configuration.
+  return <>{children}</>;
 }

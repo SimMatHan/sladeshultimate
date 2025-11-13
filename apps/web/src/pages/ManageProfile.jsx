@@ -4,6 +4,8 @@ import Card from "../components/Card";
 import Page from "../components/Page";
 import Sheet from "../components/Sheet";
 import { useTheme } from "../contexts/ThemeContext";
+import { useAuth } from "../hooks/useAuth";
+import { getUser, updateUser } from "../services/userService";
 
 // Emoji options for profile pictures
 const EMOJI_OPTIONS = [
@@ -26,20 +28,19 @@ const GRADIENT_OPTIONS = [
   { id: "brand", name: "Brand", gradient: "from-[color:var(--brand,#FF385C)]/90 to-[color:var(--brand,#FF385C)]/70" },
 ];
 
-// Mock user data - replace with actual Firebase Auth data later
-const INITIAL_USER_DATA = {
-  username: "@pioneer",
-  fullName: "Sladesh Pioneer",
-  email: "pioneer@sladesh.com",
-  profileEmoji: "🍹",
-  profileGradient: "from-rose-400 to-orange-500",
-};
-
 export default function ManageProfile() {
   const navigate = useNavigate();
   const { isDarkMode, toggleDarkMode } = useTheme();
-  const [userData, setUserData] = useState(INITIAL_USER_DATA);
+  const { currentUser } = useAuth();
+  const [userData, setUserData] = useState({
+    username: "",
+    fullName: "",
+    email: "",
+    profileEmoji: "🍹",
+    profileGradient: "from-rose-400 to-orange-500",
+  });
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState(null);
   const [profileSheetOpen, setProfileSheetOpen] = useState(false);
   const [tempProfile, setTempProfile] = useState({
@@ -47,22 +48,49 @@ export default function ManageProfile() {
     gradient: userData.profileGradient,
   });
 
+  // Load user data from Firestore
   useEffect(() => {
-    // Load user data from localStorage or Firebase
-    const savedProfile = localStorage.getItem("sladesh:profile");
-    if (savedProfile) {
+    const loadUserData = async () => {
+      if (!currentUser) {
+        setLoading(false);
+        return;
+      }
+
       try {
-        const parsed = JSON.parse(savedProfile);
+        setLoading(true);
+        const firestoreUser = await getUser(currentUser.uid);
+        
+        if (firestoreUser) {
+          setUserData({
+            username: firestoreUser.username || "",
+            fullName: firestoreUser.fullName || currentUser.displayName || "",
+            email: firestoreUser.email || currentUser.email || "",
+            profileEmoji: firestoreUser.profileEmoji || "🍹",
+            profileGradient: firestoreUser.profileGradient || "from-rose-400 to-orange-500",
+          });
+        } else {
+          // Fallback to Firebase Auth data
+          setUserData((prev) => ({
+            ...prev,
+            fullName: currentUser.displayName || "",
+            email: currentUser.email || "",
+          }));
+        }
+      } catch (error) {
+        console.error("Error loading user data:", error);
+        // Fallback to Firebase Auth data
         setUserData((prev) => ({
           ...prev,
-          profileEmoji: parsed.profileEmoji || prev.profileEmoji,
-          profileGradient: parsed.profileGradient || prev.profileGradient,
+          fullName: currentUser.displayName || "",
+          email: currentUser.email || "",
         }));
-      } catch (e) {
-        console.warn("Failed to parse saved profile", e);
+      } finally {
+        setLoading(false);
       }
-    }
-  }, []);
+    };
+
+    loadUserData();
+  }, [currentUser]);
 
   useEffect(() => {
     if (!feedback) return undefined;
@@ -79,6 +107,13 @@ export default function ManageProfile() {
       });
     }
   }, [profileSheetOpen, userData.profileEmoji, userData.profileGradient]);
+
+  const handleUsernameChange = (e) => {
+    setUserData((prev) => ({
+      ...prev,
+      username: e.target.value,
+    }));
+  };
 
   const handleEmojiSelect = (emoji) => {
     setTempProfile((prev) => ({
@@ -104,21 +139,34 @@ export default function ManageProfile() {
     setFeedback("Profile picture updated!");
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (!currentUser) {
+      setFeedback("You must be logged in to save changes.");
+      return;
+    }
+
     setSaving(true);
-    // Save to localStorage (replace with Firebase update later)
-    const payload = {
-      username: userData.username,
-      fullName: userData.fullName,
-      email: userData.email,
-      profileEmoji: userData.profileEmoji,
-      profileGradient: userData.profileGradient,
-    };
-    localStorage.setItem("sladesh:profile", JSON.stringify(payload));
-    setTimeout(() => {
-      setSaving(false);
+    try {
+      // Save username and profile settings to Firestore
+      await updateUser(currentUser.uid, {
+        username: userData.username.trim(),
+        profileEmoji: userData.profileEmoji,
+        profileGradient: userData.profileGradient,
+      });
+
+      // Also save to localStorage for profile picture (for now)
+      localStorage.setItem("sladesh:profile", JSON.stringify({
+        profileEmoji: userData.profileEmoji,
+        profileGradient: userData.profileGradient,
+      }));
+
       setFeedback("Profile updated successfully!");
-    }, 450);
+    } catch (error) {
+      console.error("Error saving profile:", error);
+      setFeedback("Failed to save profile. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDarkModeToggle = () => {
@@ -126,6 +174,16 @@ export default function ManageProfile() {
     toggleDarkMode();
     setFeedback(newMode ? "Switched to dark mode" : "Switched to light mode");
   };
+
+  if (loading) {
+    return (
+      <Page title="Manage Profile" allowScroll={true}>
+        <div className="flex items-center justify-center py-12">
+          <div className="text-sm" style={{ color: 'var(--muted)' }}>Loading...</div>
+        </div>
+      </Page>
+    );
+  }
 
   return (
     <Page title="Manage Profile" allowScroll={true}>
@@ -210,16 +268,22 @@ export default function ManageProfile() {
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <label className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+              <label htmlFor="username" className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
                 Username
               </label>
-              <div className="w-full rounded-2xl border px-4 py-3 text-sm font-mono font-medium tracking-wide" style={{ 
-                borderColor: 'var(--line)',
-                backgroundColor: 'var(--subtle)',
-                color: 'var(--ink)'
-              }}>
-                {userData.username}
-              </div>
+              <input
+                id="username"
+                type="text"
+                value={userData.username}
+                onChange={handleUsernameChange}
+                placeholder="@username"
+                className="w-full rounded-2xl border px-4 py-3 text-sm font-mono font-medium tracking-wide transition focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-2"
+                style={{ 
+                  borderColor: 'var(--line)',
+                  backgroundColor: 'var(--surface)',
+                  color: 'var(--ink)'
+                }}
+              />
             </div>
 
             <div className="space-y-2">

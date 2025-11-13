@@ -1,18 +1,23 @@
 /* src/tokens.css */
 /* ==============  DESIGN TOKENS  ================= */
 :root {
+  /* Safe area insets for mobile devices */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
   /* Brand (Airbnb-ish) */
-  --brand: #ff385c;
+  --brand: #FF385C;
   --brand-ink: #ffffff;
   --brand-rgb: 255 56 92;
 
   /* Secondary / Accent */
-  --accent: #00a699;          /* “teal” */
+  --accent: #00A699;          /* "teal" */
   --accent-ink: #ffffff;
   --accent-rgb: 0 166 153;
 
   /* Content */
   --ink: #222222;
+  --text: #222222; /* Alias for --ink for compatibility */
   --muted: #717171;
 
   /* Surfaces */
@@ -35,7 +40,9 @@
   --shadow-soft: 0 8px 20px rgba(0,0,0,.08);
 
   /* Layout tokens */
-  --tabbar-h: 64px;
+  --tabbar-h: 57px;
+  /* TabBar height: 8px top + 24px icon + 2px gap + 11px label + 12px bottom + safe area */
+  --tabbar-height: calc(57px + env(safe-area-inset-bottom, 0px));
 
   /* Typography scale (kan udbygges) */
   --h1: 20px;
@@ -53,6 +60,7 @@
   --accent-rgb: 0 181 165;
 
   --ink: #f5f5f5;
+  --text: #f5f5f5; /* Alias for --ink for compatibility */
   --muted: #bcbcbc;
 
   --bg: #0b0b0b;

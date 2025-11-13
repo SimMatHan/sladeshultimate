@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 
 const tabs = [
   { to: '/home', label: 'Home', Icon: HomeIcon, end: true },
-  { to: '/leaderboard', label: 'Leaderboard', Icon: TrophyIcon },
+  { to: '/leaderboard', label: 'Score', Icon: TrophyIcon },
   { to: '/sladesh', label: 'Sladesh', Icon: SparkIcon },
   { to: '/map', label: 'Map', Icon: MapIcon },
   { to: '/more', label: 'More', Icon: MenuIcon, additionalActivePaths: ['/manage-channels', '/manage-profile'] },
@@ -19,27 +19,27 @@ function Item({ to, label, Icon, end, additionalActivePaths = [] }) {
       className={({ isActive }) => {
         const isAdditionalActive = additionalActivePaths.some(path => location.pathname === path)
         const shouldBeActive = isActive || isAdditionalActive
-        return ['tab', shouldBeActive ? 'active' : ''].filter(Boolean).join(' ')
+        return `flex flex-col items-center justify-center text-xs transition-colors ${
+          shouldBeActive 
+            ? 'text-[color:var(--brand,#FF385C)]' 
+            : 'text-[color:var(--muted,#717171)]'
+        }`
       }}
     >
-      <span className="tab__icon" aria-hidden="true">
-        <Icon className="tab__icon-svg" focusable="false" />
+      <span className="leading-none mb-1" aria-hidden="true">
+        <Icon className="w-6 h-6" focusable="false" />
       </span>
-      <span className="tab__label">{label}</span>
+      <span className="leading-none text-[11px] font-medium">{label}</span>
     </NavLink>
   )
 }
 
 export default function TabBar() {
   return (
-    <nav className="tabbar" aria-label="Primary navigation">
-      <div className="tabbar__container">
-        <div className="tabbar__items">
-          {tabs.map((tab) => (
-            <Item key={tab.to} {...tab} />
-          ))}
-        </div>
-      </div>
+    <nav className="h-16 max-w-[480px] mx-auto grid grid-cols-5" aria-label="Primary navigation">
+      {tabs.map((tab) => (
+        <Item key={tab.to} {...tab} />
+      ))}
     </nav>
   )
 }

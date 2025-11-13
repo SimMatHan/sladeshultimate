@@ -3,6 +3,7 @@ import Card from "../components/Card";
 import Page from "../components/Page";
 import { useLocation } from "../contexts/LocationContext";
 import { useTheme } from "../contexts/ThemeContext";
+import { useChannel } from "../hooks/useChannel";
 
 const PARTICIPANTS = [
   {
@@ -64,7 +65,13 @@ const PARTICIPANTS = [
 ];
 
 export default function Sladesh() {
+  const { selectedChannel } = useChannel();
   const [selectedParticipant, setSelectedParticipant] = useState(null);
+
+  // TODO: When implementing real Firestore queries, filter by channelId:
+  // - If selectedChannel.isDefault === true: show global/unfiltered view (no channelId filter)
+  // - Otherwise: filter all queries with where('channelId', '==', selectedChannel.id)
+  // This applies to: participants list, sladesh activities, and user interactions
 
   // Generate random starting angles for participants on mount
   const participantsWithRandomAngles = useMemo(() => {
@@ -85,7 +92,7 @@ export default function Sladesh() {
   return (
     <Page title="Sladesh">
       <div className="flex flex-1 flex-col items-center justify-center gap-8 pb-8 pt-4">
-        <div className="relative w-full max-w-[420px]">
+        <div className="relative w-full max-w-full">
           <div className="aspect-square">
             <OrbitBackdrop />
             {participantsWithRandomAngles.map((participant) => (
@@ -98,7 +105,7 @@ export default function Sladesh() {
           </div>
         </div>
 
-        <Card className="w-full max-w-[420px] p-5 text-center backdrop-blur-sm" style={{ 
+        <Card className="w-full max-w-full p-5 text-center backdrop-blur-sm" style={{ 
           borderColor: 'color-mix(in srgb, var(--line) 70%, transparent)',
           backgroundColor: 'color-mix(in srgb, var(--surface) 70%, transparent)'
         }}>
@@ -231,6 +238,7 @@ function AvatarBadge({ participant, size = "h-16 w-16", textSize = "text-lg" }) 
 }
 
 function RequestOverlay({ participant, onClose }) {
+  const { selectedChannel } = useChannel();
   const { updateLocation } = useLocation();
   const firstName = participant.name.split(" ")[0] ?? participant.name;
   
@@ -238,14 +246,15 @@ function RequestOverlay({ participant, onClose }) {
     // Track location when sending sladesh
     updateLocation();
     // TODO: Implement actual sladesh sending functionality
-    console.log(`Sending sladesh to ${participant.name}`);
+    // When implementing, include channelId: selectedChannel?.id in the sladesh data
+    console.log(`Sending sladesh to ${participant.name}`, { channelId: selectedChannel?.id });
     onClose();
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-6 py-8 backdrop-blur-sm" style={{ backgroundColor: 'rgba(11, 17, 32, 0.6)' }}>
       <div 
-        className="w-full max-w-[360px] rounded-[28px] p-6 shadow-[0_24px_60px_rgba(15,23,42,0.25)]"
+        className="w-full max-w-[calc(100%-48px)] sm:max-w-[360px] rounded-[28px] p-6 shadow-[0_24px_60px_rgba(15,23,42,0.25)]"
         style={{ backgroundColor: 'var(--surface)' }}
       >
         <div className="flex items-start justify-between gap-4">

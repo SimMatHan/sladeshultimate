@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet'
 import { useLocation } from '../contexts/LocationContext'
+import { useChannel } from '../hooks/useChannel'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
@@ -117,7 +118,7 @@ function UserPinOverlay({ user, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-6 py-8 backdrop-blur-sm" style={{ backgroundColor: 'rgba(11, 17, 32, 0.6)' }} onClick={onClose}>
       <div 
-        className="w-full max-w-[360px] rounded-[28px] p-6 shadow-[0_24px_60px_rgba(15,23,42,0.25)]" 
+        className="w-full max-w-[calc(100%-48px)] sm:max-w-[360px] rounded-[28px] p-6 shadow-[0_24px_60px_rgba(15,23,42,0.25)]" 
         style={{ backgroundColor: 'var(--surface)' }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -236,9 +237,15 @@ function UserAvatar({ user }) {
 }
 
 export default function MapPage() {
+  const { selectedChannel } = useChannel()
   const { userLocation, otherUsers } = useLocation()
   const [selectedUser, setSelectedUser] = useState(null)
   const mapRef = useRef(null)
+
+  // TODO: When implementing real Firestore queries, filter by channelId:
+  // - If selectedChannel.isDefault === true: show global/unfiltered view (no channelId filter)
+  // - Otherwise: filter all queries with where('channelId', '==', selectedChannel.id)
+  // This applies to: user locations, check-ins, and activities displayed on the map
 
   const handleCenterOnMe = () => {
     if (userLocation && mapRef.current) {
@@ -250,50 +257,51 @@ export default function MapPage() {
   }
 
   return (
-    <div className="map-container">
-      <MapContainer
-        center={userLocation ? [userLocation.lat, userLocation.lng] : [55.6761, 12.5683]}
-        zoom={13}
-        style={{ width: '100%', height: '100%', zIndex: 0 }}
-        scrollWheelZoom={true}
-        whenCreated={(map) => {
-          mapRef.current = map
-          // Ensure map resizes properly on initial load
-          setTimeout(() => {
-            map.invalidateSize()
-          }, 100)
-        }}
-      >
-        <MapResizeHandler />
-        <MapInstanceSetter mapRef={mapRef} />
-        {userLocation && (
-          <>
-            <MapCenterHandler center={[userLocation.lat, userLocation.lng]} />
-            <Marker
-              position={[userLocation.lat, userLocation.lng]}
-              icon={userLocationIcon}
-            />
-          </>
-        )}
-        {otherUsers.map((user) => (
-          <Marker
-            key={user.id}
-            position={[user.location.lat, user.location.lng]}
-            icon={otherUserIcon(user.avatarGradient)}
-            eventHandlers={{
-              click: () => {
-                setSelectedUser(user)
-              },
+    <div className="w-full -mx-4 -my-3">
+      <div className="map-container relative" style={{ minHeight: 'calc(100dvh - 12rem)', height: '100%' }}>
+          <MapContainer
+            center={userLocation ? [userLocation.lat, userLocation.lng] : [55.6761, 12.5683]}
+            zoom={13}
+            style={{ width: '100%', height: '100%', zIndex: 0 }}
+            scrollWheelZoom={true}
+            whenCreated={(map) => {
+              mapRef.current = map
+              // Ensure map resizes properly on initial load
+              setTimeout(() => {
+                map.invalidateSize()
+              }, 100)
             }}
-          />
-        ))}
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-          subdomains="abcd"
-          maxZoom={19}
-        />
-      </MapContainer>
+          >
+            <MapResizeHandler />
+            <MapInstanceSetter mapRef={mapRef} />
+            {userLocation && (
+              <>
+                <MapCenterHandler center={[userLocation.lat, userLocation.lng]} />
+                <Marker
+                  position={[userLocation.lat, userLocation.lng]}
+                  icon={userLocationIcon}
+                />
+              </>
+            )}
+            {otherUsers.map((user) => (
+              <Marker
+                key={user.id}
+                position={[user.location.lat, user.location.lng]}
+                icon={otherUserIcon(user.avatarGradient)}
+                eventHandlers={{
+                  click: () => {
+                    setSelectedUser(user)
+                  },
+                }}
+              />
+            ))}
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+              url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
+              subdomains="abcd"
+              maxZoom={19}
+            />
+          </MapContainer>
       
       {userLocation && (
         <button
@@ -327,6 +335,7 @@ export default function MapPage() {
           onClose={() => setSelectedUser(null)}
         />
       )}
+      </div>
     </div>
   )
 }

@@ -72,7 +72,7 @@ export default function Onboarding() {
   }
 
   const completeOnboarding = useCallback(() => {
-    localStorage.setItem('onboardingComplete', 'true')
+    localStorage.setItem('onboarded', '1')
     navigate('/home', { replace: true })
   }, [navigate])
 
@@ -121,7 +121,7 @@ export default function Onboarding() {
   return (
     <div className="min-h-screen bg-[color:var(--bg)] text-[color:var(--text)]">
       <div
-        className="mx-auto flex min-h-screen w-full max-w-[430px] flex-col"
+        className="mx-auto flex min-h-screen w-full max-w-full flex-col"
         style={safeAreaStyle}
       >
         <header className="flex items-center justify-end px-6 pb-10">

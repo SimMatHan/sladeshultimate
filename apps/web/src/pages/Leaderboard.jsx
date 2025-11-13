@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Page from '../components/Page';
+import { useChannel } from '../hooks/useChannel';
+import { USE_MOCK_DATA } from '../config/env';
+import { fetchLeaderboardProfiles, fetchUserRecentDrinks } from '../services/leaderboardService';
 
 const leaderboardProfiles = [
   {
@@ -193,15 +196,65 @@ const sortComparators = {
 };
 
 export default function Leaderboard() {
+  const { selectedChannel } = useChannel();
   const [sortMode, setSortMode] = useState('total-desc');
   const [selectedProfile, setSelectedProfile] = useState(null);
   const topSectionRef = useRef(null);
   const [listHeight, setListHeight] = useState(null);
+  const [profiles, setProfiles] = useState([]);
+  const [loading, setLoading] = useState(!USE_MOCK_DATA);
+  const [error, setError] = useState(null);
+
+  // Fetch leaderboard data from Firestore when not using mock data
+  useEffect(() => {
+    if (USE_MOCK_DATA) {
+      setProfiles(leaderboardProfiles);
+      setLoading(false);
+      return;
+    }
+
+    const loadProfiles = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const channelId = selectedChannel && !selectedChannel.isDefault ? selectedChannel.id : null;
+        const fetchedProfiles = await fetchLeaderboardProfiles(channelId);
+        setProfiles(fetchedProfiles);
+      } catch (err) {
+        console.error('Error loading leaderboard:', err);
+        setError('Kunne ikke indlæse leaderboard');
+        setProfiles([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadProfiles();
+  }, [selectedChannel]);
+
+  // Fetch recent drinks when a profile is selected (only in production mode)
+  useEffect(() => {
+    if (USE_MOCK_DATA || !selectedProfile) return;
+
+    const loadRecentDrinks = async () => {
+      try {
+        const recentDrinks = await fetchUserRecentDrinks(selectedProfile.id, 3);
+        setSelectedProfile(prev => ({
+          ...prev,
+          recentDrinks: recentDrinks.length > 0 ? recentDrinks : prev.recentDrinks
+        }));
+      } catch (err) {
+        console.error('Error loading recent drinks:', err);
+      }
+    };
+
+    loadRecentDrinks();
+  }, [selectedProfile?.id, USE_MOCK_DATA]);
 
   const sortedProfiles = useMemo(() => {
     const comparator = sortComparators[sortMode] || sortComparators['total-desc'];
-    return [...leaderboardProfiles].sort(comparator);
-  }, [sortMode]);
+    return [...profiles].sort(comparator);
+  }, [profiles, sortMode]);
 
   const updateListHeight = useCallback(() => {
     if (!topSectionRef.current) {
@@ -209,13 +262,11 @@ export default function Leaderboard() {
     }
 
     const rect = topSectionRef.current.getBoundingClientRect();
-    const tabbarValue =
-      Number.parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue('--tabbar-h')
-      ) || 64;
-    // Account for tabbar + safe area (typically 0-34px on iOS) + extra spacing for visual comfort
-    // The content padding already accounts for safe area, so we add extra spacing here
-    const reservedBottom = tabbarValue + 32; // 24px visual spacing + 8px buffer
+    // Account for bottom padding (16px) + safe area + extra spacing for visual comfort
+    const safeAreaBottom = Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('env(safe-area-inset-bottom)')
+    ) || 0;
+    const reservedBottom = 16 + safeAreaBottom + 24; // 16px padding + safe area + 24px visual spacing
     const available = window.innerHeight - rect.bottom - reservedBottom;
 
     setListHeight(Math.max(160, available));
@@ -252,7 +303,7 @@ export default function Leaderboard() {
 
   return (
     <Page title="Leaderboard">
-      <div className="flex h-full min-h-0 flex-col gap-4">
+      <div className="flex flex-1 flex-col gap-4">
         <div ref={topSectionRef} className="shrink-0 space-y-4 pb-2 pt-1">
           <p className="text-sm" style={{ color: 'var(--muted)' }}>
             Følg med i hvem der har tracket flest drinks i Sladesh Crew. Tryk på et kort for at se deres
@@ -270,15 +321,31 @@ export default function Leaderboard() {
               ...(listHeight ? { maxHeight: `${listHeight}px` } : {}),
             }}
           >
-            {sortedProfiles.map((profile, index) => (
-              <ProfileCard
-                key={profile.id}
-                profile={profile}
-                rank={index + 1}
-                onSelect={setSelectedProfile}
-                isActive={selectedProfile?.id === profile.id}
-              />
-            ))}
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <p className="text-sm" style={{ color: 'var(--muted)' }}>Indlæser...</p>
+              </div>
+            ) : error ? (
+              <div className="flex items-center justify-center py-12">
+                <p className="text-sm" style={{ color: 'var(--muted)' }}>{error}</p>
+              </div>
+            ) : sortedProfiles.length === 0 ? (
+              <div className="flex items-center justify-center py-12">
+                <p className="text-sm" style={{ color: 'var(--muted)' }}>
+                  Ingen data endnu. Vær den første til at tracke drinks!
+                </p>
+              </div>
+            ) : (
+              sortedProfiles.map((profile, index) => (
+                <ProfileCard
+                  key={profile.id}
+                  profile={profile}
+                  rank={index + 1}
+                  onSelect={setSelectedProfile}
+                  isActive={selectedProfile?.id === profile.id}
+                />
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -396,7 +463,7 @@ function ProfileDetailSheet({ profile, onClose }) {
         className={`absolute inset-0 bg-black/45 transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
       />
 
-      <div className="relative z-10 flex w-full max-w-[430px] justify-center">
+      <div className="relative z-10 flex w-full max-w-full justify-center">
         <div
           className={`relative flex h-full w-full flex-col overflow-hidden rounded-b-[32px] shadow-2xl transition-transform duration-300 ease-out ${
             isVisible ? 'translate-y-0' : '-translate-y-full'
@@ -463,18 +530,22 @@ function ProfileDetailSheet({ profile, onClose }) {
 
             <section className="space-y-3">
               <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>Seneste aktivitet</h3>
-              <ul className="space-y-2">
-                {profile.recentDrinks.map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex items-center justify-between rounded-2xl border border-[var(--line)] px-3 py-2"
-                    style={{ backgroundColor: 'var(--surface)' }}
-                  >
-                    <span className="text-sm" style={{ color: 'var(--ink)' }}>{item.label}</span>
-                    <span className="text-xs" style={{ color: 'var(--muted)' }}>{item.timestamp}</span>
-                  </li>
-                ))}
-              </ul>
+              {profile.recentDrinks && profile.recentDrinks.length > 0 ? (
+                <ul className="space-y-2">
+                  {profile.recentDrinks.map((item) => (
+                    <li
+                      key={item.id}
+                      className="flex items-center justify-between rounded-2xl border border-[var(--line)] px-3 py-2"
+                      style={{ backgroundColor: 'var(--surface)' }}
+                    >
+                      <span className="text-sm" style={{ color: 'var(--ink)' }}>{item.label}</span>
+                      <span className="text-xs" style={{ color: 'var(--muted)' }}>{item.timestamp}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm" style={{ color: 'var(--muted)' }}>Ingen seneste aktivitet</p>
+              )}
             </section>
           </div>
 

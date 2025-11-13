@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import Card from "../components/Card";
 import Page from "../components/Page";
 import Sheet from "../components/Sheet";
+import { useAuth } from "../hooks/useAuth";
+import { createChannel } from "../services/channelService";
 
 const INITIAL_CHANNELS = [
   {
@@ -253,12 +255,19 @@ function ChannelMembersSheet({ channel, open, onClose }) {
   );
 }
 
+const ADMIN_EMAIL = 'simonmathiashansen@gmail.com';
+
 export default function ManageChannels() {
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const [channels, setChannels] = useState(INITIAL_CHANNELS);
   const [joinCode, setJoinCode] = useState("");
   const [feedback, setFeedback] = useState(null);
   const [selectedChannel, setSelectedChannel] = useState(null);
+  const [newChannelName, setNewChannelName] = useState("");
+  const [isCreatingChannel, setIsCreatingChannel] = useState(false);
+  
+  const isAdmin = currentUser?.email === ADMIN_EMAIL;
 
   useEffect(() => {
     if (!feedback) return undefined;
@@ -290,7 +299,7 @@ export default function ManageChannels() {
     const existing = channels.find((channel) => channel.code === code);
 
     if (existing) {
-      setFeedback(`You’re already part of ${existing.name}.`);
+      setFeedback(`You're already part of ${existing.name}.`);
     } else {
       setChannels((prev) => [
         {
@@ -315,6 +324,30 @@ export default function ManageChannels() {
       setFeedback(`Joined channel with invite code ${code}.`);
     }
     setJoinCode("");
+  };
+
+  const handleCreateChannel = async (event) => {
+    event.preventDefault();
+    if (!newChannelName.trim()) {
+      setFeedback("Enter a channel name.");
+      return;
+    }
+
+    setIsCreatingChannel(true);
+    try {
+      const channelId = await createChannel({
+        name: newChannelName.trim(),
+        isDefault: false
+      });
+      setFeedback(`Channel "${newChannelName.trim()}" created successfully!`);
+      setNewChannelName("");
+      // Optionally refresh channels list here when real Firestore integration is added
+    } catch (error) {
+      console.error('Error creating channel:', error);
+      setFeedback(error.message || "Failed to create channel. Please try again.");
+    } finally {
+      setIsCreatingChannel(false);
+    }
   };
 
   return (
@@ -360,6 +393,70 @@ export default function ManageChannels() {
             Channels keep your nights organised. Join friends with an invite code.
           </p>
         </Card>
+
+        {isAdmin && (
+          <Card className="px-5 py-6 space-y-4">
+            <div className="space-y-1">
+              <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+                Admin
+              </div>
+              <h2 className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>
+                Create New Channel
+              </h2>
+              <p className="text-sm" style={{ color: 'var(--muted)' }}>
+                Create a new channel for users to join.
+              </p>
+            </div>
+            <form className="flex flex-col gap-3" onSubmit={handleCreateChannel}>
+              <input
+                type="text"
+                value={newChannelName}
+                onChange={(event) => setNewChannelName(event.target.value)}
+                placeholder="Enter channel name"
+                className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1"
+                style={{ 
+                  borderColor: 'var(--line)',
+                  backgroundColor: 'var(--subtle)',
+                  color: 'var(--ink)',
+                  '--tw-ring-offset-color': 'var(--bg)'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = 'var(--brand)';
+                  e.target.style.backgroundColor = 'var(--surface)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = 'var(--line)';
+                  e.target.style.backgroundColor = 'var(--subtle)';
+                }}
+                disabled={isCreatingChannel}
+              />
+              <button
+                type="submit"
+                disabled={isCreatingChannel || !newChannelName.trim()}
+                className="inline-flex items-center justify-center rounded-full border px-5 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ 
+                  borderColor: 'var(--line)',
+                  backgroundColor: 'var(--surface)',
+                  color: 'var(--ink)'
+                }}
+                onMouseEnter={(e) => {
+                  if (!e.target.disabled) {
+                    e.target.style.borderColor = 'var(--line)';
+                    e.target.style.color = 'var(--ink)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!e.target.disabled) {
+                    e.target.style.borderColor = 'var(--line)';
+                    e.target.style.color = 'var(--ink)';
+                  }
+                }}
+              >
+                {isCreatingChannel ? 'Creating...' : 'Create Channel'}
+              </button>
+            </form>
+          </Card>
+        )}
 
         <Card className="px-5 py-6 space-y-4">
           <div className="space-y-1">
