@@ -143,9 +143,7 @@ export default function TopBar({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [notificationOpen, setNotificationOpen] = useState(false);
-  const [messageOpen, setMessageOpen] = useState(false);
-  const [channelPickerOpen, setChannelPickerOpen] = useState(false);
+  const [activeOverlay, setActiveOverlay] = useState(null);
   const { selectedChannel, setSelectedChannel, channels, loading: channelsLoading } = useChannel();
   
   // Use mock data in development, empty arrays in production (unless explicitly provided)
@@ -156,11 +154,15 @@ export default function TopBar({
     ? (propMessages ?? DEFAULT_MESSAGES)
     : (propMessages ?? []);
 
+  // Close all overlays when route changes
   useEffect(() => {
-    setNotificationOpen(false);
-    setMessageOpen(false);
-    setChannelPickerOpen(false);
+    setActiveOverlay(null);
   }, [location.pathname]);
+
+  // Handler for overlay toggle
+  const handleOverlayToggle = (overlay) => {
+    setActiveOverlay(prev => prev === overlay ? null : overlay);
+  };
 
 
   const handleProfileClick =
@@ -170,7 +172,7 @@ export default function TopBar({
     });
 
   return (
-    <div className={`flex items-center gap-3 h-12 ${className}`}>
+    <div className={`flex items-center gap-3 h-16 ${className}`}>
       <button
         type="button"
         onClick={handleProfileClick}
@@ -202,23 +204,26 @@ export default function TopBar({
         <div className="relative">
           <button
             type="button"
-            onClick={() => {
-              setChannelPickerOpen((prev) => !prev);
-              setNotificationOpen(false);
-              setMessageOpen(false);
-            }}
+            onClick={() => handleOverlayToggle('channels')}
             aria-haspopup="dialog"
-            aria-expanded={channelPickerOpen}
+            aria-expanded={activeOverlay === 'channels'}
             aria-label="Select channel"
             className="grid h-10 w-10 place-items-center rounded-full border transition-colors"
-            style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
+            style={{ 
+              borderColor: activeOverlay === 'channels' ? 'var(--brand, #FF385C)' : 'var(--line)', 
+              color: activeOverlay === 'channels' ? 'var(--brand, #FF385C)' : 'var(--muted)' 
+            }}
             onMouseEnter={(e) => {
-              e.target.style.borderColor = 'var(--line)';
-              e.target.style.color = 'var(--ink)';
+              if (activeOverlay !== 'channels') {
+                e.currentTarget.style.borderColor = 'var(--line)';
+                e.currentTarget.style.color = 'var(--ink)';
+              }
             }}
             onMouseLeave={(e) => {
-              e.target.style.borderColor = 'var(--line)';
-              e.target.style.color = 'var(--muted)';
+              if (activeOverlay !== 'channels') {
+                e.currentTarget.style.borderColor = 'var(--line)';
+                e.currentTarget.style.color = 'var(--muted)';
+              }
             }}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
@@ -239,13 +244,13 @@ export default function TopBar({
             </svg>
           </button>
           <ChannelPickerSheet
-            open={channelPickerOpen}
-            onClose={() => setChannelPickerOpen(false)}
+            open={activeOverlay === 'channels'}
+            onClose={() => setActiveOverlay(null)}
             channels={channels}
             selectedChannel={selectedChannel}
             onSelectChannel={(channelId) => {
               setSelectedChannel(channelId);
-              setChannelPickerOpen(false);
+              setActiveOverlay(null);
             }}
           />
         </div>
@@ -255,22 +260,26 @@ export default function TopBar({
         <div className="relative">
           <button
             type="button"
-            onClick={() => {
-              setNotificationOpen((prev) => !prev);
-              setMessageOpen(false);
-            }}
+            onClick={() => handleOverlayToggle('notifications')}
             aria-haspopup="dialog"
-            aria-expanded={notificationOpen}
+            aria-expanded={activeOverlay === 'notifications'}
             aria-label="Open notifications"
             className="grid h-10 w-10 place-items-center rounded-full border transition-colors"
-            style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
+            style={{ 
+              borderColor: activeOverlay === 'notifications' ? 'var(--brand, #FF385C)' : 'var(--line)', 
+              color: activeOverlay === 'notifications' ? 'var(--brand, #FF385C)' : 'var(--muted)' 
+            }}
             onMouseEnter={(e) => {
-              e.target.style.borderColor = 'var(--line)';
-              e.target.style.color = 'var(--ink)';
+              if (activeOverlay !== 'notifications') {
+                e.currentTarget.style.borderColor = 'var(--line)';
+                e.currentTarget.style.color = 'var(--ink)';
+              }
             }}
             onMouseLeave={(e) => {
-              e.target.style.borderColor = 'var(--line)';
-              e.target.style.color = 'var(--muted)';
+              if (activeOverlay !== 'notifications') {
+                e.currentTarget.style.borderColor = 'var(--line)';
+                e.currentTarget.style.color = 'var(--muted)';
+              }
             }}
           >
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
@@ -290,8 +299,8 @@ export default function TopBar({
             </svg>
           </button>
           <OverlayPanel
-            open={notificationOpen}
-            onClose={() => setNotificationOpen(false)}
+            open={activeOverlay === 'notifications'}
+            onClose={() => setActiveOverlay(null)}
             title="Notifications"
             description="Latest updates and alerts"
             items={notifications}
@@ -301,22 +310,26 @@ export default function TopBar({
         <div className="relative">
           <button
             type="button"
-            onClick={() => {
-              setMessageOpen((prev) => !prev);
-              setNotificationOpen(false);
-            }}
+            onClick={() => handleOverlayToggle('messages')}
             aria-haspopup="dialog"
-            aria-expanded={messageOpen}
+            aria-expanded={activeOverlay === 'messages'}
             aria-label="Open messages"
             className="grid h-10 w-10 place-items-center rounded-full border transition-colors"
-            style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}
+            style={{ 
+              borderColor: activeOverlay === 'messages' ? 'var(--brand, #FF385C)' : 'var(--line)', 
+              color: activeOverlay === 'messages' ? 'var(--brand, #FF385C)' : 'var(--muted)' 
+            }}
             onMouseEnter={(e) => {
-              e.target.style.borderColor = 'var(--line)';
-              e.target.style.color = 'var(--ink)';
+              if (activeOverlay !== 'messages') {
+                e.currentTarget.style.borderColor = 'var(--line)';
+                e.currentTarget.style.color = 'var(--ink)';
+              }
             }}
             onMouseLeave={(e) => {
-              e.target.style.borderColor = 'var(--line)';
-              e.target.style.color = 'var(--muted)';
+              if (activeOverlay !== 'messages') {
+                e.currentTarget.style.borderColor = 'var(--line)';
+                e.currentTarget.style.color = 'var(--muted)';
+              }
             }}
           >
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
@@ -336,8 +349,8 @@ export default function TopBar({
             </svg>
           </button>
           <OverlayPanel
-            open={messageOpen}
-            onClose={() => setMessageOpen(false)}
+            open={activeOverlay === 'messages'}
+            onClose={() => setActiveOverlay(null)}
             title="Messages"
             description="Your latest conversations"
             items={messages}

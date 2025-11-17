@@ -54,7 +54,7 @@ export default function AppShell() {
 
   return (
     <div className="app-shell bg-[var(--bg)] text-[color:var(--text)]">
-      <header className="topbar bg-[var(--bg)]/90 backdrop-blur">
+      <header className="topbar">
         <div className="max-w-[480px] mx-auto px-4 h-full">
           <TopBar 
             title={title} 
@@ -69,8 +69,10 @@ export default function AppShell() {
         </div>
       </main>
 
-      <nav className="bottombar bg-[var(--bg)]/90 backdrop-blur">
-        <TabBar />
+      <nav className="bottombar">
+        <div className="max-w-[480px] mx-auto px-4 h-full">
+          <TabBar />
+        </div>
       </nav>
     </div>
   )

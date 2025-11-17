@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Page from '../components/Page';
 import { useChannel } from '../hooks/useChannel';
 import { USE_MOCK_DATA } from '../config/env';
@@ -199,11 +199,11 @@ export default function Leaderboard() {
   const { selectedChannel } = useChannel();
   const [sortMode, setSortMode] = useState('total-desc');
   const [selectedProfile, setSelectedProfile] = useState(null);
-  const topSectionRef = useRef(null);
-  const [listHeight, setListHeight] = useState(null);
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(!USE_MOCK_DATA);
   const [error, setError] = useState(null);
+  const topSectionRef = useRef(null);
+  const [listMaxHeight, setListMaxHeight] = useState(null);
 
   // Fetch leaderboard data from Firestore when not using mock data
   useEffect(() => {
@@ -256,21 +256,51 @@ export default function Leaderboard() {
     return [...profiles].sort(comparator);
   }, [profiles, sortMode]);
 
-  const updateListHeight = useCallback(() => {
-    if (!topSectionRef.current) {
-      return;
-    }
+  // Calculate available height for the scrollable list
+  useEffect(() => {
+    const updateListHeight = () => {
+      if (!topSectionRef.current) return;
 
-    const rect = topSectionRef.current.getBoundingClientRect();
-    // Account for bottom padding (16px) + safe area + extra spacing for visual comfort
-    const safeAreaBottom = Number.parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue('env(safe-area-inset-bottom)')
-    ) || 0;
-    const reservedBottom = 16 + safeAreaBottom + 24; // 16px padding + safe area + 24px visual spacing
-    const available = window.innerHeight - rect.bottom - reservedBottom;
+      const topSectionRect = topSectionRef.current.getBoundingClientRect();
+      // Get CSS variables for bar heights
+      const rootStyles = getComputedStyle(document.documentElement);
+      const topbarHeight = parseFloat(rootStyles.getPropertyValue('--topbar-height')) || 64;
+      const tabbarHeight = parseFloat(rootStyles.getPropertyValue('--tabbar-height')) || 64;
+      
+      // Calculate: viewport height - topbar - tabbar - top section bottom position - padding
+      // The top section bottom is relative to viewport, so we subtract it from viewport height
+      // Then subtract the tabbar height and padding
+      const scrollRegionPadding = 24; // py-3 = 12px top + 12px bottom
+      const listBottomPadding = 24; // pb-6 = 24px
+      const gap = 16; // gap-4 = 16px between top section and list
+      
+      const availableHeight = window.innerHeight 
+        - topSectionRect.bottom 
+        - (tabbarHeight - scrollRegionPadding) 
+        - listBottomPadding 
+        - gap;
+      
+      setListMaxHeight(Math.max(200, availableHeight));
+    };
 
-    setListHeight(Math.max(160, available));
-  }, []);
+    // Use requestAnimationFrame to ensure DOM is ready
+    const frame = requestAnimationFrame(() => {
+      updateListHeight();
+    });
+
+    window.addEventListener('resize', updateListHeight);
+    window.addEventListener('orientationchange', updateListHeight);
+
+    // Also update when sort mode changes (in case it affects top section height)
+    const timeout = setTimeout(updateListHeight, 150);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', updateListHeight);
+      window.removeEventListener('orientationchange', updateListHeight);
+      clearTimeout(timeout);
+    };
+  }, [sortMode]);
 
   useEffect(() => {
     if (!selectedProfile) return undefined;
@@ -284,27 +314,10 @@ export default function Leaderboard() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedProfile]);
 
-  useEffect(() => {
-    updateListHeight();
-
-    window.addEventListener('resize', updateListHeight);
-    window.addEventListener('orientationchange', updateListHeight);
-
-    return () => {
-      window.removeEventListener('resize', updateListHeight);
-      window.removeEventListener('orientationchange', updateListHeight);
-    };
-  }, [updateListHeight]);
-
-  useEffect(() => {
-    const frame = requestAnimationFrame(updateListHeight);
-    return () => cancelAnimationFrame(frame);
-  }, [sortMode, updateListHeight]);
-
   return (
     <Page title="Leaderboard">
-      <div className="flex flex-1 flex-col gap-4">
-        <div ref={topSectionRef} className="shrink-0 space-y-4 pb-2 pt-1">
+      <div className="flex flex-col gap-4">
+        <div ref={topSectionRef} className="shrink-0 space-y-4 pt-1">
           <p className="text-sm" style={{ color: 'var(--muted)' }}>
             Følg med i hvem der har tracket flest drinks i Sladesh Crew. Tryk på et kort for at se deres
             seneste aktivitet.
@@ -313,14 +326,14 @@ export default function Leaderboard() {
           <SortToggle options={sortOptions} active={sortMode} onChange={setSortMode} />
         </div>
 
-        <div className="min-h-0 flex-1 -mr-3 overflow-hidden pr-1">
-          <div
-            className="h-full space-y-3 overflow-y-auto pr-3 pb-6"
-            style={{
-              scrollBehavior: 'smooth',
-              ...(listHeight ? { maxHeight: `${listHeight}px` } : {}),
-            }}
-          >
+        <div 
+          className="overflow-y-auto -mr-3 pr-3 pb-6"
+          style={{
+            maxHeight: listMaxHeight ? `${listMaxHeight}px` : 'none',
+            scrollBehavior: 'smooth'
+          }}
+        >
+          <div className="space-y-3">
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <p className="text-sm" style={{ color: 'var(--muted)' }}>Indlæser...</p>

@@ -98,16 +98,23 @@ export default function Sheet({
   const overlayContent = (
     <div
       className={`fixed inset-0 flex flex-col ${justifyContent}`}
-      style={{ zIndex }}
+      style={{ zIndex, pointerEvents: 'none' }}
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? "sheet-title" : undefined}
       aria-describedby={description ? "sheet-description" : undefined}
     >
-      {/* Backdrop */}
+      {/* Backdrop - positioned to not cover navigation bars */}
       <div
-        className={`absolute inset-0 bg-black/60 transition-opacity ease-out ${backdropOpacity}`}
-        style={{ transitionDuration: `${animationDuration}ms` }}
+        className={`absolute bg-black/60 transition-opacity ease-out ${backdropOpacity}`}
+        style={{ 
+          top: 'var(--topbar-height, 48px)',
+          bottom: 'var(--tabbar-height, 57px)',
+          left: 0,
+          right: 0,
+          transitionDuration: `${animationDuration}ms`,
+          pointerEvents: 'auto'
+        }}
         onClick={onClose}
         aria-hidden="true"
       />
@@ -119,6 +126,7 @@ export default function Sheet({
           ...borderRadius,
           height: typeof height === "string" ? height : `${height}px`,
           transitionDuration: `${animationDuration}ms`,
+          pointerEvents: 'auto'
         }}
         onClick={(event) => event.stopPropagation()}
       >

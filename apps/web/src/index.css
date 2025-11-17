@@ -38,38 +38,74 @@ body {
   background: var(--bg);
 }
 
-/* App shell: 3-row grid layout */
+/* App shell: layout with fixed bars */
 .app-shell {
   min-height: 100dvh; /* iOS-friendly dynamic viewport height */
-  display: grid;
-  grid-template-rows: auto 1fr auto; /* top, content, bottom */
+  display: flex;
+  flex-direction: column;
   background: var(--bg);
+  padding-top: var(--topbar-height);
+  padding-bottom: var(--tabbar-height);
 }
 
 /* Scrollable content region */
 .scroll-region {
+  flex: 1;
   min-height: 0; /* allow child to shrink */
   overflow: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  /* Ensure content doesn't scroll behind bars - use viewport height minus both bars */
+  max-height: calc(100dvh - var(--topbar-height) - var(--tabbar-height));
 }
 
-/* Sticky top bar */
+/* Fixed top bar with glasmorphic styling */
 .topbar {
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 50;
+  left: 0;
+  right: 0;
+  z-index: 70;
+  height: var(--topbar-height);
   padding-top: var(--safe-top);
-  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  pointer-events: auto;
 }
 
-/* Sticky bottom bar */
+[data-theme="dark"] .topbar {
+  background: rgba(11, 11, 11, 0.85);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Fixed bottom bar with glasmorphic styling */
 .bottombar {
-  position: sticky;
+  position: fixed;
   bottom: 0;
-  z-index: 50;
+  left: 0;
+  right: 0;
+  z-index: 70;
+  height: var(--tabbar-height);
   padding-bottom: var(--safe-bottom);
-  border-top: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  pointer-events: auto;
+}
+
+[data-theme="dark"] .bottombar {
+  background: rgba(11, 11, 11, 0.85);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Overlay backdrop for map user pin overlay */
+.overlay-backdrop {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] .overlay-backdrop {
+  background-color: rgba(0, 0, 0, 0.7);
 }
 
 /* Utility classes */
@@ -234,19 +270,33 @@ button {
 /* Map page styles */
 .map-container {
   width: 100%;
-  min-height: 100%;
   height: 100%;
-  flex: 1 1 auto;
   position: relative;
   display: flex;
   flex-direction: column;
   margin: 0;
+  overflow: hidden;
+}
+
+/* Map page wrapper - breaks out of parent container to fill full width */
+.map-page-wrapper {
+  width: 100vw;
+  max-width: 100vw;
+  /* Break out of centered container using viewport width trick */
+  margin-left: calc((100vw - 100%) / -2);
+  margin-right: calc((100vw - 100%) / -2);
+  margin-top: -12px;
+  margin-bottom: -12px;
+  padding-left: 0;
+  padding-right: 0;
+  /* Ensure no horizontal overflow */
+  box-sizing: border-box;
 }
 
 /* Center on Me button styling */
 .center-on-me-button {
   position: absolute;
-  bottom: calc(var(--tabbar-height, 57px) + 16px);
+  bottom: calc(var(--tabbar-height, 64px) + 16px);
   right: 16px;
   z-index: 40;
   width: 48px;

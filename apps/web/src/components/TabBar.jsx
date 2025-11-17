@@ -36,7 +36,7 @@ function Item({ to, label, Icon, end, additionalActivePaths = [] }) {
 
 export default function TabBar() {
   return (
-    <nav className="h-16 max-w-[480px] mx-auto grid grid-cols-5" aria-label="Primary navigation">
+    <nav className="h-16 grid grid-cols-5" aria-label="Primary navigation">
       {tabs.map((tab) => (
         <Item key={tab.to} {...tab} />
       ))}

@@ -48,9 +48,25 @@ function MapResizeHandler() {
   
   useEffect(() => {
     // Ensure map resizes when container size changes
-    setTimeout(() => {
-      map.invalidateSize()
-    }, 100)
+    const resizeMap = () => {
+      setTimeout(() => {
+        map.invalidateSize()
+      }, 100)
+    }
+    
+    // Initial resize
+    resizeMap()
+    
+    // Listen for window resize events
+    window.addEventListener('resize', resizeMap)
+    
+    // Also listen for orientation changes on mobile
+    window.addEventListener('orientationchange', resizeMap)
+    
+    return () => {
+      window.removeEventListener('resize', resizeMap)
+      window.removeEventListener('orientationchange', resizeMap)
+    }
   }, [map])
   
   return null
@@ -116,7 +132,10 @@ function UserPinOverlay({ user, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-6 py-8 backdrop-blur-sm" style={{ backgroundColor: 'rgba(11, 17, 32, 0.6)' }} onClick={onClose}>
+    <div 
+      className="fixed inset-0 z-40 flex items-center justify-center px-6 py-8 backdrop-blur-sm overlay-backdrop" 
+      onClick={onClose}
+    >
       <div 
         className="w-full max-w-[calc(100%-48px)] sm:max-w-[360px] rounded-[28px] p-6 shadow-[0_24px_60px_rgba(15,23,42,0.25)]" 
         style={{ backgroundColor: 'var(--surface)' }}
@@ -241,11 +260,38 @@ export default function MapPage() {
   const { userLocation, otherUsers } = useLocation()
   const [selectedUser, setSelectedUser] = useState(null)
   const mapRef = useRef(null)
+  const containerRef = useRef(null)
 
   // TODO: When implementing real Firestore queries, filter by channelId:
   // - If selectedChannel.isDefault === true: show global/unfiltered view (no channelId filter)
   // - Otherwise: filter all queries with where('channelId', '==', selectedChannel.id)
   // This applies to: user locations, check-ins, and activities displayed on the map
+
+  // Ensure map resizes when container size changes
+  useEffect(() => {
+    if (!containerRef.current) return
+    
+    const resizeMap = () => {
+      // Delay to ensure map is ready
+      setTimeout(() => {
+        if (mapRef.current) {
+          mapRef.current.invalidateSize()
+        }
+      }, 150)
+    }
+    
+    // Use ResizeObserver to detect container size changes
+    const resizeObserver = new ResizeObserver(resizeMap)
+    resizeObserver.observe(containerRef.current)
+    
+    // Also trigger on initial mount after a delay to ensure map is initialized
+    const initialTimeout = setTimeout(resizeMap, 300)
+    
+    return () => {
+      resizeObserver.disconnect()
+      clearTimeout(initialTimeout)
+    }
+  }, [])
 
   const handleCenterOnMe = () => {
     if (userLocation && mapRef.current) {
@@ -257,8 +303,14 @@ export default function MapPage() {
   }
 
   return (
-    <div className="w-full -mx-4 -my-3">
-      <div className="map-container relative" style={{ minHeight: 'calc(100dvh - 12rem)', height: '100%' }}>
+    <div 
+      ref={containerRef}
+      className="map-page-wrapper relative" 
+      style={{ 
+        height: 'calc(100dvh - var(--topbar-height) - var(--tabbar-height))'
+      }}
+    >
+      <div className="map-container relative w-full h-full">
           <MapContainer
             center={userLocation ? [userLocation.lat, userLocation.lng] : [55.6761, 12.5683]}
             zoom={13}

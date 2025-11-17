@@ -22,9 +22,11 @@
 
   /* Surfaces */
   --bg: #ffffff;
+  --bg-rgb: 255 255 255;
   --surface: #ffffff;
   --subtle: #f7f7f7;
   --line: #ebebeb;
+  --line-rgb: 235 235 235;
 
   /* Status */
   --success: #10b981;
@@ -40,9 +42,11 @@
   --shadow-soft: 0 8px 20px rgba(0,0,0,.08);
 
   /* Layout tokens */
-  --tabbar-h: 57px;
-  /* TabBar height: 8px top + 24px icon + 2px gap + 11px label + 12px bottom + safe area */
-  --tabbar-height: calc(57px + env(safe-area-inset-bottom, 0px));
+  --bar-height: 64px; /* Fixed height for both TopBar and TabBar */
+  /* TopBar height: 64px + safe area */
+  --topbar-height: calc(64px + env(safe-area-inset-top, 0px));
+  /* TabBar height: 64px + safe area */
+  --tabbar-height: calc(64px + env(safe-area-inset-bottom, 0px));
 
   /* Typography scale (kan udbygges) */
   --h1: 20px;
@@ -64,9 +68,11 @@
   --muted: #bcbcbc;
 
   --bg: #0b0b0b;
+  --bg-rgb: 11 11 11;
   --surface: #111111;
   --subtle: #171717;
   --line: #242424;
+  --line-rgb: 36 36 36;
 
   --success: #34d399;
   --success-rgb: 52 211 153;
