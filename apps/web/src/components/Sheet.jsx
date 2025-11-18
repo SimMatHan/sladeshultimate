@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
+const TOPBAR_OFFSET = "var(--topbar-height, 48px)";
+const TABBAR_OFFSET = "var(--tabbar-height, 57px)";
+
 /**
  * Reusable Sheet/Overlay component for top and bottom sheets
  * 
@@ -95,10 +98,20 @@ export default function Sheet({
 
   const justifyContent = isTop ? "justify-start" : "justify-end";
 
+  const topInset = isTop ? TOPBAR_OFFSET : 0;
+  const bottomInset = isTop ? 0 : TABBAR_OFFSET;
+
   const overlayContent = (
     <div
       className={`fixed inset-0 flex flex-col ${justifyContent}`}
-      style={{ zIndex, pointerEvents: 'none' }}
+      style={{
+        zIndex,
+        pointerEvents: "none",
+        left: 0,
+        right: 0,
+        top: topInset,
+        bottom: bottomInset,
+      }}
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? "sheet-title" : undefined}
@@ -107,13 +120,13 @@ export default function Sheet({
       {/* Backdrop - positioned to not cover navigation bars */}
       <div
         className={`absolute bg-black/60 transition-opacity ease-out ${backdropOpacity}`}
-        style={{ 
-          top: 'var(--topbar-height, 48px)',
-          bottom: 'var(--tabbar-height, 57px)',
+        style={{
+          top: TOPBAR_OFFSET,
+          bottom: TABBAR_OFFSET,
           left: 0,
           right: 0,
           transitionDuration: `${animationDuration}ms`,
-          pointerEvents: 'auto'
+          pointerEvents: "auto",
         }}
         onClick={onClose}
         aria-hidden="true"
