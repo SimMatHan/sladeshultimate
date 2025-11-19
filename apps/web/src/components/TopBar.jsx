@@ -10,12 +10,15 @@ const DEFAULT_NOTIFICATIONS = [
     title: "Welcome to Sladesh!",
     body: "Start by checking in and logging your first drink.",
     meta: "Just now",
+    badge: "New",
+    icon: "✨",
   },
   {
     id: "notification-2",
     title: "Leaderboard update",
     body: "Sofie just moved to 1st place with 12 points.",
     meta: "15 min ago",
+    icon: "🏆",
   },
 ];
 
@@ -25,16 +28,65 @@ const DEFAULT_MESSAGES = [
     title: "Mikkel",
     body: "Should we meet at the bar in 10?",
     meta: "2 min ago",
+    icon: "💬",
+    badge: "Reply",
   },
   {
     id: "message-2",
     title: "Emma",
     body: "Loved the cocktail menu you recommended!",
     meta: "30 min ago",
+    icon: "🍸",
   },
 ];
 
-function OverlayPanel({ open, onClose, title, description, items }) {
+function BellIcon(props) {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M6 9V8a6 6 0 0 1 12 0v1c0 1.2.4 2.4 1.1 3.4L20 13.5V15H4v-1.5l.9-1.1C5.6 11.4 6 10.2 6 9Z" />
+      <path d="M9 18a3 3 0 0 0 6 0" />
+    </svg>
+  );
+}
+
+function ChatBubbleIcon(props) {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M7 9h10" />
+      <path d="M7 13h6" />
+      <path d="M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-3.5L12 21l-3.5-4H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" />
+    </svg>
+  );
+}
+
+function OverlayPanel({ open, onClose, title, description, items, variant = "notifications" }) {
+  const getFallbackIcon = () => {
+    if (variant === "messages") return <ChatBubbleIcon />;
+    return <BellIcon />;
+  };
+
   return (
     <Sheet
       open={open}
@@ -45,25 +97,41 @@ function OverlayPanel({ open, onClose, title, description, items }) {
       height="min(50vh, 460px)"
       animationDuration={300}
     >
-      {items.length > 0 ? (
-        <ul className="divide-y divide-neutral-100">
-          {items.map((item) => (
-            <li key={item.id} className="py-4">
-              <div className="text-sm font-semibold text-neutral-900">
-                {item.title}
-              </div>
-              <p className="mt-1 text-xs text-neutral-500">{item.body}</p>
-              <div className="mt-2 text-[11px] uppercase tracking-wide text-neutral-400">
-                {item.meta}
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <div className="py-10 text-center text-xs text-neutral-500">
-          Nothing here yet. Stay tuned!
-        </div>
-      )}
+      <div className="sheet-panel__body">
+        {items.length > 0 ? (
+          <ul className="sheet-list flex flex-col gap-3">
+            {items.map((item) => {
+              const iconNode =
+                item.icon && typeof item.icon === "string" ? (
+                  <span>{item.icon}</span>
+                ) : (
+                  item.icon ?? getFallbackIcon()
+                );
+              return (
+                <li key={item.id}>
+                  <div className="overlay-card">
+                    <div className="overlay-card__icon" aria-hidden="true">
+                      {iconNode}
+                    </div>
+                    <div className="overlay-card__body">
+                      <div className="overlay-card__title">{item.title}</div>
+                      <p className="overlay-card__text">{item.body}</p>
+                    </div>
+                    <div className="overlay-card__meta">
+                      {item.badge ? <span className="overlay-card__badge">{item.badge}</span> : null}
+                      {item.meta}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <div className="sheet-empty py-10 text-center text-xs">
+            Nothing here yet. Stay tuned!
+          </div>
+        )}
+      </div>
     </Sheet>
   );
 }
@@ -80,51 +148,53 @@ function ChannelPickerSheet({ open, onClose, channels, selectedChannel, onSelect
       animationDuration={300}
     >
       {channels.length > 0 ? (
-        <ul className="divide-y divide-neutral-100">
-          {channels.map((channel) => (
-            <li key={channel.id}>
-              <button
-                type="button"
-                onClick={() => onSelectChannel(channel.id)}
-                className={`w-full py-4 text-left transition-colors ${
-                  selectedChannel?.id === channel.id
-                    ? 'bg-neutral-50'
-                    : 'hover:bg-neutral-50'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-semibold text-neutral-900">
-                      {channel.name}
-                    </div>
-                    {channel.isDefault && (
-                      <div className="mt-1 text-xs text-neutral-500">
-                        Default channel
+        <ul className="sheet-list flex flex-col gap-3">
+          {channels.map((channel) => {
+            const isActive = selectedChannel?.id === channel.id;
+            return (
+              <li key={channel.id}>
+                <button
+                  type="button"
+                  onClick={() => onSelectChannel(channel.id)}
+                  className="channel-card text-left"
+                  aria-pressed={isActive}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                        {channel.name}
                       </div>
-                    )}
+                      <div className="mt-1 text-xs" style={{ color: 'var(--muted)' }}>
+                        {channel.isDefault ? "Default channel" : "Tap to switch"}
+                      </div>
+                      {isActive && (
+                        <div className="mt-3">
+                          <span className="overlay-card__badge">Active</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="channel-card__indicator" data-active={isActive}>
+                      <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M20 6L9 17l-5-5" />
+                      </svg>
+                    </div>
                   </div>
-                  {selectedChannel?.id === channel.id && (
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="text-[color:var(--brand,#FF385C)]"
-                    >
-                      <path d="M20 6L9 17l-5-5" />
-                    </svg>
-                  )}
-                </div>
-              </button>
-            </li>
-          ))}
+                </button>
+              </li>
+            );
+          })}
         </ul>
       ) : (
-        <div className="py-10 text-center text-xs text-neutral-500">
+        <div className="sheet-empty py-10 text-center text-xs">
           No channels available
         </div>
       )}
@@ -304,6 +374,7 @@ export default function TopBar({
             title="Notifications"
             description="Latest updates and alerts"
             items={notifications}
+            variant="notifications"
           />
         </div>
 
@@ -354,6 +425,7 @@ export default function TopBar({
             title="Messages"
             description="Your latest conversations"
             items={messages}
+            variant="messages"
           />
         </div>
 

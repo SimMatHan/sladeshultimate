@@ -589,18 +589,18 @@ export default function Home() {
             />
             <div className="relative z-50 w-full">
               <div
-                className={`relative rounded-t-[32px] shadow-2xl transition-transform duration-300 ease-out ${
+                className={`drink-selector-overlay relative rounded-t-[32px] shadow-2xl transition-transform duration-300 ease-out ${
                   isSheetVisible ? "translate-y-0" : "translate-y-full"
                 }`}
-                style={{ height: "75vh", backgroundColor: 'var(--surface)' }}
+                style={{ height: "75vh" }}
               >
                 <button
                   type="button"
                   onClick={closeSheet}
                   className="absolute right-6 top-6 text-2xl transition-colors"
                   style={{ color: 'var(--muted)' }}
-                  onMouseEnter={(e) => e.target.style.color = 'var(--ink)'}
-                  onMouseLeave={(e) => e.target.style.color = 'var(--muted)'}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--ink)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--muted)')}
                   aria-label="Close"
                 >
                   ×
@@ -627,7 +627,7 @@ export default function Home() {
                             className="rounded-2xl border p-4 shadow-sm"
                             style={{ 
                               borderColor: 'var(--line)',
-                              backgroundColor: 'var(--subtle)'
+                              backgroundColor: 'var(--surface)'
                             }}
                           >
                             <div className="flex items-center justify-between gap-4">

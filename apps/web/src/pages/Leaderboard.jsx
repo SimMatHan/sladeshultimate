@@ -203,6 +203,7 @@ export default function Leaderboard() {
   const [loading, setLoading] = useState(!USE_MOCK_DATA);
   const [error, setError] = useState(null);
   const topSectionRef = useRef(null);
+  const listContainerRef = useRef(null);
   const [listMaxHeight, setListMaxHeight] = useState(null);
 
   // Fetch leaderboard data from Firestore when not using mock data
@@ -314,6 +315,34 @@ export default function Leaderboard() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedProfile]);
 
+  // Disable scrolling on the list container and main scroll region when overlay is open
+  useEffect(() => {
+    if (!selectedProfile) return undefined;
+
+    const scrollRegion = document.querySelector('.scroll-region');
+    const originalScrollRegionOverflow = scrollRegion ? scrollRegion.style.overflow : null;
+    
+    const container = listContainerRef.current;
+    const originalContainerOverflow = container ? container.style.overflow : null;
+    
+    if (container) {
+      container.style.overflow = 'hidden';
+    }
+    
+    if (scrollRegion) {
+      scrollRegion.style.overflow = 'hidden';
+    }
+    
+    return () => {
+      if (container) {
+        container.style.overflow = originalContainerOverflow || '';
+      }
+      if (scrollRegion) {
+        scrollRegion.style.overflow = originalScrollRegionOverflow || '';
+      }
+    };
+  }, [selectedProfile]);
+
   return (
     <Page title="Leaderboard">
       <div className="flex flex-col gap-4">
@@ -327,6 +356,7 @@ export default function Leaderboard() {
         </div>
 
         <div 
+          ref={listContainerRef}
           className="overflow-y-auto -mr-3 pr-3 pb-6"
           style={{
             maxHeight: listMaxHeight ? `${listMaxHeight}px` : 'none',
@@ -470,6 +500,15 @@ function ProfileDetailSheet({ profile, onClose }) {
     return () => cancelAnimationFrame(frame);
   }, []);
 
+  // Lock body scroll when overlay is open
+  useEffect(() => {
+    const original = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = original;
+    };
+  }, []);
+
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center" onClick={onClose}>
       <div
@@ -488,8 +527,11 @@ function ProfileDetailSheet({ profile, onClose }) {
           onClick={(event) => event.stopPropagation()}
         >
           <header 
-            className="flex items-start justify-between gap-3 border-b border-[var(--line)] px-6 pb-4 pt-6"
-            style={{ backgroundColor: 'var(--surface)' }}
+            className="flex items-start justify-between gap-3 border-b border-[var(--line)] px-6 pb-4"
+            style={{ 
+              backgroundColor: 'var(--surface)',
+              paddingTop: 'calc(70px + env(safe-area-inset-top, 0px))'
+            }}
           >
             <div>
               <h2 className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>{profile.name}</h2>
@@ -498,25 +540,6 @@ function ProfileDetailSheet({ profile, onClose }) {
                 {profile.streakDays} dages streak
               </p>
             </div>
-            <button
-              type="button"
-              aria-label="Luk detaljer"
-              onClick={onClose}
-              className="rounded-full border border-transparent p-2 text-xl leading-none transition"
-              style={{ 
-                color: 'var(--muted)'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.backgroundColor = 'var(--subtle)';
-                e.target.style.color = 'var(--ink)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.backgroundColor = 'transparent';
-                e.target.style.color = 'var(--muted)';
-              }}
-            >
-              ×
-            </button>
           </header>
 
           <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">

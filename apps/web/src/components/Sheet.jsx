@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 
-const TOPBAR_OFFSET = "var(--topbar-height, 48px)";
+const DEFAULT_TOPBAR_OFFSET = "var(--topbar-height, 48px)";
 const TABBAR_OFFSET = "var(--tabbar-height, 57px)";
 
 /**
@@ -33,6 +33,7 @@ export default function Sheet({
 }) {
   const [isVisible, setIsVisible] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
+  const [topOffset, setTopOffset] = useState(DEFAULT_TOPBAR_OFFSET);
 
   // Handle mount/unmount with animation timing
   useEffect(() => {
@@ -74,6 +75,30 @@ export default function Sheet({
     };
   }, [shouldRender]);
 
+  useLayoutEffect(() => {
+    if (!shouldRender || position !== "top" || typeof window === "undefined") return undefined;
+
+    const updateTopOffset = () => {
+      const topbar = document.querySelector(".topbar");
+      if (topbar) {
+        const { bottom } = topbar.getBoundingClientRect();
+        setTopOffset(`${bottom}px`);
+      } else {
+        setTopOffset(DEFAULT_TOPBAR_OFFSET);
+      }
+    };
+
+    updateTopOffset();
+
+    window.addEventListener("resize", updateTopOffset);
+    window.addEventListener("orientationchange", updateTopOffset);
+
+    return () => {
+      window.removeEventListener("resize", updateTopOffset);
+      window.removeEventListener("orientationchange", updateTopOffset);
+    };
+  }, [position, shouldRender]);
+
   if (!shouldRender || typeof document === "undefined") return null;
 
   const isTop = position === "top";
@@ -98,7 +123,7 @@ export default function Sheet({
 
   const justifyContent = isTop ? "justify-start" : "justify-end";
 
-  const topInset = isTop ? TOPBAR_OFFSET : 0;
+  const topInset = isTop ? topOffset : 0;
   const bottomInset = isTop ? 0 : TABBAR_OFFSET;
 
   const overlayContent = (
@@ -119,9 +144,9 @@ export default function Sheet({
     >
       {/* Backdrop - positioned to not cover navigation bars */}
       <div
-        className={`absolute bg-black/60 transition-opacity ease-out ${backdropOpacity}`}
+        className={`sheet-backdrop absolute transition-opacity ease-out ${backdropOpacity}`}
         style={{
-          top: TOPBAR_OFFSET,
+          top: topInset,
           bottom: TABBAR_OFFSET,
           left: 0,
           right: 0,
@@ -134,7 +159,7 @@ export default function Sheet({
 
       {/* Sheet Content */}
       <div
-        className={`relative z-10 w-full bg-white transition-all ease-out ${sheetTransform} ${className}`}
+        className={`sheet-panel relative z-10 w-full transition-all ease-out ${sheetTransform} ${className}`}
         style={{
           ...borderRadius,
           height: typeof height === "string" ? height : `${height}px`,
@@ -148,9 +173,7 @@ export default function Sheet({
           <div
             className="px-6 pb-4"
             style={{
-              paddingTop: isTop
-                ? `calc(env(safe-area-inset-top, 0px) + 24px)`
-                : "24px",
+              paddingTop: isTop ? "10px" : "24px",
             }}
           >
             <div className="flex items-center justify-between">
@@ -158,7 +181,8 @@ export default function Sheet({
                 {title && (
                   <div
                     id="sheet-title"
-                    className="text-lg font-semibold text-neutral-900"
+                    className="text-lg font-semibold"
+                    style={{ color: 'var(--ink)' }}
                   >
                     {title}
                   </div>
@@ -166,7 +190,8 @@ export default function Sheet({
                 {description && (
                   <p
                     id="sheet-description"
-                    className="mt-1 text-xs text-neutral-500"
+                    className="mt-1 text-xs"
+                    style={{ color: 'var(--muted)' }}
                   >
                     {description}
                   </p>
@@ -175,7 +200,7 @@ export default function Sheet({
               <button
                 type="button"
                 onClick={onClose}
-                className="text-xl text-neutral-400 transition-colors hover:text-neutral-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-300 focus-visible:ring-offset-2"
+                className="text-xl text-[color:var(--muted)] transition-colors hover:text-[color:var(--ink)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2"
                 aria-label="Close sheet"
               >
                 ×
