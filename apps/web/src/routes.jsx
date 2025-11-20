@@ -4,7 +4,7 @@ import { AnimatePresence } from 'framer-motion'
 import { useAuth } from './hooks/useAuth'
 
 import AppShell from './components/AppShell'
-
+import InstallPwaGate from './components/InstallPwaGate'
 import Splash from './pages/Splash'
 import Auth from './pages/Auth'
 import Onboarding from './pages/Onboarding'
@@ -17,6 +17,7 @@ import ManageChannels from './pages/ManageChannels'
 import ManageProfile from './pages/ManageProfile'
 import AdminPortal from './pages/AdminPortal'
 import { isAdminUser } from './config/admin'
+import useDisplayMode from './hooks/useDisplayMode'
 
 /** Firebase Auth guards - check if user is authenticated */
 function useAuthGuard() {
@@ -115,6 +116,18 @@ function RedirectToAuth({ mode = 'signin' }) {
 }
 
 export default function RoutesView() {
+  const { isStandalone, canPromptInstall, handleInstallClick, isIos } = useDisplayMode()
+
+  if (!isStandalone) {
+    return (
+      <InstallPwaGate
+        canPromptInstall={canPromptInstall}
+        handleInstallClick={handleInstallClick}
+        isIos={isIos}
+      />
+    )
+  }
+
   return (
     <Routes>
       {/* splash -> auth/onboarding/home afhængigt af guards */}
