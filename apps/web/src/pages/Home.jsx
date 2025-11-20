@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import Card from "../components/Card";
 import { useLocation } from "../contexts/LocationContext";
 import { useAuth } from "../hooks/useAuth";
-import { addDrink, addCheckIn, updateUserLocation, getUser } from "../services/userService";
+import { addDrink, addCheckIn, updateUserLocation, getUser, getNextResetBoundary } from "../services/userService";
 import { incrementDrinkCount, incrementCheckInCount } from "../services/statsService";
 
 const CATEGORIES = [
@@ -302,13 +302,6 @@ export default function Home() {
     []
   );
 
-  const computeMidnight = () => {
-    const now = new Date();
-    const midnight = new Date(now);
-    midnight.setHours(24, 0, 0, 0);
-    return midnight;
-  };
-
   // Load user data from Firestore on mount
   useEffect(() => {
     const loadUserData = async () => {
@@ -319,18 +312,7 @@ export default function Home() {
         if (userData) {
           setUserTotalDrinks(userData.totalDrinks || 0);
           setCheckedIn(userData.checkInStatus || false);
-          // Set expiresAt based on lastCheckIn if needed
-          if (userData.lastCheckIn && userData.checkInStatus) {
-            const lastCheckInTime = userData.lastCheckIn.toDate?.() || 
-              (userData.lastCheckIn.seconds ? new Date(userData.lastCheckIn.seconds * 1000) : new Date());
-            const midnight = computeMidnight();
-            if (lastCheckInTime < midnight) {
-              setExpiresAt(midnight);
-            } else {
-              // Check-in expired
-              setCheckedIn(false);
-            }
-          }
+          setExpiresAt(userData.checkInStatus ? getNextResetBoundary(new Date()) : null);
         }
       } catch (error) {
         console.error("Error loading user data:", error);
@@ -456,7 +438,7 @@ export default function Home() {
                     
                     // Update UI state
                     setCheckedIn(true);
-                    setExpiresAt(computeMidnight());
+                    setExpiresAt(getNextResetBoundary(new Date()));
                     
                   } catch (error) {
                     console.error("Error saving check-in to Firestore:", error);

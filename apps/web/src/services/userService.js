@@ -16,6 +16,132 @@ import {
 import { db } from '../firebase'
 import { deriveInitials, generateAvatarGradient } from '../config/firestore.schema'
 
+const RESET_BOUNDARY_HOURS = [0, 12]
+const RESET_TIMEZONE = 'Europe/Copenhagen'
+const TIMEZONE_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: RESET_TIMEZONE,
+  hour12: false,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit'
+})
+
+function normalizeToDate(value) {
+  if (!value) return null
+  if (value instanceof Date) return value
+  if (typeof value.toDate === 'function') {
+    return value.toDate()
+  }
+  if (typeof value.seconds === 'number') {
+    return new Date(value.seconds * 1000)
+  }
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function getTimeZoneOffsetMs(date) {
+  const parts = TIMEZONE_FORMATTER.formatToParts(date)
+  const extracted = {}
+  parts.forEach(part => {
+    if (part.type !== 'literal') {
+      extracted[part.type] = part.value
+    }
+  })
+  const zonedUtc = Date.UTC(
+    Number(extracted.year),
+    Number(extracted.month) - 1,
+    Number(extracted.day),
+    Number(extracted.hour),
+    Number(extracted.minute),
+    Number(extracted.second)
+  )
+  return zonedUtc - date.getTime()
+}
+
+function shiftDateByOffset(date, offsetMs) {
+  return new Date(date.getTime() + offsetMs)
+}
+
+export function getLatestResetBoundary(now = new Date()) {
+  const offsetMs = getTimeZoneOffsetMs(now)
+  const zoned = shiftDateByOffset(now, offsetMs)
+  const boundary = new Date(zoned)
+  const zonedHour = boundary.getUTCHours()
+  const targetHour = zonedHour >= RESET_BOUNDARY_HOURS[1]
+    ? RESET_BOUNDARY_HOURS[1]
+    : RESET_BOUNDARY_HOURS[0]
+  boundary.setUTCHours(targetHour, 0, 0, 0)
+  return shiftDateByOffset(boundary, -offsetMs)
+}
+
+export function getNextResetBoundary(now = new Date()) {
+  const offsetMs = getTimeZoneOffsetMs(now)
+  const zoned = shiftDateByOffset(now, offsetMs)
+  const boundary = new Date(zoned)
+  const zonedHour = boundary.getUTCHours()
+  const targetHour = zonedHour < RESET_BOUNDARY_HOURS[1]
+    ? RESET_BOUNDARY_HOURS[1]
+    : 24
+  boundary.setUTCHours(targetHour, 0, 0, 0)
+  return shiftDateByOffset(boundary, -offsetMs)
+}
+
+function isCheckInExpired(userData, now = new Date()) {
+  const isCheckedIn = !!userData.checkInStatus
+  if (!isCheckedIn) {
+    return false
+  }
+  const lastCheckInDate = normalizeToDate(userData.lastCheckIn)
+  if (!lastCheckInDate) {
+    return true
+  }
+  const latestBoundary = getLatestResetBoundary(now)
+  return lastCheckInDate < latestBoundary
+}
+
+async function refreshCheckInStatus(userRef, userData, now = new Date()) {
+  const expired = isCheckInExpired(userData, now)
+  const missingStatusTimestamp = !normalizeToDate(userData.lastStatusCheckedAt)
+
+  if (!expired && !missingStatusTimestamp) {
+    return userData
+  }
+
+  const clientNow = Timestamp.now()
+  const updates = {
+    lastStatusCheckedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    lastActiveAt: serverTimestamp()
+  }
+
+  if (expired) {
+    updates.checkInStatus = false
+  }
+
+  await updateDoc(userRef, updates)
+
+  const nextData = {
+    ...userData,
+    lastStatusCheckedAt: clientNow,
+    updatedAt: clientNow,
+    lastActiveAt: clientNow
+  }
+
+  if (expired) {
+    nextData.checkInStatus = false
+  }
+
+  return nextData
+}
+
+export async function ensureFreshCheckInStatus(userId, userData, now = new Date()) {
+  const userRef = doc(db, 'users', userId)
+  return refreshCheckInStatus(userRef, userData, now)
+}
+
 /**
  * Create a new user document in Firestore
  * Called automatically when a user signs up
@@ -47,6 +173,8 @@ export async function createUser({ uid, email, fullName, displayName = null }) {
     drinkTypes: {},
     drinkVariations: {},
     checkInStatus: false,
+    lastCheckIn: null,
+    lastStatusCheckedAt: now,
     sladeshSent: 0,
     sladeshReceived: 0,
     joinedChannelIds: [],
@@ -92,8 +220,9 @@ export async function getUser(userId) {
   if (!userSnap.exists()) {
     return null
   }
-  
-  return { id: userSnap.id, ...userSnap.data() }
+
+  const normalizedData = await refreshCheckInStatus(userRef, userSnap.data())
+  return { id: userSnap.id, ...normalizedData }
 }
 
 /**
@@ -208,6 +337,7 @@ export async function addCheckIn(userId, checkInData) {
     checkInStatus: true,
     lastCheckIn: serverTimestamp(),
     lastCheckInVenue: checkInData.venue,
+    lastStatusCheckedAt: serverTimestamp(),
     currentLocation: {
       ...checkInData.location,
       venue: checkInData.venue,

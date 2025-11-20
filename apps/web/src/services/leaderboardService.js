@@ -7,6 +7,7 @@ import {
   where
 } from 'firebase/firestore'
 import { db } from '../firebase'
+import { ensureFreshCheckInStatus } from './userService'
 
 /**
  * Fetch leaderboard data from Firestore
@@ -34,7 +35,13 @@ export async function fetchLeaderboardProfiles(channelId = null) {
     const profiles = []
     
     for (const docSnap of querySnapshot.docs) {
-      const userData = docSnap.data()
+      let userData = docSnap.data()
+      
+      try {
+        userData = await ensureFreshCheckInStatus(docSnap.id, userData)
+      } catch (statusError) {
+        console.warn(`Unable to refresh check-in status for user ${docSnap.id}:`, statusError)
+      }
       
       // Skip users with no drinks
       if (!userData.totalDrinks || userData.totalDrinks === 0) {
