@@ -402,6 +402,37 @@ export async function joinChannelByCode(userId, joinCode) {
 }
 
 /**
+ * Fetch checked-in members for a channel.
+ * Default channel returns all checked-in users; otherwise filter by membership.
+ * @param {string | null} channelId
+ * @param {boolean} isDefaultChannel
+ * @returns {Promise<Array>} Array of checked-in user summaries
+ */
+export async function getCheckedInChannelMembers(channelId, isDefaultChannel = false) {
+  const usersRef = collection(db, 'users')
+  const constraints = [where('checkInStatus', '==', true)]
+
+  if (!isDefaultChannel && channelId) {
+    constraints.push(where('joinedChannelIds', 'array-contains', channelId))
+  }
+
+  const q = query(usersRef, ...constraints)
+  const snapshot = await getDocs(q)
+
+  return snapshot.docs.map((docSnap) => {
+    const data = docSnap.data()
+    return {
+      id: docSnap.id,
+      name: data.fullName || data.displayName || 'Ukendt',
+      initials: data.initials || '',
+      avatarGradient: data.avatarGradient || 'from-slate-400 to-indigo-500',
+      checkInStatus: true,
+      currentLocation: data.currentLocation || null
+    }
+  })
+}
+
+/**
  * Add a comment to a channel
  * @param {string} channelId - Channel ID
  * @param {Object} commentData - Comment data

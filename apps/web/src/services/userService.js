@@ -91,6 +91,24 @@ export function getNextResetBoundary(now = new Date()) {
   return shiftDateByOffset(boundary, -offsetMs)
 }
 
+export function getSladeshCooldownState(userData = {}, now = new Date()) {
+  const lastSentAt = normalizeToDate(userData.lastSladeshSentAt)
+  const blockStart = getLatestResetBoundary(now)
+  const blockEnd = getNextResetBoundary(now)
+  const blocked =
+    !!lastSentAt &&
+    lastSentAt.getTime() >= blockStart.getTime() &&
+    lastSentAt.getTime() < blockEnd.getTime()
+
+  return {
+    blocked,
+    canSend: !blocked,
+    lastSentAt,
+    blockStartedAt: blockStart,
+    blockEndsAt: blockEnd
+  }
+}
+
 export function getLatestDrinkDayBoundary(now = new Date()) {
   const offsetMs = getTimeZoneOffsetMs(now)
   const zoned = shiftDateByOffset(now, offsetMs)
@@ -253,6 +271,7 @@ export async function createUser({ uid, email, fullName, displayName = null }) {
     lastStatusCheckedAt: now,
     sladeshSent: 0,
     sladeshReceived: 0,
+    lastSladeshSentAt: null,
     joinedChannelIds: [],
     activeChannelId: null,
     createdAt: now,
@@ -512,6 +531,7 @@ export async function addSladesh(userId, sladeshData) {
   
   if (sladeshData.type === 'sent') {
     updates.sladeshSent = (userData.sladeshSent || 0) + 1
+    updates.lastSladeshSentAt = serverTimestamp()
   } else if (sladeshData.type === 'received') {
     updates.sladeshReceived = (userData.sladeshReceived || 0) + 1
   }

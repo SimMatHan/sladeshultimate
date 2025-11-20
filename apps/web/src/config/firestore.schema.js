@@ -32,6 +32,7 @@ export const USER_SCHEMA = {
   // Sladesh Activity
   sladeshSent: 'number',      // Count of sladesh sent
   sladeshReceived: 'number',  // Count of sladesh received
+  lastSladeshSentAt: 'timestamp | null', // Last time user sent a sladesh (12h cooldown)
   
   // Channels
   joinedChannelIds: 'array',    // Array of channel IDs the user has joined

@@ -1,20 +1,34 @@
-import { useState, useMemo } from "react";
+function formatDurationUntilReset(targetDate) {
+  if (!targetDate) return "snart";
+  const diffMs = Math.max(0, targetDate.getTime() - Date.now());
+  const diffMinutes = Math.round(diffMs / 60000);
+  const hours = Math.floor(diffMinutes / 60);
+  const minutes = diffMinutes % 60;
+
+  if (hours > 0 && minutes > 0) {
+    return `${hours} ${hours === 1 ? "time" : "timer"} og ${minutes} ${minutes === 1 ? "minut" : "minutter"}`;
+  }
+  if (hours > 0) {
+    return `${hours} ${hours === 1 ? "time" : "timer"}`;
+  }
+  if (minutes > 0) {
+    return `${minutes} ${minutes === 1 ? "minut" : "minutter"}`;
+  }
+  return "få sekunder";
+}
+import { useState, useMemo, useEffect, useCallback } from "react";
 import Card from "../components/Card";
 import Page from "../components/Page";
 import { useLocation } from "../contexts/LocationContext";
 import { useTheme } from "../contexts/ThemeContext";
 import { useChannel } from "../hooks/useChannel";
+import { useAuth } from "../hooks/useAuth";
 import { USE_MOCK_DATA } from "../config/env";
+import { getUser, getSladeshCooldownState, addSladesh } from "../services/userService";
+import { getCheckedInChannelMembers } from "../services/channelService";
+import { incrementSladeshCount } from "../services/statsService";
 
-const PARTICIPANTS = [
-  {
-    id: "self",
-    name: "Dig selv",
-    initials: "DU",
-    accent: "from-indigo-400 to-sky-500",
-    orbit: "center",
-  duration: 26,
-},
+const MOCK_PARTICIPANTS = [
   {
     id: "sofie",
     name: "Sofie Holm",
@@ -65,47 +79,159 @@ const PARTICIPANTS = [
   },
 ];
 
-const SELF_PARTICIPANT = PARTICIPANTS.find((participant) => participant.orbit === "center");
+const DEFAULT_LOCATION = {
+  lat: 55.6761,
+  lng: 12.5683,
+};
+
+const TIME_FORMATTER = new Intl.DateTimeFormat("da-DK", {
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+const MOCK_SLADESH_STORAGE_KEY = "sladesh:mockLastSladeshAt";
 
 export default function Sladesh() {
+  const { currentUser } = useAuth();
   const { selectedChannel } = useChannel();
-  const { otherUsers } = useLocation();
-  const [selectedParticipant, setSelectedParticipant] = useState(null);
+  const { updateLocation, userLocation } = useLocation();
 
-  // TODO: When implementing real Firestore queries, filter by channelId:
-  // - If selectedChannel.isDefault === true: show global/unfiltered view (no channelId filter)
-  // - Otherwise: filter all queries with where('channelId', '==', selectedChannel.id)
-  // This applies to: participants list, sladesh activities, and user interactions
+  const [userProfile, setUserProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(!USE_MOCK_DATA);
+  const [profileError, setProfileError] = useState(null);
+  const [members, setMembers] = useState([]);
+  const [membersLoading, setMembersLoading] = useState(!USE_MOCK_DATA);
+  const [membersError, setMembersError] = useState(null);
+  const [pendingTarget, setPendingTarget] = useState(null);
+  const [statusMessage, setStatusMessage] = useState(null);
+  const [isSending, setIsSending] = useState(false);
+  const [mockLastSladeshAt, setMockLastSladeshAt] = useState(() => {
+    if (!USE_MOCK_DATA) return null;
+    try {
+      if (typeof window === "undefined") return null;
+      const stored = window.localStorage.getItem(MOCK_SLADESH_STORAGE_KEY);
+      return stored ? new Date(stored) : null;
+    } catch {
+      return null;
+    }
+  });
 
-  // Generate random starting angles for participants on mount
-  const activeParticipants = useMemo(() => {
+  const activeChannelId = selectedChannel?.id || null;
+  const isDefaultChannel = !selectedChannel || selectedChannel?.isDefault;
+
+  useEffect(() => {
     if (USE_MOCK_DATA) {
-      return PARTICIPANTS.filter((participant) => participant.checkedIn !== false);
+      setUserProfile({ lastSladeshSentAt: null });
+      setProfileLoading(false);
+      setProfileError(null);
+      return;
+    }
+    if (!currentUser) {
+      setUserProfile(null);
+      setProfileLoading(false);
+      setProfileError("Du skal være logget ind for at sende en Sladesh.");
+      return;
     }
 
-    const orbiters = otherUsers
-      .filter((user) => user.checkedIn !== false)
-      .map((user, index) => ({
-        id: user.id,
-        name: user.name,
-        initials: user.initials,
-        accent: user.avatarGradient || "from-slate-400 to-indigo-500",
-        radius: 118 + (index % 4) * 6,
-        duration: 24 + (index % 5) * 2,
-      }));
+    let cancelled = false;
+    setProfileLoading(true);
+    setProfileError(null);
 
-    if (orbiters.length === 0) {
-      return PARTICIPANTS.filter((participant) => participant.checkedIn !== false);
+    getUser(currentUser.uid)
+      .then((data) => {
+        if (!cancelled) {
+          setUserProfile(data);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to load user profile", error);
+        if (!cancelled) {
+          setProfileError("Kunne ikke indlæse din status.");
+          setUserProfile(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setProfileLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (USE_MOCK_DATA) {
+      setMembers(MOCK_PARTICIPANTS);
+      setMembersLoading(false);
+      setMembersError(null);
+      return;
+    }
+    if (!currentUser) {
+      setMembers([]);
+      setMembersLoading(false);
+      setMembersError("Log ind for at se kanalens medlemmer.");
+      return;
     }
 
-    return SELF_PARTICIPANT ? [SELF_PARTICIPANT, ...orbiters] : orbiters;
-  }, [otherUsers]);
+    let cancelled = false;
+    setMembersLoading(true);
+    setMembersError(null);
+
+    getCheckedInChannelMembers(activeChannelId, isDefaultChannel)
+      .then((list) => {
+        if (cancelled) return;
+        const filtered = list.filter((member) => member.id !== currentUser.uid);
+        setMembers(filtered);
+      })
+      .catch((error) => {
+        console.error("Failed to load channel members", error);
+        if (!cancelled) {
+          setMembers([]);
+          setMembersError("Kunne ikke hente medlemmer.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setMembersLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChannelId, isDefaultChannel, currentUser]);
+
+  const eligibleTargets = useMemo(() => {
+    if (USE_MOCK_DATA) {
+      return MOCK_PARTICIPANTS;
+    }
+    return members.map((member) => ({
+      id: member.id,
+      name: member.name,
+      initials: member.initials || deriveInitialsFromName(member.name),
+      avatarGradient: member.avatarGradient,
+    }));
+  }, [members]);
+
+  const orbitParticipants = useMemo(() => {
+    const source = USE_MOCK_DATA ? MOCK_PARTICIPANTS : eligibleTargets;
+    if (!source.length) {
+      return [];
+    }
+    return source.map((participant, index) => ({
+      id: participant.id,
+      name: participant.name,
+      initials: participant.initials,
+      accent: participant.avatarGradient || participant.accent || "from-slate-400 to-indigo-500",
+      radius: 118 + (index % 4) * 6,
+      duration: 24 + (index % 5) * 2,
+    }));
+  }, [eligibleTargets]);
 
   const participantsWithRandomAngles = useMemo(() => {
-    return activeParticipants.map((participant, index) => {
-      if (participant.orbit === "center") {
-        return participant;
-      }
+    return orbitParticipants.map((participant, index) => {
       const hashSource = participant.id || String(index);
       const hash = Array.from(hashSource).reduce((acc, char) => acc + char.charCodeAt(0), 0);
       const deterministicAngle = (hash * 37) % 360;
@@ -114,7 +240,147 @@ export default function Sladesh() {
         angle: deterministicAngle,
       };
     });
-  }, [activeParticipants]);
+  }, [orbitParticipants]);
+
+  const cooldownState = useMemo(() => {
+    if (USE_MOCK_DATA) {
+      return getSladeshCooldownState({ lastSladeshSentAt: mockLastSladeshAt });
+    }
+    return getSladeshCooldownState(userProfile || {});
+  }, [mockLastSladeshAt, userProfile]);
+
+  useEffect(() => {
+    if (!statusMessage) return;
+    const timer = setTimeout(() => setStatusMessage(null), 5000);
+    return () => clearTimeout(timer);
+  }, [statusMessage]);
+
+  const hasTargets = eligibleTargets.length > 0;
+  const cooldownBlocked = !USE_MOCK_DATA && cooldownState.blocked;
+  const cooldownReadyAt = cooldownState.blockEndsAt
+    ? TIME_FORMATTER.format(cooldownState.blockEndsAt)
+    : null;
+
+  const cannotInitiateReason = useMemo(() => {
+    if (!hasTargets) {
+      return "Ingen medlemmer er checket ind i denne kanal endnu.";
+    }
+    if (!USE_MOCK_DATA && profileLoading) {
+      return "Vent et øjeblik, vi henter din status.";
+    }
+    if (!USE_MOCK_DATA && profileError) {
+      return profileError;
+    }
+    if (!USE_MOCK_DATA && cooldownBlocked) {
+      return cooldownReadyAt
+        ? `Du kan sende igen kl. ${cooldownReadyAt}.`
+        : "Du kan sende igen senere.";
+    }
+    return null;
+  }, [cooldownBlocked, cooldownReadyAt, hasTargets, profileError, profileLoading]);
+
+  const guardAndSetTarget = useCallback(
+    (target) => {
+      if (membersLoading || isSending) return;
+      if (cannotInitiateReason) {
+        setStatusMessage({ tone: "info", body: cannotInitiateReason });
+        return;
+      }
+      setPendingTarget(target);
+    },
+    [cannotInitiateReason, isSending, membersLoading]
+  );
+
+  const handleRandomSladesh = useCallback(() => {
+    if (!eligibleTargets.length) {
+      setStatusMessage({ tone: "info", body: "Ingen medlemmer er checket ind i denne kanal endnu." });
+      return;
+    }
+    const randomIndex = Math.floor(Math.random() * eligibleTargets.length);
+    guardAndSetTarget(eligibleTargets[randomIndex]);
+  }, [eligibleTargets, guardAndSetTarget]);
+
+  const handleConfirmSladesh = useCallback(async () => {
+    if (!pendingTarget) return;
+
+    if (USE_MOCK_DATA) {
+      const now = new Date();
+      setMockLastSladeshAt(now);
+      try {
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(MOCK_SLADESH_STORAGE_KEY, now.toISOString());
+        }
+      } catch {
+        // ignore
+      }
+      setStatusMessage({ tone: "success", body: `Mock: Sladesh sendt til ${pendingTarget.name}.` });
+      setPendingTarget(null);
+      return;
+    }
+
+    if (!currentUser) {
+      setStatusMessage({ tone: "error", body: "Du skal være logget ind for at sende en Sladesh." });
+      return;
+    }
+
+    try {
+      setIsSending(true);
+      updateLocation();
+
+      const resolvedLocation =
+        userLocation ||
+        userProfile?.currentLocation || {
+          lat: DEFAULT_LOCATION.lat,
+          lng: DEFAULT_LOCATION.lng,
+        };
+
+      const venue =
+        userProfile?.lastCheckInVenue ||
+        userProfile?.currentLocation?.venue ||
+        selectedChannel?.name ||
+        "Ukendt sted";
+
+      await addSladesh(currentUser.uid, {
+        type: "sent",
+        recipientId: pendingTarget.id,
+        venue,
+        location: {
+          lat: resolvedLocation.lat ?? DEFAULT_LOCATION.lat,
+          lng: resolvedLocation.lng ?? DEFAULT_LOCATION.lng,
+        },
+        channelId: selectedChannel?.id || null,
+      });
+
+      await incrementSladeshCount();
+      setUserProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              lastSladeshSentAt: new Date(),
+            }
+          : prev
+      );
+      setStatusMessage({ tone: "success", body: `Sladesh sendt til ${pendingTarget.name}.` });
+      setPendingTarget(null);
+    } catch (error) {
+      console.error("Error sending sladesh:", error);
+      setStatusMessage({ tone: "error", body: "Kunne ikke sende Sladesh. Prøv igen." });
+    } finally {
+      setIsSending(false);
+    }
+  }, [
+    currentUser,
+    pendingTarget,
+    selectedChannel,
+    updateLocation,
+    userLocation,
+    userProfile,
+  ]);
+
+  const handleCloseOverlay = useCallback(() => {
+    if (isSending) return;
+    setPendingTarget(null);
+  }, [isSending]);
 
   return (
     <Page title="Sladesh">
@@ -122,32 +388,117 @@ export default function Sladesh() {
         <div className="relative w-full max-w-full">
           <div className="aspect-square">
             <OrbitBackdrop />
+            <OrbitCenterButton
+              disabled={!!cannotInitiateReason || membersLoading || isSending}
+              onPress={handleRandomSladesh}
+            />
             {participantsWithRandomAngles.map((participant) => (
               <OrbitAvatar
                 key={participant.id}
                 participant={participant}
-                onSelect={setSelectedParticipant}
+                disabled={!!cannotInitiateReason || membersLoading || isSending}
+                onSelect={() => guardAndSetTarget(participant)}
               />
             ))}
           </div>
         </div>
 
-        <Card className="w-full max-w-full p-5 text-center backdrop-blur-sm" style={{ 
-          borderColor: 'color-mix(in srgb, var(--line) 70%, transparent)',
-          backgroundColor: 'color-mix(in srgb, var(--surface) 70%, transparent)'
-        }}>
-          <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>Vælg en deltager</h2>
-          <p className="mt-2 text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
-            Profilbillederne svæver omkring dig. Tryk på én af dem for at åbne en request og sende
-            din næste challenge.
-          </p>
+        <Card
+          className="w-full max-w-full p-5 text-center backdrop-blur-sm"
+          style={{
+            borderColor: "color-mix(in srgb, var(--line) 70%, transparent)",
+            backgroundColor: "color-mix(in srgb, var(--surface) 70%, transparent)",
+          }}
+        >
+          {cooldownBlocked ? (
+            <>
+              <h2
+                className="text-base font-semibold"
+                style={{ color: "var(--brand)" }}
+              >
+                Sladesh pauset
+              </h2>
+              <p
+                className="mt-2 text-sm leading-relaxed"
+                style={{
+                  color: "var(--ink)",
+                  backgroundColor: "color-mix(in srgb, var(--brand) 12%, transparent)",
+                  borderRadius: "16px",
+                  padding: "12px 16px",
+                }}
+              >
+                Du har opbrugt din Sladesh. Den bliver resat om{" "}
+                <strong>{formatDurationUntilReset(cooldownState.blockEndsAt)}</strong>.
+              </p>
+            </>
+          ) : (
+            <>
+              <h2 className="text-base font-semibold" style={{ color: "var(--ink)" }}>
+                Sladesh orbit
+              </h2>
+              <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
+                Tryk på en deltager for at sende direkte, eller ram 🤙 i midten for en tilfældig fra{" "}
+                {selectedChannel?.name || "kanalen"}.
+              </p>
+            </>
+          )}
+
+          {membersError ? (
+            <p className="mt-4 text-sm font-semibold text-[color:var(--brand,#FF385C)]">{membersError}</p>
+          ) : null}
+
+          {!USE_MOCK_DATA && profileError ? (
+            <p className="mt-4 text-sm font-semibold text-[color:var(--brand,#FF385C)]">{profileError}</p>
+          ) : null}
+
+          {cooldownBlocked && cooldownReadyAt ? (
+            <div
+              className="mt-4 rounded-2xl border px-4 py-3 text-sm"
+              style={{
+                borderColor: "color-mix(in srgb, var(--brand) 40%, transparent)",
+                color: "var(--muted)",
+              }}
+            >
+              Du har allerede sendt en Sladesh i denne 12-timers blok. Prøv igen kl. {cooldownReadyAt}.
+            </div>
+          ) : null}
+
+          {!membersLoading && !hasTargets ? (
+            <div
+              className="mt-4 rounded-2xl border px-4 py-3 text-sm"
+              style={{
+                borderColor: "var(--line)",
+                color: "var(--muted)",
+              }}
+            >
+              Ingen andre er checket ind endnu. Når nogen dukker op, vælger vi én for dig.
+            </div>
+          ) : null}
+
+          {statusMessage ? (
+            <p
+              className="mt-4 text-sm"
+              style={{
+                color:
+                  statusMessage.tone === "error"
+                    ? "var(--brand)"
+                    : statusMessage.tone === "success"
+                    ? "var(--ink)"
+                    : "var(--muted)",
+              }}
+            >
+              {statusMessage.body}
+            </p>
+          ) : null}
         </Card>
       </div>
 
-      {selectedParticipant ? (
+      {pendingTarget ? (
         <RequestOverlay
-          participant={selectedParticipant}
-          onClose={() => setSelectedParticipant(null)}
+          participant={pendingTarget}
+          onClose={handleCloseOverlay}
+          onConfirm={handleConfirmSladesh}
+          loading={isSending}
         />
       ) : null}
     </Page>
@@ -206,26 +557,9 @@ function OrbitBackdrop() {
   );
 }
 
-function OrbitAvatar({ participant, onSelect }) {
-  const { orbit = "outer" } = participant;
-  const size = orbit === "center" ? "h-28 w-28" : "h-16 w-16";
-  const textSize = orbit === "center" ? "text-2xl" : "text-lg";
-
-  if (orbit === "center") {
-    return (
-      <button
-        type="button"
-        onClick={() => onSelect(participant)}
-        className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2 text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
-      >
-        <AvatarBadge participant={participant} size={size} textSize={textSize} />
-        <span className="text-xs font-medium drop-shadow-sm" style={{ color: 'var(--ink)' }}>
-          {participant.name}
-        </span>
-      </button>
-    );
-  }
-
+function OrbitAvatar({ participant, disabled, onSelect }) {
+  const size = "h-16 w-16";
+  const textSize = "text-lg";
   const duration = participant.duration ?? 28;
 
   return (
@@ -241,11 +575,12 @@ function OrbitAvatar({ participant, onSelect }) {
       <div className="orbit-item__spin">
         <button
           type="button"
-          onClick={() => onSelect(participant)}
-          className="orbit-item__payload focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+          disabled={disabled}
+          onClick={onSelect}
+          className="orbit-item__payload focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:opacity-60"
         >
           <AvatarBadge participant={participant} size={size} textSize={textSize} />
-          <span className="text-xs font-medium drop-shadow-sm" style={{ color: 'var(--ink)' }}>
+          <span className="text-xs font-medium drop-shadow-sm" style={{ color: "var(--ink)" }}>
             {participant.name}
           </span>
         </button>
@@ -264,82 +599,70 @@ function AvatarBadge({ participant, size = "h-16 w-16", textSize = "text-lg" }) 
   );
 }
 
-function RequestOverlay({ participant, onClose }) {
-  const { selectedChannel } = useChannel();
-  const { updateLocation } = useLocation();
-  const firstName = participant.name.split(" ")[0] ?? participant.name;
-  
-  const handleSendSladesh = () => {
-    // Track location when sending sladesh
-    updateLocation();
-    // TODO: Implement actual sladesh sending functionality
-    // When implementing, include channelId: selectedChannel?.id in the sladesh data
-    console.log(`Sending sladesh to ${participant.name}`, { channelId: selectedChannel?.id });
-    onClose();
-  };
-
+function RequestOverlay({ participant, onClose, onConfirm, loading }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-6 py-8 backdrop-blur-sm" style={{ backgroundColor: 'rgba(11, 17, 32, 0.6)' }}>
-      <div 
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center px-6 py-8 backdrop-blur-sm"
+      style={{ backgroundColor: "rgba(11, 17, 32, 0.6)" }}
+    >
+      <div
         className="w-full max-w-[calc(100%-48px)] sm:max-w-[360px] rounded-[28px] p-6 shadow-[0_24px_60px_rgba(15,23,42,0.25)]"
-        style={{ backgroundColor: 'var(--surface)' }}
+        style={{ backgroundColor: "var(--surface)" }}
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             <OverlayAvatar participant={participant} />
             <div>
-              <h3 className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>{participant.name}</h3>
-              <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                Får en notifikation med din request og har 10 minutter til at svare.
+              <h3 className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+                Send Sladesh til {participant.name}?
+              </h3>
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                Vi giver dem besked med det samme. Klar på at sende udfordringen afsted?
               </p>
             </div>
           </div>
         </div>
 
         <div className="mt-5 space-y-4">
-          <div 
+          <div
             className="rounded-2xl border px-4 py-3 text-xs leading-relaxed"
-            style={{ 
-              borderColor: 'var(--line)',
-              backgroundColor: 'var(--subtle)',
-              color: 'var(--muted)'
+            style={{
+              borderColor: "var(--line)",
+              backgroundColor: "var(--subtle)",
+              color: "var(--muted)",
             }}
           >
-            <span className="font-semibold" style={{ color: 'var(--ink)' }}>10 minutter:</span> Vi giver dig besked,
-            så snart {firstName} bekræfter – eller hvis tiden løber ud.
+            <span className="font-semibold" style={{ color: "var(--ink)" }}>
+              Bekræft:
+            </span>{" "}
+            Dine venner får et ping, og du kan først sende igen i næste blok.
           </div>
-          <p className="text-sm" style={{ color: 'var(--muted)' }}>
-            Du sender kun en sladesh request. Ingen ekstra besked – bare ren udfordring.
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            “Are you sure?” – bare for en sikkerheds skyld. Du sender kun én Sladesh ad gangen.
           </p>
         </div>
 
         <div className="mt-6 flex flex-wrap gap-3">
           <button
             type="button"
-            onClick={handleSendSladesh}
-            className="inline-flex flex-1 min-w-[140px] items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold shadow-soft transition active:translate-y-[1px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
-            style={{ 
-              backgroundColor: 'var(--brand)',
-              color: 'var(--brand-ink)',
+            onClick={onConfirm}
+            disabled={loading}
+            className="inline-flex flex-1 min-w-[140px] items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold shadow-soft transition active:translate-y-[1px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:opacity-60"
+            style={{
+              backgroundColor: "var(--brand)",
+              color: "var(--brand-ink)",
             }}
           >
-            Send sladesh
+            {loading ? "Sender..." : "Bekræft"}
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center justify-center rounded-2xl border px-4 py-3 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--line)] focus-visible:ring-offset-2"
-            style={{ 
-              borderColor: 'var(--line)',
-              color: 'var(--ink)',
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.borderColor = 'var(--line)';
-              e.target.style.color = 'var(--ink)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.borderColor = 'var(--line)';
-              e.target.style.color = 'var(--ink)';
+            disabled={loading}
+            className="inline-flex items-center justify-center rounded-2xl border px-4 py-3 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--line)] focus-visible:ring-offset-2 disabled:opacity-60"
+            style={{
+              borderColor: "var(--line)",
+              color: "var(--ink)",
             }}
           >
             Luk
@@ -360,17 +683,46 @@ function OverlayAvatar({ participant }) {
         '--tw-ring-color': 'var(--surface)'
       }}
     >
-      <svg
-        width="26"
-        height="26"
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-        className="fill-none stroke-current stroke-[1.6]"
-      >
-        <circle cx="12" cy="8" r="4" />
-        <path d="M5 19c0-3.2 2.8-6 7-6s7 2.8 7 6" strokeLinecap="round" />
-      </svg>
+      <span className="text-sm font-semibold">{participant.initials || "??"}</span>
       <span className="sr-only">{participant.name}</span>
     </span>
   );
+}
+
+function OrbitCenterButton({ disabled, onPress }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onPress}
+      className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:opacity-60"
+      aria-label="Send tilfældig Sladesh"
+    >
+      <div
+        className="grid h-28 w-28 place-items-center rounded-full border shadow-[0_18px_40px_rgba(15,23,42,0.18)]"
+        style={{
+          borderColor: "color-mix(in srgb, var(--surface) 55%, transparent)",
+          backgroundColor: "color-mix(in srgb, var(--surface) 45%, transparent)",
+        }}
+      >
+        <span className="text-4xl leading-none" aria-hidden="true">
+          🤙
+        </span>
+      </div>
+      <span className="sr-only">Tilfældig Sladesh</span>
+    </button>
+  );
+}
+
+function deriveInitialsFromName(name = "") {
+  if (!name) return "";
+  const parts = name.trim().split(/\s+/);
+  if (!parts.length) return "";
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("");
 }
