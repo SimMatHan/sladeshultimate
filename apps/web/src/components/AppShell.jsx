@@ -18,6 +18,7 @@ const PAGE_TITLES = {
   '/more': { title: 'More', subtitle: null },
   '/manage-channels': { title: 'Manage Channels', subtitle: null },
   '/manage-profile': { title: 'Manage Profile', subtitle: null },
+  '/admin': { title: 'Admin Portal', subtitle: null },
 }
 
 export default function AppShell() {

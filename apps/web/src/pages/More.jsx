@@ -1,6 +1,8 @@
 import { Link, useNavigate } from "react-router-dom";
 import Card from "../components/Card";
 import Page from "../components/Page";
+import { useAuth } from "../hooks/useAuth";
+import { isAdminUser } from "../config/admin";
 
 function ActionCard({
   icon,
@@ -86,6 +88,8 @@ function ActionCard({
 
 export default function More() {
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
+  const isAdmin = isAdminUser(currentUser);
 
   const handleSignOut = () => {
     localStorage.removeItem("signedIn");
@@ -98,6 +102,15 @@ export default function More() {
     <Page title="More">
       <div className="flex flex-1 flex-col space-y-6">
         <div className="space-y-4">
+          {isAdmin && (
+            <ActionCard
+              icon="🛠️"
+              title="Admin"
+              description="Manage drink variations and channels."
+              to="/admin"
+              actionLabel="Admin"
+            />
+          )}
           <ActionCard
             icon="📡"
             title="Manage Channels"

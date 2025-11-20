@@ -5,7 +5,7 @@ const tabs = [
   { to: '/leaderboard', label: 'Score', Icon: TrophyIcon },
   { to: '/sladesh', label: 'Sladesh', Icon: SparkIcon },
   { to: '/map', label: 'Map', Icon: MapIcon },
-  { to: '/more', label: 'More', Icon: MenuIcon, additionalActivePaths: ['/manage-channels', '/manage-profile'] },
+  { to: '/more', label: 'More', Icon: MenuIcon, additionalActivePaths: ['/manage-channels', '/manage-profile', '/admin'] },
 ]
 
 function Item({ to, label, Icon, end, additionalActivePaths = [] }) {

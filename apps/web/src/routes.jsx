@@ -15,6 +15,8 @@ import Map from './pages/Map'
 import More from './pages/More'
 import ManageChannels from './pages/ManageChannels'
 import ManageProfile from './pages/ManageProfile'
+import AdminPortal from './pages/AdminPortal'
+import { isAdminUser } from './config/admin'
 
 /** Firebase Auth guards - check if user is authenticated */
 function useAuthGuard() {
@@ -90,6 +92,17 @@ function GuardApp({ children }) {
   return children
 }
 
+function RequireAdmin({ children }) {
+  const { currentUser, loading } = useAuth()
+
+  if (loading) return <div>Loading...</div>
+  if (!currentUser || !isAdminUser(currentUser)) {
+    return <Navigate to="/more" replace />
+  }
+
+  return children
+}
+
 /** Legacy redirects så gamle links virker */
 function RedirectToAuth({ mode = 'signin' }) {
   const navigate = useNavigate()
@@ -139,6 +152,14 @@ export default function RoutesView() {
         <Route path="more" element={<More />} />
         <Route path="manage-channels" element={<ManageChannels />} />
         <Route path="manage-profile" element={<ManageProfile />} />
+        <Route
+          path="admin"
+          element={
+            <RequireAdmin>
+              <AdminPortal />
+            </RequireAdmin>
+          }
+        />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
