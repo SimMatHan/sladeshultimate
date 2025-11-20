@@ -254,6 +254,7 @@ export async function createUser({ uid, email, fullName, displayName = null }) {
     sladeshSent: 0,
     sladeshReceived: 0,
     joinedChannelIds: [],
+    activeChannelId: null,
     createdAt: now,
     updatedAt: now,
     lastActiveAt: now

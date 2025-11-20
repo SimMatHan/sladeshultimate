@@ -8,11 +8,19 @@ import {
   query,
   where,
   serverTimestamp,
-  addDoc
+  addDoc,
+  arrayUnion
 } from 'firebase/firestore'
 import { db } from '../firebase'
 
 const DEFAULT_CHANNEL_NAME = 'Den Åbne Kanal'
+
+function getUserRef(userId) {
+  if (!userId) {
+    throw new Error('User ID is required')
+  }
+  return doc(db, 'users', userId)
+}
 
 /**
  * Get the default channel (where isDefault === true)
@@ -54,6 +62,113 @@ export async function ensureDefaultChannelExists() {
   return defaultChannel
 }
 
+async function ensureUserDefaultChannel(userRef, userData) {
+  const defaultChannel = await ensureDefaultChannelExists()
+  const joinedIds = Array.isArray(userData.joinedChannelIds) ? [...userData.joinedChannelIds] : []
+  let activeChannelId = userData.activeChannelId || null
+  const updates = {}
+
+  if (!joinedIds.includes(defaultChannel.id)) {
+    joinedIds.push(defaultChannel.id)
+    updates.joinedChannelIds = joinedIds
+  }
+
+  if (!activeChannelId) {
+    activeChannelId = defaultChannel.id
+    updates.activeChannelId = activeChannelId
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await updateDoc(userRef, updates)
+  }
+
+  return {
+    defaultChannel,
+    joinedChannelIds: updates.joinedChannelIds || joinedIds,
+    activeChannelId
+  }
+}
+
+async function fetchChannelsByIds(ids = []) {
+  if (!ids.length) {
+    return []
+  }
+
+  const results = await Promise.all(
+    ids.map(async (channelId) => {
+      const channelSnap = await getDoc(doc(db, 'channels', channelId))
+      return channelSnap.exists() ? { id: channelSnap.id, ...channelSnap.data() } : null
+    })
+  )
+
+  return results.filter(Boolean)
+}
+
+async function findChannelByCode(joinCode) {
+  if (!joinCode) return null
+  const channelsRef = collection(db, 'channels')
+  const codeUpper = joinCode.trim().toUpperCase()
+  const attempts = [codeUpper]
+  if (codeUpper !== joinCode.trim()) {
+    attempts.push(joinCode.trim())
+  }
+
+  for (const code of attempts) {
+    const q = query(channelsRef, where('code', '==', code))
+    const snap = await getDocs(q)
+    if (!snap.empty) {
+      const docSnap = snap.docs[0]
+      return { id: docSnap.id, ...docSnap.data() }
+    }
+  }
+  return null
+}
+
+/**
+ * Fetch user's channels along with active channel Id.
+ * Ensures the user is part of the default channel.
+ * @param {string} userId
+ * @returns {Promise<{channels: Array, activeChannelId: string | null}>}
+ */
+export async function getUserChannels(userId) {
+  const userRef = await getUserRef(userId)
+  const userSnap = await getDoc(userRef)
+
+  if (!userSnap.exists()) {
+    throw new Error('User not found')
+  }
+
+  const userData = userSnap.data()
+  const { defaultChannel, joinedChannelIds, activeChannelId } = await ensureUserDefaultChannel(
+    userRef,
+    userData
+  )
+
+  const uniqueIds = Array.from(new Set(joinedChannelIds.filter(Boolean)))
+  const channels = await fetchChannelsByIds(uniqueIds)
+
+  // Guarantee default channel appears even if doc was deleted later
+  if (!channels.find((channel) => channel.id === defaultChannel.id)) {
+    channels.unshift(defaultChannel)
+  }
+
+  const result = {
+    channels,
+    activeChannelId: activeChannelId || defaultChannel.id
+  }
+
+  console.log('[channelService:getUserChannels]', {
+    userId,
+    email: userData.email || null,
+    rawJoinedChannelIds: userData.joinedChannelIds || [],
+    ensuredJoinedChannelIds: uniqueIds,
+    activeChannelId: result.activeChannelId,
+    channels: channels.map(channel => ({ id: channel.id, name: channel.name, isDefault: !!channel.isDefault }))
+  })
+
+  return result
+}
+
 /**
  * Ensure the "Ballade" channel exists, create it if it doesn't
  * @returns {Promise<Object>} Ballade channel document
@@ -85,30 +200,7 @@ export async function ensureBalladeChannelExists() {
  * @returns {Promise<Array>} Array of channel documents
  */
 export async function getChannelsForUser(userId) {
-  const userRef = doc(db, 'users', userId)
-  const userSnap = await getDoc(userRef)
-  
-  if (!userSnap.exists()) {
-    return []
-  }
-  
-  const userData = userSnap.data()
-  const joinedChannelIds = userData.joinedChannelIds || []
-  
-  if (joinedChannelIds.length === 0) {
-    return []
-  }
-  
-  // Fetch all channels the user has joined
-  const channels = []
-  for (const channelId of joinedChannelIds) {
-    const channelRef = doc(db, 'channels', channelId)
-    const channelSnap = await getDoc(channelRef)
-    if (channelSnap.exists()) {
-      channels.push({ id: channelSnap.id, ...channelSnap.data() })
-    }
-  }
-  
+  const { channels } = await getUserChannels(userId)
   return channels
 }
 
@@ -213,6 +305,100 @@ export async function leaveChannel(userId, channelId) {
   await updateDoc(userRef, {
     joinedChannelIds
   })
+}
+
+/**
+ * Set the active channel for a user
+ * @param {string} userId
+ * @param {string} channelId
+ * @returns {Promise<void>}
+ */
+export async function setActiveChannel(userId, channelId) {
+  if (!channelId) {
+    throw new Error('Channel ID is required')
+  }
+
+  const userRef = await getUserRef(userId)
+  const userSnap = await getDoc(userRef)
+
+  if (!userSnap.exists()) {
+    throw new Error('User not found')
+  }
+
+  const joinedIds = userSnap.data().joinedChannelIds || []
+  if (!joinedIds.includes(channelId)) {
+    throw new Error('User is not a member of this channel')
+  }
+
+  await updateDoc(userRef, {
+    activeChannelId: channelId,
+    updatedAt: serverTimestamp(),
+    lastActiveAt: serverTimestamp()
+  })
+}
+
+/**
+ * Join a channel using its join code.
+ * @param {string} userId
+ * @param {string} joinCode
+ * @returns {Promise<{channels: Array, activeChannelId: string | null}>}
+ */
+export async function joinChannelByCode(userId, joinCode) {
+  const sanitized = joinCode?.trim()
+  if (!sanitized) {
+    throw new Error('A join code is required')
+  }
+
+  const channel = await findChannelByCode(sanitized)
+  if (!channel) {
+    throw new Error('No channel found with that code')
+  }
+
+  const userRef = await getUserRef(userId)
+  const userSnap = await getDoc(userRef)
+  if (!userSnap.exists()) {
+    throw new Error('User not found')
+  }
+
+  const userData = userSnap.data()
+  const joinedIds = Array.isArray(userData.joinedChannelIds) ? userData.joinedChannelIds : []
+  if (joinedIds.includes(channel.id)) {
+    throw new Error('You are already a member of that channel')
+  }
+
+  const updates = {
+    joinedChannelIds: arrayUnion(channel.id),
+    updatedAt: serverTimestamp(),
+    lastActiveAt: serverTimestamp()
+  }
+
+  if (!userData.activeChannelId) {
+    updates.activeChannelId = channel.id
+  }
+
+  await updateDoc(userRef, updates)
+
+  const updatedSnap = await getDoc(userRef)
+  const updatedData = updatedSnap.data()
+  const confirmedJoinedIds = Array.isArray(updatedData.joinedChannelIds) ? updatedData.joinedChannelIds : []
+
+  if (!confirmedJoinedIds.includes(channel.id)) {
+    throw new Error('Channel join did not persist. Please try again.')
+  }
+
+  console.log('[channelService:joinChannelByCode]', {
+    userId,
+    email: updatedData.email || null,
+    channelJoined: { id: channel.id, name: channel.name },
+    joinedChannelIds: confirmedJoinedIds
+  })
+
+  const membership = await getUserChannels(userId)
+
+  return {
+    ...membership,
+    joinedChannel: channel
+  }
 }
 
 /**

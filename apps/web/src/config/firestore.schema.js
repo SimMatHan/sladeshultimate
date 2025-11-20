@@ -35,6 +35,7 @@ export const USER_SCHEMA = {
   
   // Channels
   joinedChannelIds: 'array',    // Array of channel IDs the user has joined
+  activeChannelId: 'string | null', // Currently selected channel used for filtering
   
   // Location
   currentLocation: {

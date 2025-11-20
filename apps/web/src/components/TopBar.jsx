@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Sheet from "./Sheet";
 import { useChannel } from "../hooks/useChannel";
@@ -161,8 +161,11 @@ function ChannelPickerSheet({ open, onClose, channels, selectedChannel, onSelect
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
-                        {channel.name}
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                          {channel.name}
+                        </div>
+                        {channel.isDefault ? <span className="overlay-card__badge">Default</span> : null}
                       </div>
                       <div className="mt-1 text-xs" style={{ color: 'var(--muted)' }}>
                         {channel.isDefault ? "Default channel" : "Tap to switch"}
@@ -214,7 +217,7 @@ export default function TopBar({
   const navigate = useNavigate();
   const location = useLocation();
   const [activeOverlay, setActiveOverlay] = useState(null);
-  const { selectedChannel, setSelectedChannel, channels, loading: channelsLoading } = useChannel();
+  const { selectedChannel, setSelectedChannel, channels, loading: channelsLoading, refreshChannels } = useChannel();
   
   // Use mock data in development, empty arrays in production (unless explicitly provided)
   const notifications = USE_MOCK_DATA 
@@ -233,6 +236,28 @@ export default function TopBar({
   const handleOverlayToggle = (overlay) => {
     setActiveOverlay(prev => prev === overlay ? null : overlay);
   };
+
+  const handleChannelButtonClick = async () => {
+    if (activeOverlay === 'channels') {
+      setActiveOverlay(null);
+      return;
+    }
+    try {
+      await refreshChannels();
+    } catch (error) {
+      console.error('Failed to refresh channels before opening overlay:', error);
+    }
+    setActiveOverlay('channels');
+  };
+
+  const pickerChannels = useMemo(
+    () => channels.map(channel => ({
+      id: channel.id,
+      name: channel.name,
+      isDefault: !!channel.isDefault
+    })),
+    [channels]
+  );
 
 
   const handleProfileClick =
@@ -274,7 +299,7 @@ export default function TopBar({
         <div className="relative">
           <button
             type="button"
-            onClick={() => handleOverlayToggle('channels')}
+            onClick={handleChannelButtonClick}
             aria-haspopup="dialog"
             aria-expanded={activeOverlay === 'channels'}
             aria-label="Select channel"
@@ -316,7 +341,7 @@ export default function TopBar({
           <ChannelPickerSheet
             open={activeOverlay === 'channels'}
             onClose={() => setActiveOverlay(null)}
-            channels={channels}
+            channels={pickerChannels}
             selectedChannel={selectedChannel}
             onSelectChannel={(channelId) => {
               setSelectedChannel(channelId);
