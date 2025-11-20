@@ -90,6 +90,7 @@ export default function More() {
   const handleSignOut = () => {
     localStorage.removeItem("signedIn");
     localStorage.removeItem("onboarded");
+    localStorage.removeItem("sladesh:checkedIn");
     navigate("/");
   };
 

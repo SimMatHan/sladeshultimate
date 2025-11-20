@@ -39,6 +39,7 @@ const generateMockUsers = () => {
       name: 'Sara Holm',
       initials: 'SH',
       avatarGradient: 'from-rose-400 to-orange-500',
+      checkedIn: true,
       location: {
         lat: baseLat + (Math.random() - 0.5) * variation,
         lng: baseLng + (Math.random() - 0.5) * variation,
@@ -57,6 +58,7 @@ const generateMockUsers = () => {
       name: 'Mads Larsen',
       initials: 'ML',
       avatarGradient: 'from-sky-400 to-indigo-500',
+      checkedIn: true,
       location: {
         lat: baseLat + (Math.random() - 0.5) * variation,
         lng: baseLng + (Math.random() - 0.5) * variation,
@@ -75,6 +77,7 @@ const generateMockUsers = () => {
       name: 'Camilla Beck',
       initials: 'CB',
       avatarGradient: 'from-purple-400 to-fuchsia-500',
+      checkedIn: true,
       location: {
         lat: baseLat + (Math.random() - 0.5) * variation,
         lng: baseLng + (Math.random() - 0.5) * variation,
@@ -93,6 +96,7 @@ const generateMockUsers = () => {
       name: 'Jonas Mikkelsen',
       initials: 'JM',
       avatarGradient: 'from-emerald-400 to-teal-500',
+      checkedIn: true,
       location: {
         lat: baseLat + (Math.random() - 0.5) * variation,
         lng: baseLng + (Math.random() - 0.5) * variation,
@@ -183,6 +187,9 @@ export function LocationProvider({ children }) {
         
         querySnapshot.forEach((docSnap) => {
           const userData = docSnap.data()
+          if (!userData.checkInStatus) {
+            return
+          }
           // Filter for users with valid currentLocation
           if (userData.currentLocation && 
               userData.currentLocation.lat && 
@@ -192,6 +199,7 @@ export function LocationProvider({ children }) {
               name: userData.fullName || userData.displayName || 'Unknown',
               initials: userData.initials || '??',
               avatarGradient: userData.avatarGradient || 'from-gray-400 to-gray-600',
+              checkedIn: true,
               location: {
                 lat: userData.currentLocation.lat,
                 lng: userData.currentLocation.lng,

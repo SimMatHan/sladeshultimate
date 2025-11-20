@@ -4,6 +4,7 @@ import Page from "../components/Page";
 import { useLocation } from "../contexts/LocationContext";
 import { useTheme } from "../contexts/ThemeContext";
 import { useChannel } from "../hooks/useChannel";
+import { USE_MOCK_DATA } from "../config/env";
 
 const PARTICIPANTS = [
   {
@@ -64,8 +65,11 @@ const PARTICIPANTS = [
   },
 ];
 
+const SELF_PARTICIPANT = PARTICIPANTS.find((participant) => participant.orbit === "center");
+
 export default function Sladesh() {
   const { selectedChannel } = useChannel();
+  const { otherUsers } = useLocation();
   const [selectedParticipant, setSelectedParticipant] = useState(null);
 
   // TODO: When implementing real Firestore queries, filter by channelId:
@@ -74,20 +78,43 @@ export default function Sladesh() {
   // This applies to: participants list, sladesh activities, and user interactions
 
   // Generate random starting angles for participants on mount
+  const activeParticipants = useMemo(() => {
+    if (USE_MOCK_DATA) {
+      return PARTICIPANTS.filter((participant) => participant.checkedIn !== false);
+    }
+
+    const orbiters = otherUsers
+      .filter((user) => user.checkedIn !== false)
+      .map((user, index) => ({
+        id: user.id,
+        name: user.name,
+        initials: user.initials,
+        accent: user.avatarGradient || "from-slate-400 to-indigo-500",
+        radius: 118 + (index % 4) * 6,
+        duration: 24 + (index % 5) * 2,
+      }));
+
+    if (orbiters.length === 0) {
+      return PARTICIPANTS.filter((participant) => participant.checkedIn !== false);
+    }
+
+    return SELF_PARTICIPANT ? [SELF_PARTICIPANT, ...orbiters] : orbiters;
+  }, [otherUsers]);
+
   const participantsWithRandomAngles = useMemo(() => {
-    return PARTICIPANTS.map((participant) => {
-      // Skip center participant (self)
+    return activeParticipants.map((participant, index) => {
       if (participant.orbit === "center") {
         return participant;
       }
-      // Generate random angle between 0 and 360 degrees
-      const randomAngle = Math.random() * 360;
+      const hashSource = participant.id || String(index);
+      const hash = Array.from(hashSource).reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const deterministicAngle = (hash * 37) % 360;
       return {
         ...participant,
-        angle: randomAngle,
+        angle: deterministicAngle,
       };
     });
-  }, []);
+  }, [activeParticipants]);
 
   return (
     <Page title="Sladesh">

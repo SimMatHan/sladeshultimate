@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet'
 import { useLocation } from '../contexts/LocationContext'
 import { useChannel } from '../hooks/useChannel'
@@ -261,6 +261,10 @@ export default function MapPage() {
   const [selectedUser, setSelectedUser] = useState(null)
   const mapRef = useRef(null)
   const containerRef = useRef(null)
+  const visibleUsers = useMemo(
+    () => otherUsers.filter((user) => user.checkedIn !== false),
+    [otherUsers]
+  )
 
   // TODO: When implementing real Firestore queries, filter by channelId:
   // - If selectedChannel.isDefault === true: show global/unfiltered view (no channelId filter)
@@ -302,6 +306,14 @@ export default function MapPage() {
     }
   }
 
+  useEffect(() => {
+    if (!selectedUser) return
+    const stillVisible = visibleUsers.some((user) => user.id === selectedUser.id)
+    if (!stillVisible) {
+      setSelectedUser(null)
+    }
+  }, [selectedUser, visibleUsers])
+
   return (
     <div 
       ref={containerRef}
@@ -335,7 +347,7 @@ export default function MapPage() {
                 />
               </>
             )}
-            {otherUsers.map((user) => (
+            {visibleUsers.map((user) => (
               <Marker
                 key={user.id}
                 position={[user.location.lat, user.location.lng]}

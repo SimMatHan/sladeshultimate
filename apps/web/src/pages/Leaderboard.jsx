@@ -209,7 +209,7 @@ export default function Leaderboard() {
   // Fetch leaderboard data from Firestore when not using mock data
   useEffect(() => {
     if (USE_MOCK_DATA) {
-      setProfiles(leaderboardProfiles);
+      setProfiles(leaderboardProfiles.filter((profile) => profile.checkedIn !== false));
       setLoading(false);
       return;
     }

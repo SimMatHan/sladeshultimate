@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import Card from "../components/Card";
 import { useLocation } from "../contexts/LocationContext";
+import { useCheckInGate } from "../contexts/CheckInContext";
 import { useAuth } from "../hooks/useAuth";
-import { addDrink, removeDrink, addCheckIn, updateUserLocation, getUser, getNextResetBoundary, resetDrinks } from "../services/userService";
-import { incrementDrinkCount, incrementCheckInCount } from "../services/statsService";
+import { addDrink, removeDrink, getUser, getNextResetBoundary, resetDrinks } from "../services/userService";
+import { incrementDrinkCount } from "../services/statsService";
 
 const CATEGORIES = [
   { id: "beer", name: "Beer", icon: "🍺" },
@@ -124,7 +125,7 @@ function Countdown({ target, onExpire }) {
 export default function Home() {
   const { updateLocation, userLocation } = useLocation();
   const { currentUser } = useAuth();
-  const [checkedIn, setCheckedIn] = useState(false);
+  const { checkedIn, checkIn: globalCheckIn } = useCheckInGate();
   const [expiresAt, setExpiresAt] = useState(null);
   const [selected, setSelected] = useState("beer");
   const [sheetFor, setSheetFor] = useState(null);
@@ -204,6 +205,24 @@ export default function Home() {
     if (scrollFrame.current) cancelAnimationFrame(scrollFrame.current);
     scrollFrame.current = requestAnimationFrame(updateSelectionFromScroll);
   };
+
+  const handleCheckInClick = useCallback(async () => {
+    if (!currentUser) {
+      console.error("User not authenticated");
+      return;
+    }
+    if (checkedIn) return;
+
+    try {
+      setIsSaving(true);
+      const success = await globalCheckIn();
+      if (success) {
+        setExpiresAt(getNextResetBoundary(new Date()));
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  }, [checkedIn, currentUser, globalCheckIn]);
 
   const adjustVariantCount = async (catId, variantName, delta) => {
     if (!currentUser) return;
@@ -310,7 +329,6 @@ export default function Home() {
         if (userData) {
           setUserTotalDrinks(userData.totalDrinks || 0);
           setCurrentRunDrinkCount(userData.currentRunDrinkCount || 0);
-          setCheckedIn(userData.checkInStatus || false);
           setExpiresAt(userData.checkInStatus ? getNextResetBoundary(new Date()) : null);
         }
       } catch (error) {
@@ -407,6 +425,7 @@ export default function Home() {
   }, [sheetFor, isSheetVisible, currentUser]);
 
   return (
+    <>
       <motion.div
       className="w-full"
       initial={{ opacity: 0, y: 20 }}
@@ -467,76 +486,20 @@ export default function Home() {
           <div className="grid grid-cols-2 gap-4">
             <Card
               bare
-              className="px-5 py-4 transition-colors"
+              className={`px-5 py-4 transition-colors ${checkedIn ? "cursor-default" : "cursor-pointer"}`}
               style={checkedIn ? {
                 borderColor: 'rgba(16,185,129,0.6)',
                 backgroundColor: 'color-mix(in srgb, rgb(16,185,129) 12%, var(--surface) 88%)'
               } : {}}
               role="button"
-              tabIndex={0}
-              onClick={async () => {
-                if (checkedIn) {
-                  // Check out
-                  setCheckedIn(false);
-                  setExpiresAt(null);
-                } else {
-                  // Check in
-                  if (!currentUser) {
-                    console.error("User not authenticated");
-                    return;
-                  }
-                  
-                  try {
-                    setIsSaving(true);
-                    
-                    // Update location locally
-                    updateLocation();
-                    
-                    // Get venue name (for now using a placeholder - can be enhanced with geocoding)
-                    const venue = "Current Location"; // TODO: Get actual venue name from location
-                    
-                    // Get current location or use default
-                    const location = userLocation || {
-                      lat: 55.6761, // Copenhagen default
-                      lng: 12.5683
-                    };
-                    
-                    // Save check-in to Firestore
-                    await addCheckIn(currentUser.uid, {
-                      venue: venue,
-                      location: {
-                        lat: location.lat,
-                        lng: location.lng
-                      }
-                    });
-                    
-                    // Update user location in Firestore
-                    await updateUserLocation(currentUser.uid, {
-                      lat: location.lat,
-                      lng: location.lng,
-                      venue: venue
-                    });
-                    
-                    // Update stats
-                    await incrementCheckInCount();
-                    
-                    // Update UI state
-                    setCheckedIn(true);
-                    setExpiresAt(getNextResetBoundary(new Date()));
-                    
-                  } catch (error) {
-                    console.error("Error saving check-in to Firestore:", error);
-                    // Don't update UI state if save failed
-                  } finally {
-                    setIsSaving(false);
-                  }
-                }
-              }}
+              tabIndex={checkedIn ? -1 : 0}
+              aria-disabled={checkedIn}
+              onClick={!checkedIn ? handleCheckInClick : undefined}
               onKeyDown={(event) => {
+                if (checkedIn) return;
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
-                  // Trigger the same onClick logic
-                  event.target.click();
+                  event.currentTarget.click();
                 }
               }}
             >
@@ -568,8 +531,7 @@ export default function Home() {
                 <Countdown
                   target={expiresAt}
                   onExpire={() => {
-                    setCheckedIn(false);
-                    setExpiresAt(null);
+                    handleCheckOut();
                   }}
                 />
               )}
@@ -768,6 +730,8 @@ export default function Home() {
             </div>
           </div>
         )}
-    </motion.div>
+      </motion.div>
+
+    </>
   );
 }

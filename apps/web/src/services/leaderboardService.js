@@ -42,6 +42,10 @@ export async function fetchLeaderboardProfiles(channelId = null) {
       } catch (statusError) {
         console.warn(`Unable to refresh check-in status for user ${docSnap.id}:`, statusError)
       }
+
+      if (!userData.checkInStatus) {
+        continue
+      }
       
       // Skip users with no drinks
       if (!userData.totalDrinks || userData.totalDrinks === 0) {
