@@ -183,46 +183,16 @@ export default function Auth() {
               <Link to="/reset" className="text-brand font-medium">Reset</Link>
             </p>
             <p className="text-muted mt-2">
-              Don’t have an account?{" "}
-              <button
-                type="button"
-                onClick={() => handleModeChange("signup")}
-                className="text-brand font-medium"
-              >
-                Sign up
-              </button>
+              Need an account? Use the Sign up tab above.
             </p>
           </div>
         ) : (
           <div className="mt-6 text-center text-sm">
             <p className="text-muted">
-              Already have an account?{" "}
-              <button
-                type="button"
-                onClick={() => handleModeChange("signin")}
-                className="text-brand font-medium"
-              >
-                Sign in
-              </button>
+              Already have an account? Use the Sign in tab above.
             </p>
           </div>
         )}
-
-        {/* Optional: social buttons (placeholder UI) */}
-        <div className="mt-8 space-y-3">
-          <button
-            type="button"
-            className="w-full py-3 rounded-md border border-line bg-surface text-ink font-semibold active:scale-95"
-          >
-            Continue with Apple
-          </button>
-          <button
-            type="button"
-            className="w-full py-3 rounded-md border border-line bg-surface text-ink font-semibold active:scale-95"
-          >
-            Continue with Google
-          </button>
-        </div>
 
         {/* Back to splash (hvis du vil linke dertil) */}
         <div className="mt-8 text-center">

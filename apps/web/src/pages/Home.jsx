@@ -375,45 +375,6 @@ export default function Home() {
         ease: [0.2, 0, 0.2, 1], // ease-in cubic bezier
       }}
     >
-        {/* DEV ONLY: Reset Drinks Button */}
-        {import.meta.env.DEV && currentUser && (
-          <div className="mb-4 px-6">
-            <button
-              onClick={async () => {
-                if (!currentUser || !confirm('Reset all drinks for current user? This cannot be undone.')) {
-                  return;
-                }
-                try {
-                  setIsSaving(true);
-                  await resetDrinks(currentUser.uid);
-                  // Reload user data to update UI
-                  const userData = await getUser(currentUser.uid);
-                  if (userData) {
-                    setUserTotalDrinks(userData.totalDrinks || 0);
-                    setCurrentRunDrinkCount(userData.currentRunDrinkCount || 0);
-                    // Reset variant counts
-                    setVariantCounts(() => createZeroCounts(variantsByCategory));
-                  }
-                } catch (error) {
-                  console.error('Error resetting drinks:', error);
-                  alert('Failed to reset drinks: ' + error.message);
-                } finally {
-                  setIsSaving(false);
-                }
-              }}
-              disabled={isSaving}
-              className="rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 disabled:opacity-50"
-              style={{ 
-                borderColor: 'rgba(239, 68, 68, 0.3)',
-                backgroundColor: 'rgba(254, 242, 242, 1)',
-                color: 'rgba(185, 28, 28, 1)'
-              }}
-            >
-              🔄 DEV: Reset All Drinks
-            </button>
-          </div>
-        )}
-
         {/* Header */}
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
