@@ -1,15 +1,9 @@
-const categories = [
-  { id: 'beer', name: 'Beer', icon: '🍺' },
-  { id: 'wine', name: 'Wine', icon: '🍷' },
-  { id: 'cocktail', name: 'Cocktails', icon: '🍸' },
-  { id: 'shot', name: 'Shots', icon: '🥃' },
-  { id: 'cider', name: 'Cider', icon: '🍏' },
-];
+import { CATEGORIES } from "../constants/drinks";
 
 export default function DrinkSelector({ selected, onSelect }) {
   return (
     <div className="flex gap-3 overflow-x-auto pb-2">
-      {categories.map(cat => (
+      {CATEGORIES.map(cat => (
         <button
           key={cat.id}
           onClick={() => onSelect(cat.id)}

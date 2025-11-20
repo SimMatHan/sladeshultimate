@@ -4,84 +4,24 @@ import Card from "../components/Card";
 import { useLocation } from "../contexts/LocationContext";
 import { useCheckInGate } from "../contexts/CheckInContext";
 import { useAuth } from "../hooks/useAuth";
+import { useDrinkVariants } from "../hooks/useDrinkVariants";
 import { addDrink, removeDrink, getUser, getNextResetBoundary, resetDrinks } from "../services/userService";
 import { incrementDrinkCount } from "../services/statsService";
+import { CATEGORIES, CATEGORY_THEMES, FALLBACK_THEME } from "../constants/drinks";
 
-const CATEGORIES = [
-  { id: "beer", name: "Beer", icon: "🍺" },
-  { id: "cider", name: "Cider", icon: "🍏" },
-  { id: "wine", name: "Wine", icon: "🍷" },
-  { id: "cocktail", name: "Cocktails", icon: "🍸" },
-  { id: "shot", name: "Shots", icon: "🥃" },
-];
+const createZeroCounts = (variantsMap) =>
+  Object.fromEntries(
+    Object.entries(variantsMap).map(([catId, items]) => [
+      catId,
+      Object.fromEntries(items.map((item) => [item.name, 0])),
+    ])
+  );
 
-const CATEGORY_THEMES = {
-  beer: {
-    gradient: "linear-gradient(135deg, rgba(249, 217, 118, 0.75), rgba(243, 159, 134, 0.75))",
-  },
-  cider: {
-    gradient: "linear-gradient(135deg, rgba(168, 224, 99, 0.75), rgba(86, 171, 47, 0.75))",
-  },
-  wine: {
-    gradient: "linear-gradient(135deg, rgba(215, 109, 119, 0.75), rgba(58, 28, 113, 0.75))",
-  },
-  cocktail: {
-    gradient: "linear-gradient(135deg, rgba(251, 215, 134, 0.75), rgba(198, 255, 221, 0.75))",
-  },
-  shot: {
-    gradient: "linear-gradient(135deg, rgba(242, 153, 74, 0.75), rgba(242, 201, 76, 0.75))",
-  },
-};
-
-const FALLBACK_THEME = {
-  gradient: "linear-gradient(135deg, rgba(246, 211, 101, 0.75), rgba(253, 160, 133, 0.75))",
-};
-
-const VARIANTS = {
-  beer: [
-    { name: "Lager", description: "Clean and crisp golden brew." },
-    { name: "Classic", description: "Balanced malt-forward favorite." },
-    { name: "IPA", description: "Hoppy with citrus and floral notes." },
-    { name: "Stout", description: "Dark roasted malts with chocolate hints." },
-    { name: "Guinness", description: "Iconic Irish stout with creamy head." },
-    { name: "Pilsner", description: "Light-bodied with floral bitterness." },
-    { name: "Hvede Øl", description: "Cloudy wheat beer with banana and clove." },
-    { name: "Sour", description: "Tart ale with lively acidity." },
-    { name: "Blanc", description: "Belgian-style wit with citrus spice." },
-  ],
-  cider: [
-    { name: "Apple", description: "Classic apple cider with bright tartness." },
-    { name: "Pear", description: "Gentle, juicy pear sweetness." },
-    { name: "Mixed Berries", description: "Blend of berries with vibrant color." },
-    { name: "Elderflower", description: "Floral twist with soft sparkle." },
-    { name: "Strawberry", description: "Summer-sweet with a fruity finish." },
-  ],
-  wine: [
-    { name: "Red", description: "Deep, velvety notes of dark fruit." },
-    { name: "White", description: "Bright, crisp finish with citrus hints." },
-    { name: "Rosé", description: "Dry pink wine perfect for sunny days." },
-    { name: "Sparkling", description: "Effervescent bubbles with festive flair." },
-    { name: "Gløgg", description: "Warm spiced wine for cosy evenings." },
-    { name: "Orange", description: "Skin-contact white with bold character." },
-  ],
-  cocktail: [
-    { name: "Mojito", description: "Rum, mint and lime over crushed ice." },
-    { name: "Smirnoff Ice", description: "Vodka cooler with citrus zing." },
-    { name: "Gin & Tonic", description: "Botanical gin balanced with tonic." },
-    { name: "Dark 'n Stormy", description: "Dark rum and ginger beer kick." },
-    { name: "White Russian", description: "Vodka, coffee liqueur and cream." },
-    { name: "Espresso Martini", description: "Espresso shaken with vodka and liqueur." },
-    { name: "Vermouth Tonic", description: "Aperitif served long with tonic." },
-  ],
-  shot: [
-    { name: "Tequila", description: "Served with salt and lime wedge." },
-    { name: "Jägermeister", description: "Herbal liqueur served ice cold." },
-    { name: "Fisk", description: "Nordic licorice shot with menthol." },
-    { name: "Bailey", description: "Creamy Irish liqueur in a quick sip." },
-    { name: "Gammel Dansk", description: "Bitter herbal classic from Denmark." },
-    { name: "Snaps", description: "Traditional aquavit best served chilled." },
-  ],
-};
+const buildCategoryCounts = (items, source = {}) =>
+  items.reduce((acc, item) => {
+    acc[item.name] = source[item.name] || 0;
+    return acc;
+  }, {});
 
 function Countdown({ target, onExpire }) {
   const [remaining, setRemaining] = useState(() =>
@@ -126,6 +66,7 @@ export default function Home() {
   const { updateLocation, userLocation } = useLocation();
   const { currentUser } = useAuth();
   const { checkedIn, checkIn: globalCheckIn } = useCheckInGate();
+  const { variantsByCategory } = useDrinkVariants();
   const [expiresAt, setExpiresAt] = useState(null);
   const [selected, setSelected] = useState("beer");
   const [sheetFor, setSheetFor] = useState(null);
@@ -135,13 +76,19 @@ export default function Home() {
   const [currentRunDrinkCount, setCurrentRunDrinkCount] = useState(0);
 
   const [variantCounts, setVariantCounts] = useState(() =>
-    Object.fromEntries(
-      Object.entries(VARIANTS).map(([catId, items]) => [
-        catId,
-        Object.fromEntries(items.map((item) => [item.name, 0])),
-      ])
-    )
+    createZeroCounts(variantsByCategory)
   );
+
+  useEffect(() => {
+    setVariantCounts((prev) => {
+      const next = {};
+      Object.entries(variantsByCategory).forEach(([catId, items]) => {
+        const previousCategory = prev[catId] ?? {};
+        next[catId] = buildCategoryCounts(items, previousCategory);
+      });
+      return next;
+    });
+  }, [variantsByCategory]);
 
   const categoryTotals = useMemo(
     () =>
@@ -265,13 +212,9 @@ export default function Home() {
         // Refetch variant counts for this category to ensure sync
         if (updatedUserData.drinkVariations) {
           const categoryVariations = updatedUserData.drinkVariations[catId] || {};
-          const sheetItems = VARIANTS[catId] || [];
-          
-          const hydratedCounts = {};
-          sheetItems.forEach((item) => {
-            hydratedCounts[item.name] = categoryVariations[item.name] || 0;
-          });
-          
+          const sheetItems = variantsByCategory[catId] || [];
+          const hydratedCounts = buildCategoryCounts(sheetItems, categoryVariations);
+
           setVariantCounts((prev) => ({
             ...prev,
             [catId]: hydratedCounts,
@@ -374,7 +317,7 @@ export default function Home() {
   const selIndex = CATEGORIES.findIndex((c) => c.id === selected);
   const selectedCat = CATEGORIES[selIndex];
   const sheetCat = sheetFor ? CATEGORIES.find((c) => c.id === sheetFor) : null;
-  const sheetItems = sheetFor ? VARIANTS[sheetFor] ?? [] : [];
+  const sheetItems = sheetFor ? variantsByCategory[sheetFor] ?? [] : [];
 
   useEffect(() => {
     if (!sheetFor) return undefined;
@@ -401,14 +344,11 @@ export default function Home() {
           
           if (userData.drinkVariations) {
             const categoryVariations = userData.drinkVariations[sheetFor] || {};
-            const sheetItems = VARIANTS[sheetFor] || [];
-            
+            const sheetItems = variantsByCategory[sheetFor] || [];
+
             // Build variant counts for this category from Firestore data
-            const hydratedCounts = {};
-            sheetItems.forEach((item) => {
-              hydratedCounts[item.name] = categoryVariations[item.name] || 0;
-            });
-            
+            const hydratedCounts = buildCategoryCounts(sheetItems, categoryVariations);
+
             // Update only the opened category
             setVariantCounts((prev) => ({
               ...prev,
@@ -422,7 +362,7 @@ export default function Home() {
     };
 
     loadVariantCounts();
-  }, [sheetFor, isSheetVisible, currentUser]);
+  }, [sheetFor, isSheetVisible, currentUser, variantsByCategory]);
 
   return (
     <>
@@ -452,14 +392,7 @@ export default function Home() {
                     setUserTotalDrinks(userData.totalDrinks || 0);
                     setCurrentRunDrinkCount(userData.currentRunDrinkCount || 0);
                     // Reset variant counts
-                    setVariantCounts(() =>
-                      Object.fromEntries(
-                        Object.entries(VARIANTS).map(([catId, items]) => [
-                          catId,
-                          Object.fromEntries(items.map((item) => [item.name, 0])),
-                        ])
-                      )
-                    );
+                    setVariantCounts(() => createZeroCounts(variantsByCategory));
                   }
                 } catch (error) {
                   console.error('Error resetting drinks:', error);

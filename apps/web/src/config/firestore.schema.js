@@ -52,6 +52,19 @@ export const USER_SCHEMA = {
 }
 
 /**
+ * Drink Variation Document Schema
+ * Collection: drinkVariations
+ * Each document represents a custom drink variation that augments static defaults.
+ */
+export const DRINK_VARIATION_SCHEMA = {
+  name: 'string',            // Display name of the drink variation
+  description: 'string',     // Short description (one or two sentences)
+  categoryId: 'string',      // One of: "beer" | "cider" | "wine" | "cocktail" | "shot"
+  createdBy: 'string | null',// Admin user identifier (email or uid)
+  createdAt: 'timestamp'     // When the variation was created
+}
+
+/**
  * Check-In Document Schema
  * Subcollection: users/{userId}/checkIns
  */

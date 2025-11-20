@@ -11,6 +11,15 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
     
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.email == "simonmathiashansen@gmail.com";
+    }
+    
+    match /drinkVariations/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    
     // Users collection
     match /users/{userId} {
       // Users can read their own document and basic info of other users
