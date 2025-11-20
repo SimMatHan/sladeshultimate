@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { motion } from "framer-motion";
 import { useAuth } from "../hooks/useAuth";
 
 export default function Auth() {
@@ -77,7 +78,15 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen bg-bg text-ink flex items-center">
+    <motion.div
+      className="min-h-screen bg-bg text-ink flex items-center"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: 0.5,
+        ease: [0.2, 0, 0.2, 1], // ease-in cubic bezier
+      }}
+    >
       <div className="w-full max-w-full mx-auto px-6">
         {/* Header */}
         <h1 className="text-[28px] font-extrabold tracking-tight mb-2">Sladesh</h1>
@@ -220,6 +229,6 @@ export default function Auth() {
           <Link to="/" className="text-muted text-sm hover:text-ink transition">Back to splash</Link>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

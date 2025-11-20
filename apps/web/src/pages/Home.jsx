@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import Card from "../components/Card";
 import { useLocation } from "../contexts/LocationContext";
 import { useAuth } from "../hooks/useAuth";
@@ -386,7 +387,15 @@ export default function Home() {
   }, [sheetFor]);
 
   return (
-    <div className="w-full">
+    <motion.div
+      className="w-full"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: 0.5,
+        ease: [0.2, 0, 0.2, 1], // ease-in cubic bezier
+      }}
+    >
         {/* Header */}
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -691,6 +700,6 @@ export default function Home() {
             </div>
           </div>
         )}
-    </div>
+    </motion.div>
   );
 }

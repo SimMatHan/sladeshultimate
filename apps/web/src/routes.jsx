@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { AnimatePresence } from 'framer-motion'
 import { useAuth } from './hooks/useAuth'
 
 import AppShell from './components/AppShell'
@@ -24,21 +25,43 @@ function useAuthGuard() {
 function SplashRouter() {
   const navigate = useNavigate()
   const { isSignedIn, loading } = useAuthGuard()
+  const [minDelayPassed, setMinDelayPassed] = useState(false)
+  const [shouldExit, setShouldExit] = useState(false)
   
+  // Set minimum delay timer (3.5 seconds)
   useEffect(() => {
-    if (loading) return // Wait for auth to load
+    const timer = setTimeout(() => {
+      setMinDelayPassed(true)
+    }, 3500)
     
-    const t = setTimeout(() => {
+    return () => clearTimeout(timer)
+  }, [])
+  
+  // Navigate only when both auth loading is complete AND minimum delay has passed
+  useEffect(() => {
+    if (loading || !minDelayPassed) return // Wait for both auth to load and delay to pass
+    
+    // Trigger exit animation first
+    setShouldExit(true)
+    
+    // Wait for exit animation to complete (0.4s) before navigating
+    const navigateTimer = setTimeout(() => {
       // Check localStorage for onboarding status (can be updated later to use Firestore)
       const isOnboarded = localStorage.getItem('onboarded') === '1'
       
       if (!isSignedIn) return navigate('/auth?mode=signin', { replace: true })
       if (!isOnboarded) return navigate('/onboarding', { replace: true })
       return navigate('/home', { replace: true })
-    }, 900)
-    return () => clearTimeout(t)
-  }, [navigate, isSignedIn, loading])
-  return <Splash />
+    }, 400) // Match exit animation duration
+    
+    return () => clearTimeout(navigateTimer)
+  }, [navigate, isSignedIn, loading, minDelayPassed])
+  
+  return (
+    <AnimatePresence mode="wait" onExitComplete={() => {}}>
+      {!shouldExit && <Splash key="splash" />}
+    </AnimatePresence>
+  )
 }
 
 function GuardOnboard({ children }) {
@@ -46,6 +69,11 @@ function GuardOnboard({ children }) {
   
   if (loading) return <div>Loading...</div> // Or a loading component
   if (!isSignedIn) return <Navigate to="/auth?mode=signin" replace />
+  
+  // Check localStorage for onboarding status (can be updated later to use Firestore)
+  const isOnboarded = localStorage.getItem('onboarded') === '1'
+  if (isOnboarded) return <Navigate to="/home" replace />
+  
   return children
 }
 
