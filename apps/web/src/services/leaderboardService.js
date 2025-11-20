@@ -67,8 +67,8 @@ export async function fetchLeaderboardProfiles(channelId = null) {
         })
       }
       
-      // Get recent drinks (would need to query drinks subcollection)
-      // For now, return empty array - this would need to be fetched separately
+      // Get recent drinks - drinks subcollection removed, using lastDrinkAt from user document
+      // For now, return empty array - can be enhanced to use lastDrinkAt for sorting/display
       const recentDrinks = []
       
       // Determine top drink
@@ -111,35 +111,16 @@ export async function fetchLeaderboardProfiles(channelId = null) {
 
 /**
  * Fetch recent drinks for a specific user
+ * Note: Drinks subcollection removed - using lastDrinkAt from user document
  * @param {string} userId - User ID
- * @param {number} limitCount - Maximum number of recent drinks to fetch
- * @returns {Promise<Array>} Array of recent drink objects
+ * @param {number} limitCount - Maximum number of recent drinks to fetch (not used, kept for compatibility)
+ * @returns {Promise<Array>} Array of recent drink objects (currently empty array)
  */
 export async function fetchUserRecentDrinks(userId, limitCount = 3) {
-  try {
-    const drinksRef = collection(db, 'users', userId, 'drinks')
-    const q = query(
-      drinksRef,
-      orderBy('timestamp', 'desc'),
-      limit(limitCount)
-    )
-    
-    const querySnapshot = await getDocs(q)
-    
-    return querySnapshot.docs.map(docSnap => {
-      const data = docSnap.data()
-      const timestamp = data.timestamp?.toDate() || new Date()
-      
-      return {
-        id: docSnap.id,
-        label: data.label || 'Unknown drink',
-        timestamp: formatTimestamp(timestamp)
-      }
-    })
-  } catch (error) {
-    console.error(`Error fetching recent drinks for user ${userId}:`, error)
-    return []
-  }
+  // Drinks subcollection removed - individual drink documents no longer exist
+  // Can be enhanced to use lastDrinkAt from user document for basic recent drink tracking
+  // For now, return empty array to maintain API compatibility
+  return []
 }
 
 /**

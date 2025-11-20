@@ -20,10 +20,11 @@ export const USER_SCHEMA = {
   avatarGradient: 'string',   // e.g., "from-rose-400 to-orange-500"
   
   // Activity Tracking
-  drinks: 'array',            // Subcollection reference or array of drink objects
-  totalDrinks: 'number',      // Aggregated count
-  drinkTypes: 'object',       // { "beer": 10, "shot": 5, "cocktail": 3 }
-  drinkVariations: 'object',  // { "beer": { "Lager": 5, "IPA": 3 }, "cocktail": { "Mojito": 2 } }
+  totalDrinks: 'number',      // Lifetime aggregated count (never resets)
+  drinkTypes: 'object',       // Lifetime cumulative { "beer": 10, "shot": 5, "cocktail": 3 } (never resets)
+  drinkVariations: 'object',  // Per-run variations { "beer": { "Lager": 5, "IPA": 3 }, "cocktail": { "Mojito": 2 } } (resets at 10:00)
+  currentRunDrinkCount: 'number', // Per-run counter (resets at 10:00)
+  lastDrinkAt: 'timestamp | null', // Last drink timestamp for recent drinks ordering
   checkInStatus: 'boolean',   // Current check-in state
   lastCheckIn: 'timestamp',   // Last check-in timestamp
   lastCheckInVenue: 'string', // Venue name from last check-in
@@ -47,22 +48,6 @@ export const USER_SCHEMA = {
   createdAt: 'timestamp',
   updatedAt: 'timestamp',
   lastActiveAt: 'timestamp'
-}
-
-/**
- * Drink Document Schema
- * Subcollection: users/{userId}/drinks
- */
-export const DRINK_SCHEMA = {
-  type: 'string',            // "beer", "shot", "cocktail", etc.
-  label: 'string',           // Display name
-  venue: 'string',
-  location: {
-    lat: 'number',
-    lng: 'number'
-  },
-  timestamp: 'timestamp',
-  channelId: 'string | null' // Channel ID where this drink was tracked (required for filtering)
 }
 
 /**

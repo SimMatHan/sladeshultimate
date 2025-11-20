@@ -15,20 +15,6 @@
       ]
     },
     {
-      "collectionGroup": "drinks",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "timestamp",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "type",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "checkIns",
       "queryScope": "COLLECTION_GROUP",
       "fields": [

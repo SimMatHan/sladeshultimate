@@ -96,12 +96,13 @@ export async function incrementUserCount() {
 }
 
 /**
- * Increment drink count for a specific drink type and variation
+ * Increment or decrement drink count for a specific drink type and variation
  * @param {string} drinkType - Drink type (e.g., "beer", "shot")
  * @param {string} variation - Drink variation (e.g., "Lager", "IPA", "Mojito")
+ * @param {number} delta - Amount to change (default: 1, use -1 to decrement)
  * @returns {Promise<void>}
  */
-export async function incrementDrinkCount(drinkType, variation = null) {
+export async function incrementDrinkCount(drinkType, variation = null, delta = 1) {
   const statsRef = doc(db, 'stats', STATS_DOC_ID)
   
   // Ensure stats document exists
@@ -112,8 +113,8 @@ export async function incrementDrinkCount(drinkType, variation = null) {
   
   const statsData = statsSnap.data() || {}
   const updates = {
-    totalDrinks: increment(1),
-    [`drinkTypes.${drinkType}`]: increment(1),
+    totalDrinks: increment(delta),
+    [`drinkTypes.${drinkType}`]: increment(delta),
     lastUpdated: serverTimestamp()
   }
   
@@ -121,17 +122,29 @@ export async function incrementDrinkCount(drinkType, variation = null) {
   if (variation) {
     const variationPath = `drinkVariations.${drinkType}.${variation}`
     const currentVariationCount = statsData.drinkVariations?.[drinkType]?.[variation] || 0
+    const newCount = currentVariationCount + delta
     
-    // Use increment if the path exists, otherwise set it to 1
-    if (currentVariationCount > 0) {
-      updates[variationPath] = increment(1)
+    // Use increment if the path exists and won't go below 0
+    if (currentVariationCount > 0 || delta > 0) {
+      if (delta < 0 && newCount < 0) {
+        // Prevent going below 0 - set to 0 instead
+        const drinkVariations = statsData.drinkVariations || {}
+        const typeVariations = drinkVariations[drinkType] || {}
+        typeVariations[variation] = 0
+        drinkVariations[drinkType] = typeVariations
+        updates.drinkVariations = drinkVariations
+      } else {
+        updates[variationPath] = increment(delta)
+      }
     } else {
-      // Initialize the nested structure if it doesn't exist
-      const drinkVariations = statsData.drinkVariations || {}
-      const typeVariations = drinkVariations[drinkType] || {}
-      typeVariations[variation] = 1
-      drinkVariations[drinkType] = typeVariations
-      updates.drinkVariations = drinkVariations
+      // Initialize the nested structure if it doesn't exist (only for positive delta)
+      if (delta > 0) {
+        const drinkVariations = statsData.drinkVariations || {}
+        const typeVariations = drinkVariations[drinkType] || {}
+        typeVariations[variation] = 1
+        drinkVariations[drinkType] = typeVariations
+        updates.drinkVariations = drinkVariations
+      }
     }
   }
   

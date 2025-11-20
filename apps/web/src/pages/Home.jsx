@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import Card from "../components/Card";
 import { useLocation } from "../contexts/LocationContext";
 import { useAuth } from "../hooks/useAuth";
-import { addDrink, addCheckIn, updateUserLocation, getUser, getNextResetBoundary } from "../services/userService";
+import { addDrink, removeDrink, addCheckIn, updateUserLocation, getUser, getNextResetBoundary, resetDrinks } from "../services/userService";
 import { incrementDrinkCount, incrementCheckInCount } from "../services/statsService";
 
 const CATEGORIES = [
@@ -131,6 +131,7 @@ export default function Home() {
   const [isSheetVisible, setIsSheetVisible] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [userTotalDrinks, setUserTotalDrinks] = useState(0);
+  const [currentRunDrinkCount, setCurrentRunDrinkCount] = useState(0);
 
   const [variantCounts, setVariantCounts] = useState(() =>
     Object.fromEntries(
@@ -205,6 +206,9 @@ export default function Home() {
   };
 
   const adjustVariantCount = async (catId, variantName, delta) => {
+    if (!currentUser) return;
+
+    // Optimistically update local state
     setVariantCounts((prev) => {
       const category = prev[catId] ?? {};
       const current = category[variantName] ?? 0;
@@ -220,64 +224,58 @@ export default function Home() {
       };
     });
 
-    // Only save to Firestore when adding drinks (delta > 0)
-    if (delta > 0 && currentUser) {
-      try {
-        setIsSaving(true);
-        
-        // Update location locally
-        updateLocation();
-        
-        // Get venue name (for now using a placeholder - can be enhanced with geocoding)
-        const venue = "Current Location"; // TODO: Get actual venue name from location
-        
-        // Get current location or use default
-        const location = userLocation || {
-          lat: 55.6761, // Copenhagen default
-          lng: 12.5683
-        };
-        
-        // Save drink to Firestore
-        await addDrink(currentUser.uid, {
-          type: catId,
-          label: variantName,
-          venue: venue,
-          location: {
-            lat: location.lat,
-            lng: location.lng
-          }
-        });
-        
-        // Update user location in Firestore
-        await updateUserLocation(currentUser.uid, {
-          lat: location.lat,
-          lng: location.lng,
-          venue: venue
-        });
-        
-        // Update stats (with variation tracking)
-        await incrementDrinkCount(catId, variantName);
-        
-        // Update local total drinks count
-        setUserTotalDrinks(prev => prev + 1);
-        
-      } catch (error) {
-        console.error("Error saving drink to Firestore:", error);
-        // Revert the count if save failed
-        setVariantCounts((prev) => {
-          const category = prev[catId] ?? {};
-          const current = category[variantName] ?? 0;
-          return {
-            ...prev,
-            [catId]: {
-              ...category,
-              [variantName]: Math.max(0, current - delta),
-            },
-          };
-        });
-      } finally {
-        setIsSaving(false);
+    try {
+      setIsSaving(true);
+      
+      // Call appropriate service function based on delta
+      // The service function handles Firestore increment, we don't manually update local state
+      if (delta > 0) {
+        await addDrink(currentUser.uid, catId, variantName);
+      } else if (delta < 0) {
+        await removeDrink(currentUser.uid, catId, variantName);
       }
+      
+      // Refresh user data from Firestore to get the updated values
+      // This is the single source of truth - no manual increments!
+      const updatedUserData = await getUser(currentUser.uid);
+      if (updatedUserData) {
+        // Update totalDrinks from Firestore (single source of truth)
+        setUserTotalDrinks(updatedUserData.totalDrinks || 0);
+        setCurrentRunDrinkCount(updatedUserData.currentRunDrinkCount || 0);
+        
+        // Refetch variant counts for this category to ensure sync
+        if (updatedUserData.drinkVariations) {
+          const categoryVariations = updatedUserData.drinkVariations[catId] || {};
+          const sheetItems = VARIANTS[catId] || [];
+          
+          const hydratedCounts = {};
+          sheetItems.forEach((item) => {
+            hydratedCounts[item.name] = categoryVariations[item.name] || 0;
+          });
+          
+          setVariantCounts((prev) => ({
+            ...prev,
+            [catId]: hydratedCounts,
+          }));
+        }
+      }
+      
+    } catch (error) {
+      console.error("Error updating drink in Firestore:", error);
+      // Revert the optimistic update if save failed
+      setVariantCounts((prev) => {
+        const category = prev[catId] ?? {};
+        const current = category[variantName] ?? 0;
+        return {
+          ...prev,
+          [catId]: {
+            ...category,
+            [variantName]: Math.max(0, current - delta),
+          },
+        };
+      });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -311,6 +309,7 @@ export default function Home() {
         const userData = await getUser(currentUser.uid);
         if (userData) {
           setUserTotalDrinks(userData.totalDrinks || 0);
+          setCurrentRunDrinkCount(userData.currentRunDrinkCount || 0);
           setCheckedIn(userData.checkInStatus || false);
           setExpiresAt(userData.checkInStatus ? getNextResetBoundary(new Date()) : null);
         }
@@ -368,8 +367,47 @@ export default function Home() {
     return () => window.removeEventListener("keydown", handleKey);
   }, [sheetFor]);
 
+  // Hydrate variantCounts from Firestore when sheet opens
+  // Also refresh userTotalDrinks to ensure it's in sync (but don't modify it here)
+  useEffect(() => {
+    if (!sheetFor || !isSheetVisible || !currentUser) return;
+
+    const loadVariantCounts = async () => {
+      try {
+        const userData = await getUser(currentUser.uid);
+        if (userData) {
+          // Refresh userTotalDrinks from Firestore (single source of truth)
+          // This ensures the header shows the correct value, but we don't modify it
+          setUserTotalDrinks(userData.totalDrinks || 0);
+          setCurrentRunDrinkCount(userData.currentRunDrinkCount || 0);
+          
+          if (userData.drinkVariations) {
+            const categoryVariations = userData.drinkVariations[sheetFor] || {};
+            const sheetItems = VARIANTS[sheetFor] || [];
+            
+            // Build variant counts for this category from Firestore data
+            const hydratedCounts = {};
+            sheetItems.forEach((item) => {
+              hydratedCounts[item.name] = categoryVariations[item.name] || 0;
+            });
+            
+            // Update only the opened category
+            setVariantCounts((prev) => ({
+              ...prev,
+              [sheetFor]: hydratedCounts,
+            }));
+          }
+        }
+      } catch (error) {
+        console.error("Error loading variant counts from Firestore:", error);
+      }
+    };
+
+    loadVariantCounts();
+  }, [sheetFor, isSheetVisible, currentUser]);
+
   return (
-    <motion.div
+      <motion.div
       className="w-full"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -378,6 +416,52 @@ export default function Home() {
         ease: [0.2, 0, 0.2, 1], // ease-in cubic bezier
       }}
     >
+        {/* DEV ONLY: Reset Drinks Button */}
+        {import.meta.env.DEV && currentUser && (
+          <div className="mb-4 px-6">
+            <button
+              onClick={async () => {
+                if (!currentUser || !confirm('Reset all drinks for current user? This cannot be undone.')) {
+                  return;
+                }
+                try {
+                  setIsSaving(true);
+                  await resetDrinks(currentUser.uid);
+                  // Reload user data to update UI
+                  const userData = await getUser(currentUser.uid);
+                  if (userData) {
+                    setUserTotalDrinks(userData.totalDrinks || 0);
+                    setCurrentRunDrinkCount(userData.currentRunDrinkCount || 0);
+                    // Reset variant counts
+                    setVariantCounts(() =>
+                      Object.fromEntries(
+                        Object.entries(VARIANTS).map(([catId, items]) => [
+                          catId,
+                          Object.fromEntries(items.map((item) => [item.name, 0])),
+                        ])
+                      )
+                    );
+                  }
+                } catch (error) {
+                  console.error('Error resetting drinks:', error);
+                  alert('Failed to reset drinks: ' + error.message);
+                } finally {
+                  setIsSaving(false);
+                }
+              }}
+              disabled={isSaving}
+              className="rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 disabled:opacity-50"
+              style={{ 
+                borderColor: 'rgba(239, 68, 68, 0.3)',
+                backgroundColor: 'rgba(254, 242, 242, 1)',
+                color: 'rgba(185, 28, 28, 1)'
+              }}
+            >
+              🔄 DEV: Reset All Drinks
+            </button>
+          </div>
+        )}
+
         {/* Header */}
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -497,14 +581,16 @@ export default function Home() {
               </div>
               <div className="mt-2 flex items-end gap-2">
                 <span className="text-3xl font-semibold" style={{ color: 'var(--ink)' }}>
-                  {userTotalDrinks + total}
+                  {userTotalDrinks}
                 </span>
                 <span className="pb-1 text-xs uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
                   total
                 </span>
               </div>
               <p className="mt-3 text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
-                {total > 0 ? `${total} this session` : "Track each variation with the drink selector below."}
+                {currentRunDrinkCount > 0 
+                  ? `${currentRunDrinkCount} this run` 
+                  : "Track each variation with the drink selector below."}
               </p>
             </Card>
           </div>

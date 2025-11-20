@@ -11,13 +11,15 @@ import {
   limit,
   serverTimestamp,
   addDoc,
-  Timestamp
+  Timestamp,
+  increment
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { deriveInitials, generateAvatarGradient } from '../config/firestore.schema'
 
 const RESET_BOUNDARY_HOURS = [0, 12]
 const RESET_TIMEZONE = 'Europe/Copenhagen'
+const DRINK_DAY_START_HOUR = 10
 const TIMEZONE_FORMATTER = new Intl.DateTimeFormat('en-US', {
   timeZone: RESET_TIMEZONE,
   hour12: false,
@@ -89,6 +91,32 @@ export function getNextResetBoundary(now = new Date()) {
   return shiftDateByOffset(boundary, -offsetMs)
 }
 
+export function getLatestDrinkDayBoundary(now = new Date()) {
+  const offsetMs = getTimeZoneOffsetMs(now)
+  const zoned = shiftDateByOffset(now, offsetMs)
+  const boundary = new Date(zoned)
+  const zonedHour = boundary.getUTCHours()
+  // If at or after 10:00 today, use 10:00 today; otherwise 10:00 yesterday
+  boundary.setUTCHours(DRINK_DAY_START_HOUR, 0, 0, 0)
+  if (zonedHour < DRINK_DAY_START_HOUR) {
+    boundary.setUTCDate(boundary.getUTCDate() - 1)
+  }
+  return shiftDateByOffset(boundary, -offsetMs)
+}
+
+export function getNextDrinkDayBoundary(now = new Date()) {
+  const offsetMs = getTimeZoneOffsetMs(now)
+  const zoned = shiftDateByOffset(now, offsetMs)
+  const boundary = new Date(zoned)
+  const zonedHour = boundary.getUTCHours()
+  // If before 10:00 today, next boundary is 10:00 today; otherwise 10:00 tomorrow
+  boundary.setUTCHours(DRINK_DAY_START_HOUR, 0, 0, 0)
+  if (zonedHour >= DRINK_DAY_START_HOUR) {
+    boundary.setUTCDate(boundary.getUTCDate() + 1)
+  }
+  return shiftDateByOffset(boundary, -offsetMs)
+}
+
 function isCheckInExpired(userData, now = new Date()) {
   const isCheckedIn = !!userData.checkInStatus
   if (!isCheckedIn) {
@@ -142,6 +170,50 @@ export async function ensureFreshCheckInStatus(userId, userData, now = new Date(
   return refreshCheckInStatus(userRef, userData, now)
 }
 
+function isDrinkDayExpired(userData, now = new Date()) {
+  const lastDrinkDayStart = normalizeToDate(userData.lastDrinkDayStart)
+  if (!lastDrinkDayStart) {
+    return true // Treat as expired if never initialized
+  }
+  const latestBoundary = getLatestDrinkDayBoundary(now)
+  return lastDrinkDayStart.getTime() < latestBoundary.getTime()
+}
+
+async function refreshDrinkDayStatus(userRef, userData, now = new Date()) {
+  const expired = isDrinkDayExpired(userData, now)
+  
+  if (!expired) {
+    return userData
+  }
+
+  const latestBoundary = getLatestDrinkDayBoundary(now)
+  const clientNow = Timestamp.now()
+  const boundaryTimestamp = Timestamp.fromDate(latestBoundary)
+
+  // Reset only per-run fields (drinkVariations and currentRunDrinkCount)
+  // Do NOT reset totalDrinks or drinkTypes (these stay cumulative)
+  const updates = {
+    currentRunDrinkCount: 0,
+    drinkVariations: {},
+    lastDrinkDayStart: boundaryTimestamp,
+    updatedAt: serverTimestamp(),
+    lastActiveAt: serverTimestamp()
+  }
+
+  await updateDoc(userRef, updates)
+
+  const nextData = {
+    ...userData,
+    currentRunDrinkCount: 0,
+    drinkVariations: {},
+    lastDrinkDayStart: boundaryTimestamp,
+    updatedAt: clientNow,
+    lastActiveAt: clientNow
+  }
+
+  return nextData
+}
+
 /**
  * Create a new user document in Firestore
  * Called automatically when a user signs up
@@ -172,6 +244,10 @@ export async function createUser({ uid, email, fullName, displayName = null }) {
     totalDrinks: 0,
     drinkTypes: {},
     drinkVariations: {},
+    currentRunDrinkCount: 0,
+    currentRunDrinkTypes: {},
+    lastDrinkDayStart: null,
+    lastDrinkAt: null,
     checkInStatus: false,
     lastCheckIn: null,
     lastStatusCheckedAt: now,
@@ -221,8 +297,10 @@ export async function getUser(userId) {
     return null
   }
 
-  const normalizedData = await refreshCheckInStatus(userRef, userSnap.data())
-  return { id: userSnap.id, ...normalizedData }
+  const userData = userSnap.data()
+  const checkInRefreshed = await refreshCheckInStatus(userRef, userData)
+  const drinkDayRefreshed = await refreshDrinkDayStatus(userRef, checkInRefreshed)
+  return { id: userSnap.id, ...drinkDayRefreshed }
 }
 
 /**
@@ -255,58 +333,101 @@ export async function searchUsersByName(searchTerm, maxResults = 20) {
 }
 
 /**
- * Add a drink to user's drinks subcollection
- * Also updates the user's total drinks count and drink types
+ * Add a drink to user's drink tracking
+ * Updates user's total drinks count, drink types, and drink variations using Firestore increment
  * @param {string} userId - User ID
- * @param {Object} drinkData - Drink data
- * @param {string} drinkData.type - Drink type (e.g., "beer", "shot")
- * @param {string} drinkData.label - Display name
- * @param {string} drinkData.venue - Venue name
- * @param {Object} drinkData.location - Location with lat/lng
- * @param {string} [drinkData.channelId] - Optional channel ID
- * @returns {Promise<string>} Document ID of the new drink
+ * @param {string} type - Drink type (e.g., "beer", "shot", "cocktail")
+ * @param {string} variation - Drink variation (e.g., "Lager", "IPA", "Mojito")
+ * @returns {Promise<void>}
  */
-export async function addDrink(userId, drinkData) {
-  const drinksRef = collection(db, 'users', userId, 'drinks')
-  
-  const drinkDoc = {
-    type: drinkData.type,
-    label: drinkData.label,
-    venue: drinkData.venue,
-    location: drinkData.location,
-    timestamp: serverTimestamp(),
-    channelId: drinkData.channelId || null
-  }
-  
-  const docRef = await addDoc(drinksRef, drinkDoc)
-  
-  // Update user's aggregated stats
+export async function addDrink(userId, type, variation) {
   const userRef = doc(db, 'users', userId)
+  
+  // Refresh drink day status before adding (checks if new day started and resets per-run fields)
   const userSnap = await getDoc(userRef)
-  const userData = userSnap.data()
-  
-  const newTotal = (userData.totalDrinks || 0) + 1
-  const newDrinkTypes = { ...(userData.drinkTypes || {}) }
-  newDrinkTypes[drinkData.type] = (newDrinkTypes[drinkData.type] || 0) + 1
-  
-  // Also track drink variations in user document
-  const newDrinkVariations = { ...(userData.drinkVariations || {}) }
-  if (!newDrinkVariations[drinkData.type]) {
-    newDrinkVariations[drinkData.type] = {}
+  if (!userSnap.exists()) {
+    throw new Error(`User ${userId} not found`)
   }
-  const typeVariations = { ...newDrinkVariations[drinkData.type] }
-  typeVariations[drinkData.label] = (typeVariations[drinkData.label] || 0) + 1
-  newDrinkVariations[drinkData.type] = typeVariations
   
-  await updateDoc(userRef, {
-    totalDrinks: newTotal,
-    drinkTypes: newDrinkTypes,
-    drinkVariations: newDrinkVariations,
+  const userData = userSnap.data()
+  const refreshedData = await refreshDrinkDayStatus(userRef, userData)
+  
+  // Read current drinkVariations to handle nested path initialization
+  const currentDrinkVariations = refreshedData.drinkVariations || {}
+  
+  // Build updates using increment for atomic operations
+  const updates = {
+    totalDrinks: increment(1),
+    [`drinkTypes.${type}`]: increment(1),
+    currentRunDrinkCount: increment(1),
+    lastDrinkAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     lastActiveAt: serverTimestamp()
-  })
+  }
   
-  return docRef.id
+  // Handle nested drinkVariations path
+  // Firestore increment will create nested paths if parent structure exists
+  // Ensure parent structure exists first if needed
+  const typeVariations = currentDrinkVariations[type] || {}
+  
+  // If the type doesn't exist in drinkVariations, initialize it
+  if (!currentDrinkVariations.hasOwnProperty(type)) {
+    // Initialize the type structure first
+    const newDrinkVariations = { ...currentDrinkVariations }
+    newDrinkVariations[type] = { [variation]: 1 }
+    updates.drinkVariations = newDrinkVariations
+  } else {
+    // Type exists, can use increment on the nested path
+    // Firestore will create the variation key if it doesn't exist
+    updates[`drinkVariations.${type}.${variation}`] = increment(1)
+  }
+  
+  await updateDoc(userRef, updates)
+}
+
+/**
+ * Remove a drink from user's drink tracking
+ * Decrements user's total drinks count, drink types, and drink variations using Firestore increment
+ * @param {string} userId - User ID
+ * @param {string} type - Drink type (e.g., "beer", "shot", "cocktail")
+ * @param {string} variation - Drink variation (e.g., "Lager", "IPA", "Mojito")
+ * @returns {Promise<void>}
+ */
+export async function removeDrink(userId, type, variation) {
+  const userRef = doc(db, 'users', userId)
+  
+  // Refresh drink day status first
+  const userSnap = await getDoc(userRef)
+  if (!userSnap.exists()) {
+    throw new Error(`User ${userId} not found`)
+  }
+  
+  const userData = userSnap.data()
+  const refreshedData = await refreshDrinkDayStatus(userRef, userData)
+  
+  // Check current value of drinkVariations[type][variation]
+  const drinkVariations = refreshedData.drinkVariations || {}
+  const typeVariations = drinkVariations[type] || {}
+  const currentVariationCount = typeVariations[variation] || 0
+  
+  // If value is 0 or doesn't exist, do nothing (never write negative values)
+  if (currentVariationCount <= 0) {
+    return
+  }
+  
+  // Use increment(-1) for all fields
+  const updates = {
+    totalDrinks: increment(-1),
+    [`drinkTypes.${type}`]: increment(-1),
+    [`drinkVariations.${type}.${variation}`]: increment(-1),
+    currentRunDrinkCount: increment(-1),
+    updatedAt: serverTimestamp(),
+    lastActiveAt: serverTimestamp()
+  }
+  
+  // Note: Do NOT update lastDrinkAt when removing (keep most recent timestamp)
+  
+  await updateDoc(userRef, updates)
 }
 
 /**
@@ -417,6 +538,25 @@ export async function updateUserLocation(userId, locationData) {
       venue: locationData.venue,
       timestamp: serverTimestamp()
     },
+    updatedAt: serverTimestamp(),
+    lastActiveAt: serverTimestamp()
+  })
+}
+
+/**
+ * DEV ONLY: Reset all drink-related fields for a user
+ * Resets totalDrinks, currentRunDrinkCount, drinkTypes, and drinkVariations
+ * Does not affect auth or other user fields
+ * @param {string} userId - User ID
+ * @returns {Promise<void>}
+ */
+export async function resetDrinks(userId) {
+  const userRef = doc(db, 'users', userId)
+  await updateDoc(userRef, {
+    totalDrinks: 0,
+    currentRunDrinkCount: 0,
+    drinkTypes: {},
+    drinkVariations: {},
     updatedAt: serverTimestamp(),
     lastActiveAt: serverTimestamp()
   })
