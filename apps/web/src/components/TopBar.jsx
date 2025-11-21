@@ -218,9 +218,9 @@ export default function TopBar({
   const location = useLocation();
   const [activeOverlay, setActiveOverlay] = useState(null);
   const { selectedChannel, setSelectedChannel, channels, loading: channelsLoading, refreshChannels } = useChannel();
-  
+
   // Use mock data in development, empty arrays in production (unless explicitly provided)
-  const notifications = USE_MOCK_DATA 
+  const notifications = USE_MOCK_DATA
     ? (propNotifications ?? DEFAULT_NOTIFICATIONS)
     : (propNotifications ?? []);
   const messages = USE_MOCK_DATA
@@ -268,23 +268,37 @@ export default function TopBar({
 
   return (
     <div className={`flex items-center gap-3 h-16 ${className}`}>
-      <button
-        type="button"
-        onClick={handleProfileClick}
-        className="grid h-12 w-12 place-items-center rounded-2xl border text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
-        style={{ borderColor: 'var(--line)', backgroundColor: 'var(--surface)', color: 'var(--muted)' }}
-        aria-label="Open profile settings"
-      >
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.6" />
-          <path
-            d="M5.5 19.5c0-3.59 3.04-5.5 6.5-5.5s6.5 1.91 6.5 5.5"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-          />
-        </svg>
-      </button>
+      {['/admin', '/manage-channels', '/manage-profile'].includes(location.pathname) ? (
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="grid h-12 w-12 place-items-center rounded-2xl border text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+          style={{ borderColor: 'var(--line)', backgroundColor: 'var(--surface)', color: 'var(--muted)' }}
+          aria-label="Go back"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={handleProfileClick}
+          className="grid h-12 w-12 place-items-center rounded-2xl border text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+          style={{ borderColor: 'var(--line)', backgroundColor: 'var(--surface)', color: 'var(--muted)' }}
+          aria-label="Open profile settings"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.6" />
+            <path
+              d="M5.5 19.5c0-3.59 3.04-5.5 6.5-5.5s6.5 1.91 6.5 5.5"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+      )}
 
       <div className="flex-1">
         {subtitle ? (
@@ -304,9 +318,9 @@ export default function TopBar({
             aria-expanded={activeOverlay === 'channels'}
             aria-label="Select channel"
             className="grid h-10 w-10 place-items-center rounded-full border transition-colors"
-            style={{ 
-              borderColor: activeOverlay === 'channels' ? 'var(--brand, #FF385C)' : 'var(--line)', 
-              color: activeOverlay === 'channels' ? 'var(--brand, #FF385C)' : 'var(--muted)' 
+            style={{
+              borderColor: activeOverlay === 'channels' ? 'var(--brand, #FF385C)' : 'var(--line)',
+              color: activeOverlay === 'channels' ? 'var(--brand, #FF385C)' : 'var(--muted)'
             }}
             onMouseEnter={(e) => {
               if (activeOverlay !== 'channels') {
@@ -360,9 +374,9 @@ export default function TopBar({
             aria-expanded={activeOverlay === 'notifications'}
             aria-label="Open notifications"
             className="grid h-10 w-10 place-items-center rounded-full border transition-colors"
-            style={{ 
-              borderColor: activeOverlay === 'notifications' ? 'var(--brand, #FF385C)' : 'var(--line)', 
-              color: activeOverlay === 'notifications' ? 'var(--brand, #FF385C)' : 'var(--muted)' 
+            style={{
+              borderColor: activeOverlay === 'notifications' ? 'var(--brand, #FF385C)' : 'var(--line)',
+              color: activeOverlay === 'notifications' ? 'var(--brand, #FF385C)' : 'var(--muted)'
             }}
             onMouseEnter={(e) => {
               if (activeOverlay !== 'notifications') {
@@ -411,9 +425,9 @@ export default function TopBar({
             aria-expanded={activeOverlay === 'messages'}
             aria-label="Open messages"
             className="grid h-10 w-10 place-items-center rounded-full border transition-colors"
-            style={{ 
-              borderColor: activeOverlay === 'messages' ? 'var(--brand, #FF385C)' : 'var(--line)', 
-              color: activeOverlay === 'messages' ? 'var(--brand, #FF385C)' : 'var(--muted)' 
+            style={{
+              borderColor: activeOverlay === 'messages' ? 'var(--brand, #FF385C)' : 'var(--line)',
+              color: activeOverlay === 'messages' ? 'var(--brand, #FF385C)' : 'var(--muted)'
             }}
             onMouseEnter={(e) => {
               if (activeOverlay !== 'messages') {

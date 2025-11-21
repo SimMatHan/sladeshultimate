@@ -157,25 +157,7 @@ export default function ManageChannels() {
   return (
     <Page title="Manage Channels" allowScroll>
       <div className="space-y-6">
-        <button
-          type="button"
-          onClick={() => navigate("/more")}
-          className="mb-2 flex items-center gap-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2"
-          style={{ color: "var(--ink)" }}
-        >
-          <svg
-            className="h-5 w-5"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-          Back
-        </button>
+
 
         <Card className="px-5 py-6">
           <div className="flex items-center justify-between">

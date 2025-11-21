@@ -59,7 +59,7 @@ export default function ManageProfile() {
       try {
         setLoading(true);
         const firestoreUser = await getUser(currentUser.uid);
-        
+
         if (firestoreUser) {
           setUserData({
             username: firestoreUser.username || "",
@@ -188,27 +188,7 @@ export default function ManageProfile() {
   return (
     <Page title="Manage Profile" allowScroll={true}>
       <div className="space-y-6">
-        <button
-          type="button"
-          onClick={() => navigate("/more")}
-          className="mb-2 flex items-center gap-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2"
-          style={{ color: 'var(--ink)' }}
-          onMouseEnter={(e) => e.target.style.color = 'var(--ink)'}
-          onMouseLeave={(e) => e.target.style.color = 'var(--ink)'}
-        >
-          <svg
-            className="h-5 w-5"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-          Back
-        </button>
+
 
         <Card className="px-5 py-6 space-y-5">
           <div className="space-y-1">
@@ -233,7 +213,7 @@ export default function ManageProfile() {
                 type="button"
                 onClick={() => setProfileSheetOpen(true)}
                 className="inline-flex items-center justify-center rounded-full border px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2"
-                style={{ 
+                style={{
                   borderColor: 'var(--line)',
                   backgroundColor: 'var(--surface)',
                   color: 'var(--ink)'
@@ -278,7 +258,7 @@ export default function ManageProfile() {
                 onChange={handleUsernameChange}
                 placeholder="@username"
                 className="w-full rounded-2xl border px-4 py-3 text-sm font-mono font-medium tracking-wide transition focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-2"
-                style={{ 
+                style={{
                   borderColor: 'var(--line)',
                   backgroundColor: 'var(--surface)',
                   color: 'var(--ink)'
@@ -290,7 +270,7 @@ export default function ManageProfile() {
               <label className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
                 Full Name
               </label>
-              <div className="w-full rounded-2xl border px-4 py-3 text-sm font-medium" style={{ 
+              <div className="w-full rounded-2xl border px-4 py-3 text-sm font-medium" style={{
                 borderColor: 'var(--line)',
                 backgroundColor: 'var(--subtle)',
                 color: 'var(--ink)'
@@ -303,7 +283,7 @@ export default function ManageProfile() {
               <label className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
                 Email
               </label>
-              <div className="w-full rounded-2xl border px-4 py-3 text-sm font-medium" style={{ 
+              <div className="w-full rounded-2xl border px-4 py-3 text-sm font-medium" style={{
                 borderColor: 'var(--line)',
                 backgroundColor: 'var(--subtle)',
                 color: 'var(--ink)'
@@ -333,7 +313,7 @@ export default function ManageProfile() {
             aria-checked={isDarkMode}
             onClick={handleDarkModeToggle}
             className="flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2"
-            style={{ 
+            style={{
               borderColor: 'var(--line)',
               backgroundColor: 'var(--surface)'
             }}
@@ -353,16 +333,14 @@ export default function ManageProfile() {
               </span>
             </span>
             <span
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-                isDarkMode
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${isDarkMode
                   ? "bg-[color:var(--brand,#FF385C)]/90"
                   : "bg-neutral-200 text-neutral-400"
-              }`}
+                }`}
             >
               <span
-                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
-                  isDarkMode ? "translate-x-5" : "translate-x-1"
-                }`}
+                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${isDarkMode ? "translate-x-5" : "translate-x-1"
+                  }`}
               />
             </span>
           </button>
@@ -381,9 +359,9 @@ export default function ManageProfile() {
 
         {feedback ? (
           <div className="sticky bottom-5 z-10 flex justify-center pt-4">
-            <div 
+            <div
               className="rounded-full border px-4 py-2 text-sm font-medium shadow-[0_18px_36px_rgba(15,23,42,0.15)]"
-              style={{ 
+              style={{
                 borderColor: 'var(--line)',
                 backgroundColor: 'var(--surface)',
                 color: 'var(--ink)'
@@ -427,11 +405,10 @@ export default function ManageProfile() {
                     key={emoji}
                     type="button"
                     onClick={() => handleEmojiSelect(emoji)}
-                    className={`flex h-12 w-12 items-center justify-center rounded-2xl border text-2xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white ${
-                      isSelected
+                    className={`flex h-12 w-12 items-center justify-center rounded-2xl border text-2xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white ${isSelected
                         ? "border-[color:var(--brand,#FF385C)] bg-[color:var(--brand,#FF385C)]/10 scale-110"
                         : "border-neutral-200 bg-white hover:border-neutral-300 hover:scale-105"
-                    }`}
+                      }`}
                     aria-pressed={isSelected}
                   >
                     {emoji}
@@ -454,11 +431,10 @@ export default function ManageProfile() {
                     key={option.id}
                     type="button"
                     onClick={() => handleGradientSelect(option.gradient)}
-                    className={`relative flex h-14 w-full items-center justify-center rounded-2xl border-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white ${
-                      isSelected
+                    className={`relative flex h-14 w-full items-center justify-center rounded-2xl border-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white ${isSelected
                         ? "border-[color:var(--brand,#FF385C)] ring-2 ring-[color:var(--brand,#FF385C)]/20 scale-105"
                         : "border-neutral-200 hover:border-neutral-300 hover:scale-105"
-                    }`}
+                      }`}
                     aria-pressed={isSelected}
                     title={option.name}
                   >

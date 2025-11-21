@@ -1,9 +1,9 @@
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  updateDoc, 
-  getDoc, 
+import {
+  collection,
+  doc,
+  setDoc,
+  updateDoc,
+  getDoc,
   getDocs,
   query,
   where,
@@ -199,7 +199,7 @@ function isDrinkDayExpired(userData, now = new Date()) {
 
 async function refreshDrinkDayStatus(userRef, userData, now = new Date()) {
   const expired = isDrinkDayExpired(userData, now)
-  
+
   if (!expired) {
     return userData
   }
@@ -291,12 +291,12 @@ export async function createUser({ uid, email, fullName, displayName = null }) {
  */
 export async function updateUser(userId, updates) {
   const userRef = doc(db, 'users', userId)
-  
+
   // If fullName is being updated, also update initials
   if (updates.fullName) {
     updates.initials = deriveInitials(updates.fullName)
   }
-  
+
   await updateDoc(userRef, {
     ...updates,
     updatedAt: serverTimestamp(),
@@ -312,7 +312,7 @@ export async function updateUser(userId, updates) {
 export async function getUser(userId) {
   const userRef = doc(db, 'users', userId)
   const userSnap = await getDoc(userRef)
-  
+
   if (!userSnap.exists()) {
     return null
   }
@@ -337,7 +337,7 @@ export async function searchUsersByName(searchTerm, maxResults = 20) {
 
   const searchLower = searchTerm.toLowerCase().trim()
   const usersRef = collection(db, 'users')
-  
+
   // Note: This is a simple prefix search. For more advanced search,
   // consider using Algolia or implementing a searchable field with lowercase version
   const q = query(
@@ -347,7 +347,7 @@ export async function searchUsersByName(searchTerm, maxResults = 20) {
     orderBy('fullName'),
     limit(maxResults)
   )
-  
+
   const querySnapshot = await getDocs(q)
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
 }
@@ -362,19 +362,19 @@ export async function searchUsersByName(searchTerm, maxResults = 20) {
  */
 export async function addDrink(userId, type, variation) {
   const userRef = doc(db, 'users', userId)
-  
+
   // Refresh drink day status before adding (checks if new day started and resets per-run fields)
   const userSnap = await getDoc(userRef)
   if (!userSnap.exists()) {
     throw new Error(`User ${userId} not found`)
   }
-  
+
   const userData = userSnap.data()
   const refreshedData = await refreshDrinkDayStatus(userRef, userData)
-  
+
   // Read current drinkVariations to handle nested path initialization
   const currentDrinkVariations = refreshedData.drinkVariations || {}
-  
+
   // Build updates using increment for atomic operations
   const updates = {
     totalDrinks: increment(1),
@@ -384,12 +384,12 @@ export async function addDrink(userId, type, variation) {
     updatedAt: serverTimestamp(),
     lastActiveAt: serverTimestamp()
   }
-  
+
   // Handle nested drinkVariations path
   // Firestore increment will create nested paths if parent structure exists
   // Ensure parent structure exists first if needed
   const typeVariations = currentDrinkVariations[type] || {}
-  
+
   // If the type doesn't exist in drinkVariations, initialize it
   if (!currentDrinkVariations.hasOwnProperty(type)) {
     // Initialize the type structure first
@@ -401,7 +401,7 @@ export async function addDrink(userId, type, variation) {
     // Firestore will create the variation key if it doesn't exist
     updates[`drinkVariations.${type}.${variation}`] = increment(1)
   }
-  
+
   await updateDoc(userRef, updates)
 }
 
@@ -415,26 +415,26 @@ export async function addDrink(userId, type, variation) {
  */
 export async function removeDrink(userId, type, variation) {
   const userRef = doc(db, 'users', userId)
-  
+
   // Refresh drink day status first
   const userSnap = await getDoc(userRef)
   if (!userSnap.exists()) {
     throw new Error(`User ${userId} not found`)
   }
-  
+
   const userData = userSnap.data()
   const refreshedData = await refreshDrinkDayStatus(userRef, userData)
-  
+
   // Check current value of drinkVariations[type][variation]
   const drinkVariations = refreshedData.drinkVariations || {}
   const typeVariations = drinkVariations[type] || {}
   const currentVariationCount = typeVariations[variation] || 0
-  
+
   // If value is 0 or doesn't exist, do nothing (never write negative values)
   if (currentVariationCount <= 0) {
     return
   }
-  
+
   // Use increment(-1) for all fields
   const updates = {
     totalDrinks: increment(-1),
@@ -444,9 +444,9 @@ export async function removeDrink(userId, type, variation) {
     updatedAt: serverTimestamp(),
     lastActiveAt: serverTimestamp()
   }
-  
+
   // Note: Do NOT update lastDrinkAt when removing (keep most recent timestamp)
-  
+
   await updateDoc(userRef, updates)
 }
 
@@ -462,16 +462,16 @@ export async function removeDrink(userId, type, variation) {
  */
 export async function addCheckIn(userId, checkInData) {
   const checkInsRef = collection(db, 'users', userId, 'checkIns')
-  
+
   const checkInDoc = {
     venue: checkInData.venue,
     location: checkInData.location,
     timestamp: serverTimestamp(),
     channelId: checkInData.channelId || null
   }
-  
+
   const docRef = await addDoc(checkInsRef, checkInDoc)
-  
+
   // Update user's check-in status and location
   const userRef = doc(db, 'users', userId)
   await updateDoc(userRef, {
@@ -487,7 +487,7 @@ export async function addCheckIn(userId, checkInData) {
     updatedAt: serverTimestamp(),
     lastActiveAt: serverTimestamp()
   })
-  
+
   return docRef.id
 }
 
@@ -506,7 +506,7 @@ export async function addCheckIn(userId, checkInData) {
  */
 export async function addSladesh(userId, sladeshData) {
   const sladeshRef = collection(db, 'users', userId, 'sladesh')
-  
+
   const sladeshDoc = {
     type: sladeshData.type,
     recipientId: sladeshData.recipientId || null,
@@ -516,28 +516,28 @@ export async function addSladesh(userId, sladeshData) {
     timestamp: serverTimestamp(),
     channelId: sladeshData.channelId || null
   }
-  
+
   const docRef = await addDoc(sladeshRef, sladeshDoc)
-  
+
   // Update user's sladesh counts
   const userRef = doc(db, 'users', userId)
   const userSnap = await getDoc(userRef)
   const userData = userSnap.data()
-  
+
   const updates = {
     updatedAt: serverTimestamp(),
     lastActiveAt: serverTimestamp()
   }
-  
+
   if (sladeshData.type === 'sent') {
     updates.sladeshSent = (userData.sladeshSent || 0) + 1
     updates.lastSladeshSentAt = serverTimestamp()
   } else if (sladeshData.type === 'received') {
     updates.sladeshReceived = (userData.sladeshReceived || 0) + 1
   }
-  
+
   await updateDoc(userRef, updates)
-  
+
   return docRef.id
 }
 
@@ -577,6 +577,22 @@ export async function resetDrinks(userId) {
     totalDrinks: 0,
     currentRunDrinkCount: 0,
     drinkTypes: {},
+    drinkVariations: {},
+    updatedAt: serverTimestamp(),
+    lastActiveAt: serverTimestamp()
+  })
+}
+
+/**
+ * Reset only the current run's drink count and variations
+ * Preserves totalDrinks (lifetime count)
+ * @param {string} userId - User ID
+ * @returns {Promise<void>}
+ */
+export async function resetCurrentRun(userId) {
+  const userRef = doc(db, 'users', userId)
+  await updateDoc(userRef, {
+    currentRunDrinkCount: 0,
     drinkVariations: {},
     updatedAt: serverTimestamp(),
     lastActiveAt: serverTimestamp()

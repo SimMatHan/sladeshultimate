@@ -28,8 +28,11 @@ function ActionCard({
     <div className="flex w-full items-center justify-between gap-4 p-5 transition-transform duration-200 group-active:scale-[0.98]">
       <div className="flex items-start gap-4">
         <div
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/50 shadow-inner"
-          style={{ background: gradientMap[tone] ?? gradientMap.default }}
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border shadow-inner"
+          style={{
+            background: gradientMap[tone] ?? gradientMap.default,
+            borderColor: 'var(--line)'
+          }}
         >
           <span className="text-2xl">{icon}</span>
         </div>
@@ -56,7 +59,7 @@ function ActionCard({
     </div>
   );
 
-  const cardBackgroundStyle = tone === "critical" 
+  const cardBackgroundStyle = tone === "critical"
     ? { background: "linear-gradient(135deg, rgba(254, 226, 226, 0.4), rgba(254, 202, 202, 0.5))" }
     : {};
 
@@ -65,8 +68,9 @@ function ActionCard({
       <Card
         as={Link}
         to={to}
+        bare
         className="group block transition-[transform,box-shadow] hover:-translate-y-1 hover:shadow-[0_24px_50px_rgba(15,23,42,0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
-        style={cardBackgroundStyle}
+        style={{ ...cardBackgroundStyle, borderColor: 'var(--line)' }}
       >
         {content}
       </Card>
@@ -78,8 +82,9 @@ function ActionCard({
       as="button"
       type="button"
       onClick={onClick}
+      bare
       className="group w-full transition-[transform,box-shadow] hover:-translate-y-1 hover:shadow-[0_24px_50px_rgba(15,23,42,0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
-      style={cardBackgroundStyle}
+      style={{ ...cardBackgroundStyle, borderColor: 'var(--line)' }}
     >
       {content}
     </Card>
