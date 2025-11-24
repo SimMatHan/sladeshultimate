@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { USE_MOCK_DATA } from '../config/env'
-import { collection, getDocs } from 'firebase/firestore'
+import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../firebase'
+import { useChannel } from '../hooks/useChannel'
 
 const LocationContext = createContext(null)
 
@@ -122,6 +123,7 @@ const generateMockUsers = () => {
 }
 
 export function LocationProvider({ children }) {
+  const { selectedChannel } = useChannel()
   const [userLocation, setUserLocation] = useState(null)
   const [locationHistory, setLocationHistory] = useState([])
   const [otherUsers, setOtherUsers] = useState(() => USE_MOCK_DATA ? generateMockUsers() : [])
@@ -188,9 +190,17 @@ export function LocationProvider({ children }) {
     const fetchOtherUsers = async () => {
       try {
         const usersRef = collection(db, 'users')
-        // Fetch all users and filter client-side for those with currentLocation
-        // Note: Firestore doesn't support querying for null/non-null nested fields easily
-        const querySnapshot = await getDocs(usersRef)
+        
+        // Build query with channel filter if channel is selected and not default
+        const channelId = selectedChannel && !selectedChannel.isDefault ? selectedChannel.id : null
+        let q = query(usersRef)
+        
+        // If channelId is provided, filter by activeChannelId
+        if (channelId) {
+          q = query(usersRef, where('activeChannelId', '==', channelId))
+        }
+        
+        const querySnapshot = await getDocs(q)
         const users = []
         
         querySnapshot.forEach((docSnap) => {
@@ -234,7 +244,7 @@ export function LocationProvider({ children }) {
     // Set up periodic refresh (every 30 seconds)
     const interval = setInterval(fetchOtherUsers, 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [selectedChannel])
 
   // Function to update location (called when user interacts)
   // This is called when:

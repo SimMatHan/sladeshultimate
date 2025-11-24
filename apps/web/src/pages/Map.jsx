@@ -258,10 +258,8 @@ export default function MapPage() {
     [otherUsers]
   )
 
-  // TODO: When implementing real Firestore queries, filter by channelId:
-  // - If selectedChannel.isDefault === true: show global/unfiltered view (no channelId filter)
-  // - Otherwise: filter all queries with where('channelId', '==', selectedChannel.id)
-  // This applies to: user locations, check-ins, and activities displayed on the map
+  // Channel filtering is handled in LocationContext, which filters otherUsers based on selectedChannel
+  // Map displays only users from the active channel (or all users if default channel is selected)
 
   // Ensure map resizes when container size changes
   useEffect(() => {

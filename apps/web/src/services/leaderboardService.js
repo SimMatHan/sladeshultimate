@@ -32,15 +32,23 @@ export async function fetchLeaderboardProfiles(channelId = null) {
     const usersRef = collection(db, 'users')
     
     // Build query - order by totalDrinks descending
-    let q = query(
-      usersRef,
-      orderBy('totalDrinks', 'desc'),
-      limit(50) // Limit to top 50 users
-    )
-    
-    // If channelId is provided, we would filter by channel
-    // Note: This requires users to have a channelId field or a subcollection
-    // For now, we'll fetch all users and filter client-side if needed
+    // If channelId is provided, filter by activeChannelId
+    let q
+    if (channelId) {
+      q = query(
+        usersRef,
+        where('activeChannelId', '==', channelId),
+        orderBy('totalDrinks', 'desc'),
+        limit(50) // Limit to top 50 users
+      )
+    } else {
+      // Default channel: show all users
+      q = query(
+        usersRef,
+        orderBy('totalDrinks', 'desc'),
+        limit(50) // Limit to top 50 users
+      )
+    }
     
     const querySnapshot = await getDocs(q)
     

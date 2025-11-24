@@ -165,6 +165,8 @@ async function refreshCheckInStatus(userRef, userData, now = new Date()) {
 
   if (expired) {
     updates.checkInStatus = false
+    // Clear location when check-in expires (at 00:00 and 12:00)
+    updates.currentLocation = null
   }
 
   await updateDoc(userRef, updates)
@@ -178,6 +180,8 @@ async function refreshCheckInStatus(userRef, userData, now = new Date()) {
 
   if (expired) {
     nextData.checkInStatus = false
+    // Clear location when check-in expires
+    nextData.currentLocation = null
   }
 
   return nextData
@@ -569,6 +573,7 @@ export async function resetCurrentRun(userId) {
   await updateDoc(userRef, {
     currentRunDrinkCount: 0,
     drinkVariations: {},
+    currentLocation: null,
     updatedAt: serverTimestamp(),
     lastActiveAt: serverTimestamp()
   })
