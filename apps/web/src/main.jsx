@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { LocationProvider } from './contexts/LocationContext'
 import { ThemeProvider } from './contexts/ThemeContext'
+import { UserDataProvider } from './contexts/UserDataContext'
 import App from './App.jsx'
 import './index.css'
 
@@ -11,7 +12,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter>
       <ThemeProvider>
         <LocationProvider>
-          <App />
+          <UserDataProvider>
+            <App />
+          </UserDataProvider>
         </LocationProvider>
       </ThemeProvider>
     </BrowserRouter>

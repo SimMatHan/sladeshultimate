@@ -3,9 +3,10 @@ import { motion } from "framer-motion";
 import Card from "../components/Card";
 import { useLocation } from "../contexts/LocationContext";
 import { useCheckInGate } from "../contexts/CheckInContext";
+import { useUserData } from "../contexts/UserDataContext";
 import { useAuth } from "../hooks/useAuth";
 import { useDrinkVariants } from "../hooks/useDrinkVariants";
-import { addDrink, removeDrink, getUser, getNextResetBoundary, resetDrinks, resetCurrentRun } from "../services/userService";
+import { addDrink, removeDrink, getNextResetBoundary, resetCurrentRun } from "../services/userService";
 import { incrementDrinkCount } from "../services/statsService";
 import { CATEGORIES, CATEGORY_THEMES, FALLBACK_THEME } from "../constants/drinks";
 
@@ -66,30 +67,44 @@ export default function Home() {
   const { updateLocation, userLocation } = useLocation();
   const { currentUser } = useAuth();
   const { checkedIn, checkIn: globalCheckIn, checkOut: handleCheckOut } = useCheckInGate();
+  const { userData, refreshUserData } = useUserData();
   const { variantsByCategory } = useDrinkVariants();
   const [expiresAt, setExpiresAt] = useState(null);
   const [selected, setSelected] = useState("beer");
   const [sheetFor, setSheetFor] = useState(null);
   const [isSheetVisible, setIsSheetVisible] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [userTotalDrinks, setUserTotalDrinks] = useState(0);
-  const [currentRunDrinkCount, setCurrentRunDrinkCount] = useState(0);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  // Get values from context with fallbacks
+  const userTotalDrinks = userData?.totalDrinks || 0;
+  const currentRunDrinkCount = userData?.currentRunDrinkCount || 0;
+  const drinkVariations = userData?.drinkVariations || {};
 
   const [variantCounts, setVariantCounts] = useState(() =>
     createZeroCounts(variantsByCategory)
   );
 
+  // Update variantCounts when variantsByCategory changes or when userData is loaded/updated
   useEffect(() => {
+    if (!variantsByCategory) return;
+
     setVariantCounts((prev) => {
       const next = {};
       Object.entries(variantsByCategory).forEach(([catId, items]) => {
-        const previousCategory = prev[catId] ?? {};
-        next[catId] = buildCategoryCounts(items, previousCategory);
+        // Hydrate from userData.drinkVariations if available, otherwise keep previous or use zero counts
+        if (userData?.drinkVariations?.[catId]) {
+          const categoryVariations = userData.drinkVariations[catId] || {};
+          next[catId] = buildCategoryCounts(items, categoryVariations);
+        } else {
+          // Keep previous counts if no data available yet
+          const previousCategory = prev[catId] ?? {};
+          next[catId] = buildCategoryCounts(items, previousCategory);
+        }
       });
       return next;
     });
-  }, [variantsByCategory]);
+  }, [variantsByCategory, userData]);
 
   const categoryTotals = useMemo(
     () =>
@@ -216,25 +231,11 @@ export default function Home() {
       }
 
       // Refresh user data from Firestore to get the updated values
-      // This is the single source of truth - no manual increments!
-      const updatedUserData = await getUser(currentUser.uid);
-      if (updatedUserData) {
-        // Update totalDrinks from Firestore (single source of truth)
-        setUserTotalDrinks(updatedUserData.totalDrinks || 0);
-        setCurrentRunDrinkCount(updatedUserData.currentRunDrinkCount || 0);
+      // This updates the context, which will automatically update our displayed values
+      await refreshUserData();
 
-        // Refetch variant counts for this category to ensure sync
-        if (updatedUserData.drinkVariations) {
-          const categoryVariations = updatedUserData.drinkVariations[catId] || {};
-          const sheetItems = variantsByCategory[catId] || [];
-          const hydratedCounts = buildCategoryCounts(sheetItems, categoryVariations);
-
-          setVariantCounts((prev) => ({
-            ...prev,
-            [catId]: hydratedCounts,
-          }));
-        }
-      }
+      // Note: After refreshUserData, the context will update and trigger a re-render
+      // The variant counts will be updated via the useEffect that watches userData
 
     } catch (error) {
       console.error("Error updating drink in Firestore:", error);
@@ -256,19 +257,16 @@ export default function Home() {
   };
 
   const handleResetRun = async () => {
-    // ... (keep existing handleResetRun logic)
     if (!currentUser) return;
     try {
       setIsSaving(true);
       await resetCurrentRun(currentUser.uid);
 
-      // Refresh local state
-      const updatedUserData = await getUser(currentUser.uid);
-      if (updatedUserData) {
-        setUserTotalDrinks(updatedUserData.totalDrinks || 0);
-        setCurrentRunDrinkCount(updatedUserData.currentRunDrinkCount || 0);
-        setVariantCounts(createZeroCounts(variantsByCategory));
-      }
+      // Refresh user data from context, which will update all displayed values
+      await refreshUserData();
+
+      // Reset variant counts to zero
+      setVariantCounts(createZeroCounts(variantsByCategory));
       setShowResetConfirm(false);
     } catch (error) {
       console.error("Error resetting run:", error);

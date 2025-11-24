@@ -9,6 +9,7 @@ import { useLocation as useGeoLocation } from '../contexts/LocationContext'
 import CheckInContext from '../contexts/CheckInContext'
 
 const CHECK_IN_STORAGE_KEY = 'sladesh:checkedIn'
+const CHECK_IN_GATE_ACTIVATED_KEY = 'sladesh:checkInGateActivated'
 
 const PAGE_TITLES = {
   '/home': { title: null, subtitle: null }, // title and subtitle will be set dynamically
@@ -35,20 +36,55 @@ export default function AppShell() {
   })
   const [isCheckingIn, setIsCheckingIn] = useState(false)
   const [showSuccessOverlay, setShowSuccessOverlay] = useState(false)
-  const [showCheckInGate, setShowCheckInGate] = useState(false)
+  const [showCheckInGate, setShowCheckInGate] = useState(() => {
+    // Check if gate was already activated in a previous session
+    try {
+      return localStorage.getItem(CHECK_IN_GATE_ACTIVATED_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
   const successOverlayTimeout = useRef(null)
+  const checkInGateTimer = useRef(null)
   const pageInfo = PAGE_TITLES[location.pathname] || { title: 'Sladesh', subtitle: null }
   const blockingOverlayVisible = (!checkedIn && showCheckInGate) || showSuccessOverlay
 
   // Lurker mode: Show check-in gate after 20 seconds if not checked in
   useEffect(() => {
     if (currentUser && !checkedIn) {
-      const timer = setTimeout(() => {
+      // If gate was already activated, show it immediately
+      const wasActivated = localStorage.getItem(CHECK_IN_GATE_ACTIVATED_KEY) === '1'
+      if (wasActivated) {
         setShowCheckInGate(true)
+        return
+      }
+
+      // Otherwise, start the 20 second timer
+      checkInGateTimer.current = setTimeout(() => {
+        setShowCheckInGate(true)
+        // Mark that gate has been activated (persists across app restarts)
+        try {
+          localStorage.setItem(CHECK_IN_GATE_ACTIVATED_KEY, '1')
+        } catch {
+          // ignore storage errors
+        }
       }, 20000) // 20 seconds delay
-      return () => clearTimeout(timer)
+      
+      return () => {
+        if (checkInGateTimer.current) {
+          clearTimeout(checkInGateTimer.current)
+        }
+      }
     } else {
       setShowCheckInGate(false)
+      // Clear the activation flag when checked in
+      if (checkedIn) {
+        try {
+          localStorage.removeItem(CHECK_IN_GATE_ACTIVATED_KEY)
+        } catch {
+          // ignore storage errors
+        }
+      }
     }
   }, [currentUser, checkedIn])
 
@@ -166,6 +202,13 @@ export default function AppShell() {
 
   const handleGlobalCheckOut = useCallback(() => {
     persistCheckedIn(false)
+    // Reset the gate activation flag when checking out, so user gets 20 seconds again
+    try {
+      localStorage.removeItem(CHECK_IN_GATE_ACTIVATED_KEY)
+    } catch {
+      // ignore storage errors
+    }
+    setShowCheckInGate(false)
   }, [persistCheckedIn])
 
   const checkInContextValue = {
@@ -203,7 +246,7 @@ export default function AppShell() {
         </nav>
       </div>
 
-      {currentUser && !checkedIn && (
+      {currentUser && !checkedIn && showCheckInGate && (
         <div className="pointer-events-auto fixed inset-0 z-[1000] flex items-center justify-center bg-black/10 backdrop-blur-md px-6 text-center">
           <div className="w-full max-w-md rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-8 shadow-2xl">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[color:var(--brand,#FF385C)]/10 text-3xl">

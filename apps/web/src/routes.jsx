@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-
 import { useEffect, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { useAuth } from './hooks/useAuth'
+import { useUserData } from './contexts/UserDataContext'
 
 import AppShell from './components/AppShell'
 import InstallPwaGate from './components/InstallPwaGate'
@@ -28,6 +29,7 @@ function useAuthGuard() {
 function SplashRouter() {
   const navigate = useNavigate()
   const { isSignedIn, loading } = useAuthGuard()
+  const { loading: userDataLoading } = useUserData()
   const [minDelayPassed, setMinDelayPassed] = useState(false)
   const [shouldExit, setShouldExit] = useState(false)
   
@@ -40,9 +42,10 @@ function SplashRouter() {
     return () => clearTimeout(timer)
   }, [])
   
-  // Navigate only when both auth loading is complete AND minimum delay has passed
+  // Navigate only when auth loading, user data loading, AND minimum delay have all completed
   useEffect(() => {
-    if (loading || !minDelayPassed) return // Wait for both auth to load and delay to pass
+    // Wait for auth to load, user data to load, and minimum delay to pass
+    if (loading || userDataLoading || !minDelayPassed) return
     
     // Trigger exit animation first
     setShouldExit(true)
@@ -58,7 +61,7 @@ function SplashRouter() {
     }, 400) // Match exit animation duration
     
     return () => clearTimeout(navigateTimer)
-  }, [navigate, isSignedIn, loading, minDelayPassed])
+  }, [navigate, isSignedIn, loading, userDataLoading, minDelayPassed])
   
   return (
     <AnimatePresence mode="wait" onExitComplete={() => {}}>
