@@ -1,16 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { getDoc, doc } from 'firebase/firestore';
 import Page from '../components/Page';
 import { useChannel } from '../hooks/useChannel';
 import { USE_MOCK_DATA } from '../config/env';
-import { fetchLeaderboardProfiles, fetchUserRecentDrinks } from '../services/leaderboardService';
+import { fetchLeaderboardProfiles, fetchUserRecentDrinks, clearLeaderboardCache } from '../services/leaderboardService';
+import { db } from '../firebase';
 
 const leaderboardProfiles = [
   {
     id: 'sara-holm',
     name: 'Sara Holm',
     initials: 'SH',
+    profileEmoji: '🍹',
+    profileGradient: 'from-rose-400 to-orange-500',
     avatarGradient: 'from-rose-400 to-orange-500',
     totalDrinks: 148,
+    currentRunDrinkCount: 12,
     weeklyAverage: 17,
     streakDays: 8,
     topDrink: 'Sladesh shot',
@@ -31,8 +36,11 @@ const leaderboardProfiles = [
     id: 'mads-larsen',
     name: 'Mads Larsen',
     initials: 'ML',
+    profileEmoji: '🍺',
+    profileGradient: 'from-sky-400 to-indigo-500',
     avatarGradient: 'from-sky-400 to-indigo-500',
     totalDrinks: 131,
+    currentRunDrinkCount: 8,
     weeklyAverage: 15,
     streakDays: 5,
     topDrink: 'Kolde øl',
@@ -53,8 +61,11 @@ const leaderboardProfiles = [
     id: 'camilla-beck',
     name: 'Camilla Beck',
     initials: 'CB',
+    profileEmoji: '🍸',
+    profileGradient: 'from-purple-400 to-fuchsia-500',
     avatarGradient: 'from-purple-400 to-fuchsia-500',
     totalDrinks: 118,
+    currentRunDrinkCount: 15,
     weeklyAverage: 11,
     streakDays: 9,
     topDrink: 'Sour cocktails',
@@ -75,8 +86,11 @@ const leaderboardProfiles = [
     id: 'jonas-mikkelsen',
     name: 'Jonas Mikkelsen',
     initials: 'JM',
+    profileEmoji: '🥃',
+    profileGradient: 'from-emerald-400 to-teal-500',
     avatarGradient: 'from-emerald-400 to-teal-500',
     totalDrinks: 104,
+    currentRunDrinkCount: 5,
     weeklyAverage: 10,
     streakDays: 6,
     topDrink: 'Gin & tonic',
@@ -97,8 +111,11 @@ const leaderboardProfiles = [
     id: 'aline-thomsen',
     name: 'Aline Thomsen',
     initials: 'AT',
+    profileEmoji: '🍷',
+    profileGradient: 'from-amber-400 to-red-500',
     avatarGradient: 'from-amber-400 to-red-500',
     totalDrinks: 97,
+    currentRunDrinkCount: 7,
     weeklyAverage: 9,
     streakDays: 4,
     topDrink: 'Aperol spritz',
@@ -119,8 +136,11 @@ const leaderboardProfiles = [
     id: 'frederik-olsen',
     name: 'Frederik Olsen',
     initials: 'FO',
+    profileEmoji: '☕',
+    profileGradient: 'from-slate-400 to-slate-600',
     avatarGradient: 'from-slate-400 to-slate-600',
     totalDrinks: 86,
+    currentRunDrinkCount: 3,
     weeklyAverage: 8,
     streakDays: 3,
     topDrink: 'Irish coffee',
@@ -141,8 +161,11 @@ const leaderboardProfiles = [
     id: 'cecilie-knudsen',
     name: 'Cecilie Knudsen',
     initials: 'CK',
+    profileEmoji: '🍾',
+    profileGradient: 'from-pink-400 to-rose-500',
     avatarGradient: 'from-pink-400 to-rose-500',
     totalDrinks: 82,
+    currentRunDrinkCount: 6,
     weeklyAverage: 7,
     streakDays: 5,
     topDrink: 'Paloma',
@@ -163,8 +186,11 @@ const leaderboardProfiles = [
     id: 'mathias-hansen',
     name: 'Mathias Hansen',
     initials: 'MH',
+    profileEmoji: '🍺',
+    profileGradient: 'from-cyan-400 to-blue-500',
     avatarGradient: 'from-cyan-400 to-blue-500',
     totalDrinks: 75,
+    currentRunDrinkCount: 4,
     weeklyAverage: 6,
     streakDays: 2,
     topDrink: 'Mikkeller IPA',
@@ -184,20 +210,20 @@ const leaderboardProfiles = [
 ];
 
 const sortOptions = [
-  { id: 'total-desc', label: 'Flest drinks' },
-  { id: 'total-asc', label: 'Færrest drinks' },
-  { id: 'name-asc', label: 'Navn A-Å' },
+  { id: 'current-run-most', label: 'Nuværende runde – flest' },
+  { id: 'current-run-least', label: 'Nuværende runde – færrest' },
+  { id: 'all-time-total', label: 'Alle tiders drinks' },
 ];
 
 const sortComparators = {
-  'total-desc': (a, b) => b.totalDrinks - a.totalDrinks,
-  'total-asc': (a, b) => a.totalDrinks - b.totalDrinks,
-  'name-asc': (a, b) => a.name.localeCompare(b.name, 'da'),
+  'current-run-most': (a, b) => (b.currentRunDrinkCount || 0) - (a.currentRunDrinkCount || 0),
+  'current-run-least': (a, b) => (a.currentRunDrinkCount || 0) - (b.currentRunDrinkCount || 0),
+  'all-time-total': (a, b) => (b.totalDrinks || 0) - (a.totalDrinks || 0),
 };
 
 export default function Leaderboard() {
   const { selectedChannel } = useChannel();
-  const [sortMode, setSortMode] = useState('total-desc');
+  const [sortMode, setSortMode] = useState('all-time-total');
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(!USE_MOCK_DATA);
@@ -219,6 +245,8 @@ export default function Leaderboard() {
         setLoading(true);
         setError(null);
         const channelId = selectedChannel && !selectedChannel.isDefault ? selectedChannel.id : null;
+        // Clear cache when channel changes
+        clearLeaderboardCache(channelId);
         const fetchedProfiles = await fetchLeaderboardProfiles(channelId);
         setProfiles(fetchedProfiles);
       } catch (err) {
@@ -253,7 +281,7 @@ export default function Leaderboard() {
   }, [selectedProfile?.id, USE_MOCK_DATA]);
 
   const sortedProfiles = useMemo(() => {
-    const comparator = sortComparators[sortMode] || sortComparators['total-desc'];
+    const comparator = sortComparators[sortMode] || sortComparators['all-time-total'];
     return [...profiles].sort(comparator);
   }, [profiles, sortMode]);
 
@@ -386,6 +414,7 @@ export default function Leaderboard() {
                   rank={index + 1}
                   onSelect={setSelectedProfile}
                   isActive={selectedProfile?.id === profile.id}
+                  sortMode={sortMode}
                 />
               ))
             )}
@@ -394,7 +423,11 @@ export default function Leaderboard() {
       </div>
 
       {selectedProfile ? (
-        <ProfileDetailSheet profile={selectedProfile} onClose={() => setSelectedProfile(null)} />
+        <ProfileDetailSheet 
+          profile={selectedProfile} 
+          sortMode={sortMode}
+          onClose={() => setSelectedProfile(null)} 
+        />
       ) : null}
     </Page>
   );
@@ -440,9 +473,15 @@ function SortToggle({ options, active, onChange }) {
   );
 }
 
-function ProfileCard({ profile, rank, onSelect, isActive }) {
+function ProfileCard({ profile, rank, onSelect, isActive, sortMode }) {
   const rankBadge = `#${rank}`;
-  const totalFormatted = profile.totalDrinks.toLocaleString('da-DK');
+  
+  // Determine which value to display based on sort mode
+  const displayValue = sortMode === 'all-time-total' 
+    ? (profile.totalDrinks || 0)
+    : (profile.currentRunDrinkCount || 0);
+  
+  const valueFormatted = displayValue.toLocaleString('da-DK');
 
   return (
     <button
@@ -468,12 +507,16 @@ function ProfileCard({ profile, rank, onSelect, isActive }) {
           {rankBadge}
         </span>
 
-        <Avatar initials={profile.initials} gradient={profile.avatarGradient} />
+        <Avatar 
+          emoji={profile.profileEmoji} 
+          gradient={profile.profileGradient || profile.avatarGradient}
+          initials={profile.initials}
+        />
 
         <span className="min-w-0 truncate text-sm font-semibold" style={{ color: 'var(--ink)' }}>{profile.name}</span>
 
         <div className="text-right leading-tight">
-          <span className="block text-base font-semibold tabular-nums" style={{ color: 'var(--ink)' }}>{totalFormatted}</span>
+          <span className="block text-base font-semibold tabular-nums" style={{ color: 'var(--ink)' }}>{valueFormatted}</span>
           <span className="block text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>Drinks</span>
         </div>
       </div>
@@ -481,19 +524,32 @@ function ProfileCard({ profile, rank, onSelect, isActive }) {
   );
 }
 
-function Avatar({ initials, gradient }) {
+function Avatar({ emoji, gradient, initials }) {
+  // Use emoji if available, otherwise fall back to initials
+  if (emoji && gradient) {
+    return (
+      <div
+        className={`flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br ${gradient} text-xl shadow-sm`}
+      >
+        {emoji}
+      </div>
+    );
+  }
+  
+  // Fallback to initials if emoji/gradient not available
   return (
     <div
-      className={`flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br ${gradient} text-sm font-semibold uppercase text-white shadow-sm`}
+      className={`flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br ${gradient || 'from-gray-400 to-gray-600'} text-sm font-semibold uppercase text-white shadow-sm`}
     >
-      {initials}
+      {initials || '??'}
     </div>
   );
 }
 
-function ProfileDetailSheet({ profile, onClose }) {
-  const breakdownTotal = profile.drinkBreakdown.reduce((sum, item) => sum + item.count, 0);
+function ProfileDetailSheet({ profile, sortMode, onClose }) {
   const [isVisible, setIsVisible] = useState(false);
+  const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => setIsVisible(true));
@@ -508,6 +564,182 @@ function ProfileDetailSheet({ profile, onClose }) {
       document.body.style.overflow = original;
     };
   }, []);
+
+  // Fetch user data from Firestore when overlay opens
+  useEffect(() => {
+    if (USE_MOCK_DATA) {
+      // Use mock data from profile
+      setUserData({
+        totalDrinks: profile.totalDrinks || 0,
+        currentRunDrinkCount: profile.currentRunDrinkCount || 0,
+        drinkTypes: profile.drinkBreakdown ? 
+          profile.drinkBreakdown.reduce((acc, item) => {
+            // Convert drinkBreakdown to drinkTypes format
+            const type = item.label.toLowerCase().replace(/\s+/g, '');
+            acc[type] = item.count;
+            return acc;
+          }, {}) : {},
+        drinkVariations: {},
+        createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // 30 days ago for mock
+      });
+      setLoading(false);
+      return;
+    }
+
+    const fetchUserData = async () => {
+      try {
+        setLoading(true);
+        const userRef = doc(db, 'users', profile.id);
+        const userSnap = await getDoc(userRef);
+        
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+          setUserData({
+            totalDrinks: data.totalDrinks || 0,
+            currentRunDrinkCount: data.currentRunDrinkCount || 0,
+            drinkTypes: data.drinkTypes || {},
+            drinkVariations: data.drinkVariations || {},
+            createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt || new Date())
+          });
+        } else {
+          // Fallback to profile data if user not found
+          setUserData({
+            totalDrinks: profile.totalDrinks || 0,
+            currentRunDrinkCount: profile.currentRunDrinkCount || 0,
+            drinkTypes: {},
+            drinkVariations: {},
+            createdAt: new Date()
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+        // Fallback to profile data on error
+        setUserData({
+          totalDrinks: profile.totalDrinks || 0,
+          currentRunDrinkCount: profile.currentRunDrinkCount || 0,
+          drinkTypes: {},
+          drinkVariations: {},
+          createdAt: new Date()
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserData();
+  }, [profile.id]);
+
+  // Calculate weekly average for all-time view
+  const calculateWeeklyAverage = (totalDrinks, createdAt) => {
+    if (!totalDrinks || totalDrinks === 0 || !createdAt) return 0;
+    
+    const now = new Date();
+    const created = createdAt instanceof Date ? createdAt : new Date(createdAt);
+    const diffMs = now - created;
+    const diffWeeks = diffMs / (7 * 24 * 60 * 60 * 1000);
+    
+    if (diffWeeks < 1) return totalDrinks; // Less than 1 week, return total
+    
+    return Math.round((totalDrinks / diffWeeks) * 10) / 10; // Round to 1 decimal
+  };
+
+  // Build drink breakdown based on sortMode
+  const buildDrinkBreakdown = () => {
+    if (!userData) return [];
+
+    const isCurrentRun = sortMode === 'current-run-most' || sortMode === 'current-run-least';
+    
+    if (isCurrentRun) {
+      // Current run: use drinkVariations
+      const breakdown = [];
+      const variations = userData.drinkVariations || {};
+      
+      Object.entries(variations).forEach(([type, typeVariations]) => {
+        if (typeVariations && typeof typeVariations === 'object') {
+          Object.entries(typeVariations).forEach(([variation, count]) => {
+            if (count > 0) {
+              breakdown.push({
+                id: `${type}-${variation}`,
+                label: variation,
+                count: count
+              });
+            }
+          });
+        }
+      });
+      
+      return breakdown.sort((a, b) => b.count - a.count);
+    } else {
+      // All time: use drinkTypes
+      const breakdown = [];
+      const drinkTypes = userData.drinkTypes || {};
+      
+      // Format drink type labels
+      const formatDrinkTypeLabel = (type) => {
+        const labels = {
+          beer: 'Øl',
+          cider: 'Cider',
+          wine: 'Vin',
+          cocktail: 'Cocktails',
+          shot: 'Shots',
+          spritz: 'Spritz',
+          soda: 'Sodavand',
+          other: 'Andre'
+        };
+        return labels[type] || type.charAt(0).toUpperCase() + type.slice(1);
+      };
+      
+      Object.entries(drinkTypes).forEach(([type, count]) => {
+        if (count > 0) {
+          breakdown.push({
+            id: type,
+            label: formatDrinkTypeLabel(type),
+            count: count
+          });
+        }
+      });
+      
+      return breakdown.sort((a, b) => b.count - a.count);
+    }
+  };
+
+  const drinkBreakdown = userData ? buildDrinkBreakdown() : [];
+  const breakdownTotal = drinkBreakdown.reduce((sum, item) => sum + item.count, 0);
+  
+  // Determine main number and description based on sortMode
+  const isCurrentRun = sortMode === 'current-run-most' || sortMode === 'current-run-least';
+  const mainNumber = userData 
+    ? (isCurrentRun ? userData.currentRunDrinkCount : userData.totalDrinks)
+    : 0;
+  const weeklyAverage = userData && !isCurrentRun 
+    ? calculateWeeklyAverage(userData.totalDrinks, userData.createdAt)
+    : null;
+
+  if (loading) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-start justify-center" onClick={onClose}>
+        <div
+          className={`absolute inset-0 bg-black/45 transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
+        />
+        <div className="relative z-10 flex w-full max-w-full justify-center">
+          <div
+            className={`relative flex h-full w-full flex-col overflow-hidden rounded-b-[32px] shadow-2xl transition-transform duration-300 ease-out ${
+              isVisible ? 'translate-y-0' : '-translate-y-full'
+            }`}
+            style={{ 
+              height: 'min(88vh, 640px)',
+              backgroundColor: 'var(--surface)'
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-center h-full">
+              <p className="text-sm" style={{ color: 'var(--muted)' }}>Indlæser...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center" onClick={onClose}>
@@ -536,53 +768,47 @@ function ProfileDetailSheet({ profile, onClose }) {
             <div>
               <h2 className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>{profile.name}</h2>
               <p className="text-sm" style={{ color: 'var(--muted)' }}>
-                {profile.totalDrinks.toLocaleString('da-DK')} drinks totalt · {profile.weeklyAverage} pr. uge ·{' '}
-                {profile.streakDays} dages streak
+                {isCurrentRun ? (
+                  <>
+                    {mainNumber.toLocaleString('da-DK')} drinks i nuværende runde
+                  </>
+                ) : (
+                  <>
+                    {mainNumber.toLocaleString('da-DK')} drinks totalt
+                    {weeklyAverage !== null && weeklyAverage > 0 && (
+                      <> · {weeklyAverage.toLocaleString('da-DK', { maximumFractionDigits: 1 })} pr. uge</>
+                    )}
+                  </>
+                )}
               </p>
             </div>
           </header>
 
           <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
-            <section className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>Fordeling af drinks</h3>
-              <ul className="space-y-3">
-                {profile.drinkBreakdown.map((item) => {
-                  const percentage = breakdownTotal ? Math.round((item.count / breakdownTotal) * 100) : 0;
-                  return (
-                    <li key={item.id} className="rounded-2xl border border-[var(--line)] bg-[var(--subtle)] p-3">
-                      <div className="flex items-center justify-between text-sm font-medium" style={{ color: 'var(--ink)' }}>
-                        <span>{item.label}</span>
-                        <span>{item.count}</span>
-                      </div>
-                      <div className="mt-2 h-2 w-full overflow-hidden rounded-full" style={{ backgroundColor: 'var(--line)' }}>
-                        <div className="h-full rounded-full bg-[var(--brand)]" style={{ width: `${percentage}%` }} />
-                      </div>
-                      <p className="mt-1 text-xs" style={{ color: 'var(--muted)' }}>{percentage}% af trackede drinks</p>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-
-            <section className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>Seneste aktivitet</h3>
-              {profile.recentDrinks && profile.recentDrinks.length > 0 ? (
-                <ul className="space-y-2">
-                  {profile.recentDrinks.map((item) => (
-                    <li
-                      key={item.id}
-                      className="flex items-center justify-between rounded-2xl border border-[var(--line)] px-3 py-2"
-                      style={{ backgroundColor: 'var(--surface)' }}
-                    >
-                      <span className="text-sm" style={{ color: 'var(--ink)' }}>{item.label}</span>
-                      <span className="text-xs" style={{ color: 'var(--muted)' }}>{item.timestamp}</span>
-                    </li>
-                  ))}
+            {drinkBreakdown.length > 0 && breakdownTotal > 0 ? (
+              <section className="space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+                  {isCurrentRun ? 'Fordeling af nuværende drinks' : 'Fordeling af drinks'}
+                </h3>
+                <ul className="space-y-3">
+                  {drinkBreakdown.map((item) => {
+                    const percentage = breakdownTotal ? Math.round((item.count / breakdownTotal) * 100) : 0;
+                    return (
+                      <li key={item.id} className="rounded-2xl border border-[var(--line)] bg-[var(--subtle)] p-3">
+                        <div className="flex items-center justify-between text-sm font-medium" style={{ color: 'var(--ink)' }}>
+                          <span>{item.label}</span>
+                          <span>{item.count}</span>
+                        </div>
+                        <div className="mt-2 h-2 w-full overflow-hidden rounded-full" style={{ backgroundColor: 'var(--line)' }}>
+                          <div className="h-full rounded-full bg-[var(--brand)]" style={{ width: `${percentage}%` }} />
+                        </div>
+                        <p className="mt-1 text-xs" style={{ color: 'var(--muted)' }}>{percentage}% af trackede drinks</p>
+                      </li>
+                    );
+                  })}
                 </ul>
-              ) : (
-                <p className="text-sm" style={{ color: 'var(--muted)' }}>Ingen seneste aktivitet</p>
-              )}
-            </section>
+              </section>
+            ) : null}
           </div>
 
           <div 

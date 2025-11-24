@@ -38,6 +38,7 @@ const generateMockUsers = () => {
       id: 'sara-holm',
       name: 'Sara Holm',
       initials: 'SH',
+      profileEmoji: '🍹',
       avatarGradient: 'from-rose-400 to-orange-500',
       checkedIn: true,
       location: {
@@ -52,11 +53,13 @@ const generateMockUsers = () => {
         { type: 'drink', label: 'Passion spritz', timestamp: 'I går • 23:02', venue: 'Bar Nexus' },
       ],
       totalDrinks: 148,
+      currentRunDrinkCount: 12,
     },
     {
       id: 'mads-larsen',
       name: 'Mads Larsen',
       initials: 'ML',
+      profileEmoji: '🍺',
       avatarGradient: 'from-sky-400 to-indigo-500',
       checkedIn: true,
       location: {
@@ -71,11 +74,13 @@ const generateMockUsers = () => {
         { type: 'drink', label: 'Mosaik IPA', timestamp: 'I går • 22:10', venue: 'Taproom' },
       ],
       totalDrinks: 131,
+      currentRunDrinkCount: 8,
     },
     {
       id: 'camilla-beck',
       name: 'Camilla Beck',
       initials: 'CB',
+      profileEmoji: '🍸',
       avatarGradient: 'from-purple-400 to-fuchsia-500',
       checkedIn: true,
       location: {
@@ -90,11 +95,13 @@ const generateMockUsers = () => {
         { type: 'sladesh', label: 'Sent sladesh', timestamp: 'I går • 23:40', venue: 'Bar Nexus' },
       ],
       totalDrinks: 118,
+      currentRunDrinkCount: 15,
     },
     {
       id: 'jonas-mikkelsen',
       name: 'Jonas Mikkelsen',
       initials: 'JM',
+      profileEmoji: '🥃',
       avatarGradient: 'from-emerald-400 to-teal-500',
       checkedIn: true,
       location: {
@@ -109,6 +116,7 @@ const generateMockUsers = () => {
         { type: 'drink', label: 'Classic pilsner', timestamp: 'I går • 22:47', venue: 'Taproom' },
       ],
       totalDrinks: 104,
+      currentRunDrinkCount: 5,
     },
   ]
 }
@@ -198,6 +206,7 @@ export function LocationProvider({ children }) {
               id: docSnap.id,
               name: userData.fullName || userData.displayName || 'Unknown',
               initials: userData.initials || '??',
+              profileEmoji: userData.profileEmoji || null,
               avatarGradient: userData.avatarGradient || 'from-gray-400 to-gray-600',
               checkedIn: true,
               location: {
@@ -208,6 +217,7 @@ export function LocationProvider({ children }) {
               },
               recentActivities: [], // Would need to fetch from subcollections
               totalDrinks: userData.totalDrinks || 0,
+              currentRunDrinkCount: userData.currentRunDrinkCount || 0,
             })
           }
         })

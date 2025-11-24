@@ -9,6 +9,10 @@ import {
 import { db } from '../firebase'
 import { ensureFreshCheckInStatus } from './userService'
 
+// Simple in-memory cache per channel
+const cache = new Map()
+const CACHE_TTL_MS = 30000 // 30 seconds
+
 /**
  * Fetch leaderboard data from Firestore
  * Aggregates user data including total drinks, weekly averages, streaks, etc.
@@ -16,6 +20,14 @@ import { ensureFreshCheckInStatus } from './userService'
  * @returns {Promise<Array>} Array of leaderboard profile objects
  */
 export async function fetchLeaderboardProfiles(channelId = null) {
+  // Check cache first
+  const cacheKey = channelId || 'default'
+  const cached = cache.get(cacheKey)
+  const now = Date.now()
+  
+  if (cached && (now - cached.timestamp) < CACHE_TTL_MS) {
+    return cached.data
+  }
   try {
     const usersRef = collection(db, 'users')
     
@@ -95,8 +107,11 @@ export async function fetchLeaderboardProfiles(channelId = null) {
         id: docSnap.id,
         name: userData.fullName || userData.displayName || 'Unknown',
         initials: userData.initials || '??',
-        avatarGradient: userData.avatarGradient || 'from-gray-400 to-gray-600',
+        profileEmoji: userData.profileEmoji || '🍹',
+        profileGradient: userData.profileGradient || 'from-rose-400 to-orange-500',
+        avatarGradient: userData.avatarGradient || userData.profileGradient || 'from-gray-400 to-gray-600',
         totalDrinks: userData.totalDrinks || 0,
+        currentRunDrinkCount: userData.currentRunDrinkCount || 0,
         weeklyAverage: weeklyAverage,
         streakDays: streakDays,
         topDrink: topDrink,
@@ -106,10 +121,26 @@ export async function fetchLeaderboardProfiles(channelId = null) {
       })
     }
     
+    // Cache the results
+    cache.set(cacheKey, { data: profiles, timestamp: now })
+    
     return profiles
   } catch (error) {
     console.error('Error fetching leaderboard profiles:', error)
     return []
+  }
+}
+
+/**
+ * Clear the leaderboard cache for a specific channel or all channels
+ * @param {string} [channelId] - Optional channel ID to clear cache for. If not provided, clears all cache.
+ */
+export function clearLeaderboardCache(channelId = null) {
+  if (channelId) {
+    const cacheKey = channelId || 'default'
+    cache.delete(cacheKey)
+  } else {
+    cache.clear()
   }
 }
 

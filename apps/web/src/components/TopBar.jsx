@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Sheet from "./Sheet";
 import { useChannel } from "../hooks/useChannel";
+import { useUserData } from "../contexts/UserDataContext";
 import { USE_MOCK_DATA } from "../config/env";
 
 const DEFAULT_NOTIFICATIONS = [
@@ -218,6 +219,7 @@ export default function TopBar({
   const location = useLocation();
   const [activeOverlay, setActiveOverlay] = useState(null);
   const { selectedChannel, setSelectedChannel, channels, loading: channelsLoading, refreshChannels } = useChannel();
+  const { userData } = useUserData();
 
   // Use mock data in development, empty arrays in production (unless explicitly provided)
   const notifications = USE_MOCK_DATA
@@ -284,72 +286,73 @@ export default function TopBar({
         <button
           type="button"
           onClick={handleProfileClick}
-          className="grid h-12 w-12 place-items-center rounded-2xl border text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
-          style={{ borderColor: 'var(--line)', backgroundColor: 'var(--surface)', color: 'var(--muted)' }}
+          className="h-12 w-12 rounded-2xl border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white overflow-hidden"
+          style={{ borderColor: 'var(--line)', backgroundColor: 'var(--surface)' }}
           aria-label="Open profile settings"
         >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.6" />
-            <path
-              d="M5.5 19.5c0-3.59 3.04-5.5 6.5-5.5s6.5 1.91 6.5 5.5"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-            />
-          </svg>
+          {userData?.profileEmoji && userData?.profileGradient ? (
+            <div
+              className={`flex h-full w-full items-center justify-center bg-gradient-to-br ${userData.profileGradient} text-xl`}
+            >
+              {userData.profileEmoji}
+            </div>
+          ) : (
+            <div className="grid h-full w-full place-items-center text-neutral-500" style={{ color: 'var(--muted)' }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.6" />
+                <path
+                  d="M5.5 19.5c0-3.59 3.04-5.5 6.5-5.5s6.5 1.91 6.5 5.5"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+          )}
         </button>
       )}
 
-      <div className="flex-1">
-        {subtitle ? (
-          <div className="text-xs font-medium uppercase tracking-wide text-neutral-400">
-            {subtitle}
-          </div>
-        ) : null}
-        <h1 className="text-xl font-semibold leading-tight" style={{ color: 'var(--ink)' }}>{title}</h1>
-      </div>
-
       {selectedChannel && !channelsLoading && (
-        <div className="relative">
+        <div className="flex-1 relative">
           <button
             type="button"
             onClick={handleChannelButtonClick}
             aria-haspopup="dialog"
             aria-expanded={activeOverlay === 'channels'}
             aria-label="Select channel"
-            className="grid h-10 w-10 place-items-center rounded-full border transition-colors"
+            className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
             style={{
-              borderColor: activeOverlay === 'channels' ? 'var(--brand, #FF385C)' : 'var(--line)',
-              color: activeOverlay === 'channels' ? 'var(--brand, #FF385C)' : 'var(--muted)'
+              color: activeOverlay === 'channels' ? 'var(--brand, #FF385C)' : 'var(--ink)'
             }}
             onMouseEnter={(e) => {
               if (activeOverlay !== 'channels') {
-                e.currentTarget.style.borderColor = 'var(--line)';
-                e.currentTarget.style.color = 'var(--ink)';
+                e.currentTarget.style.color = 'var(--brand, #FF385C)';
               }
             }}
             onMouseLeave={(e) => {
               if (activeOverlay !== 'channels') {
-                e.currentTarget.style.borderColor = 'var(--line)';
-                e.currentTarget.style.color = 'var(--muted)';
+                e.currentTarget.style.color = 'var(--ink)';
               }
             }}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M9 22V12h6v10"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
+            <span className="text-xl font-semibold leading-tight">
+              {selectedChannel.name}
+            </span>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{
+                transform: activeOverlay === 'channels' ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.2s ease'
+              }}
+            >
+              <path d="M6 9l6 6 6-6" />
             </svg>
           </button>
           <ChannelPickerSheet

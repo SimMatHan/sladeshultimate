@@ -23,6 +23,7 @@ import { useLocation } from "../contexts/LocationContext";
 import { useTheme } from "../contexts/ThemeContext";
 import { useChannel } from "../hooks/useChannel";
 import { useAuth } from "../hooks/useAuth";
+import { useScrollLock } from "../hooks/useScrollLock";
 import { USE_MOCK_DATA } from "../config/env";
 import { getUser, getSladeshCooldownState, addSladesh } from "../services/userService";
 import { getCheckedInChannelMembers } from "../services/channelService";
@@ -32,7 +33,10 @@ const MOCK_PARTICIPANTS = [
   {
     id: "sofie",
     name: "Sofie Holm",
+    username: "sofie",
     initials: "SH",
+    profileEmoji: "🍹",
+    profileGradient: "from-rose-400 to-pink-500",
     accent: "from-rose-400 to-pink-500",
     radius: 128,
     duration: 28,
@@ -40,7 +44,10 @@ const MOCK_PARTICIPANTS = [
   {
     id: "malte",
     name: "Malte Jensen",
+    username: "malte",
     initials: "MJ",
+    profileEmoji: "🍺",
+    profileGradient: "from-amber-400 to-orange-500",
     accent: "from-amber-400 to-orange-500",
     radius: 122,
     duration: 24,
@@ -48,7 +55,10 @@ const MOCK_PARTICIPANTS = [
   {
     id: "olivia",
     name: "Olivia Madsen",
+    username: "olivia",
     initials: "OM",
+    profileEmoji: "🍸",
+    profileGradient: "from-violet-400 to-purple-500",
     accent: "from-violet-400 to-purple-500",
     radius: 116,
     duration: 32,
@@ -56,7 +66,10 @@ const MOCK_PARTICIPANTS = [
   {
     id: "noah",
     name: "Noah Leth",
+    username: "noah",
     initials: "NL",
+    profileEmoji: "🥃",
+    profileGradient: "from-emerald-400 to-teal-500",
     accent: "from-emerald-400 to-teal-500",
     radius: 128,
     duration: 30,
@@ -64,7 +77,10 @@ const MOCK_PARTICIPANTS = [
   {
     id: "emma",
     name: "Emma Friis",
+    username: "emma",
     initials: "EF",
+    profileEmoji: "🍷",
+    profileGradient: "from-sky-400 to-cyan-500",
     accent: "from-sky-400 to-cyan-500",
     radius: 118,
     duration: 22,
@@ -72,7 +88,10 @@ const MOCK_PARTICIPANTS = [
   {
     id: "lars",
     name: "Lars Bæk",
+    username: "lars",
     initials: "LB",
+    profileEmoji: "🍾",
+    profileGradient: "from-slate-400 to-indigo-500",
     accent: "from-slate-400 to-indigo-500",
     radius: 132,
     duration: 26,
@@ -118,6 +137,9 @@ export default function Sladesh() {
 
   const activeChannelId = selectedChannel?.id || null;
   const isDefaultChannel = !selectedChannel || selectedChannel?.isDefault;
+
+  // Lock scroll when overlay is open
+  useScrollLock(!!pendingTarget);
 
   useEffect(() => {
     if (USE_MOCK_DATA) {
@@ -210,8 +232,11 @@ export default function Sladesh() {
     return members.map((member) => ({
       id: member.id,
       name: member.name,
+      username: member.username || member.name,
       initials: member.initials || deriveInitialsFromName(member.name),
-      avatarGradient: member.avatarGradient,
+      profileEmoji: member.profileEmoji || '🍹',
+      profileGradient: member.profileGradient || member.avatarGradient || 'from-rose-400 to-orange-500',
+      avatarGradient: member.avatarGradient || member.profileGradient,
     }));
   }, [members]);
 
@@ -223,8 +248,11 @@ export default function Sladesh() {
     return source.map((participant, index) => ({
       id: participant.id,
       name: participant.name,
+      username: participant.username || participant.name,
       initials: participant.initials,
-      accent: participant.avatarGradient || participant.accent || "from-slate-400 to-indigo-500",
+      profileEmoji: participant.profileEmoji || '🍹',
+      profileGradient: participant.profileGradient || participant.avatarGradient || participant.accent || "from-rose-400 to-orange-500",
+      accent: participant.profileGradient || participant.avatarGradient || participant.accent || "from-slate-400 to-indigo-500",
       radius: 118 + (index % 4) * 6,
       duration: 24 + (index % 5) * 2,
     }));
@@ -313,7 +341,7 @@ export default function Sladesh() {
       } catch {
         // ignore
       }
-      setStatusMessage({ tone: "success", body: `Mock: Sladesh sendt til ${pendingTarget.name}.` });
+      setStatusMessage({ tone: "success", body: `Mock: Sladesh sendt til ${pendingTarget.username || pendingTarget.name}.` });
       setPendingTarget(null);
       return;
     }
@@ -360,7 +388,7 @@ export default function Sladesh() {
             }
           : prev
       );
-      setStatusMessage({ tone: "success", body: `Sladesh sendt til ${pendingTarget.name}.` });
+      setStatusMessage({ tone: "success", body: `Sladesh sendt til ${pendingTarget.username || pendingTarget.name}.` });
       setPendingTarget(null);
     } catch (error) {
       console.error("Error sending sladesh:", error);
@@ -581,7 +609,7 @@ function OrbitAvatar({ participant, disabled, onSelect }) {
         >
           <AvatarBadge participant={participant} size={size} textSize={textSize} />
           <span className="text-xs font-medium drop-shadow-sm" style={{ color: "var(--ink)" }}>
-            {participant.name}
+            {participant.username || participant.name}
           </span>
         </button>
       </div>
@@ -590,11 +618,26 @@ function OrbitAvatar({ participant, disabled, onSelect }) {
 }
 
 function AvatarBadge({ participant, size = "h-16 w-16", textSize = "text-lg" }) {
+  const gradient = participant.profileGradient || participant.accent || "from-rose-400 to-orange-500";
+  const emoji = participant.profileEmoji;
+  
+  // Use emoji if available, otherwise fall back to initials
+  if (emoji) {
+    return (
+      <div
+        className={`grid place-items-center rounded-full ${size} bg-gradient-to-br ${gradient} shadow-[0_18px_40px_rgba(15,23,42,0.18)]`}
+      >
+        <span className="text-2xl">{emoji}</span>
+      </div>
+    );
+  }
+  
+  // Fallback to initials
   return (
     <div
-      className={`grid place-items-center rounded-full ${size} bg-gradient-to-br ${participant.accent} font-semibold text-white shadow-[0_18px_40px_rgba(15,23,42,0.18)]`}
+      className={`grid place-items-center rounded-full ${size} bg-gradient-to-br ${gradient} font-semibold text-white shadow-[0_18px_40px_rgba(15,23,42,0.18)]`}
     >
-      <span className={textSize}>{participant.initials}</span>
+      <span className={textSize}>{participant.initials || "??"}</span>
     </div>
   );
 }
@@ -614,7 +657,7 @@ function RequestOverlay({ participant, onClose, onConfirm, loading }) {
             <OverlayAvatar participant={participant} />
             <div>
               <h3 className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
-                Send Sladesh til {participant.name}?
+                Send Sladesh til {participant.username || participant.name}?
               </h3>
               <p className="text-xs" style={{ color: "var(--muted)" }}>
                 Vi giver dem besked med det samme. Klar på at sende udfordringen afsted?
@@ -674,43 +717,81 @@ function RequestOverlay({ participant, onClose, onConfirm, loading }) {
 }
 
 function OverlayAvatar({ participant }) {
+  const gradient = participant.profileGradient || participant.avatarGradient || participant.accent || "from-rose-400 to-orange-500";
+  const emoji = participant.profileEmoji;
+  
+  // Use emoji if available, otherwise fall back to initials
+  if (emoji) {
+    return (
+      <div
+        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${gradient} text-xl shadow-[0_16px_30px_rgba(15,23,42,0.12)] overflow-hidden aspect-square`}
+      >
+        {emoji}
+      </div>
+    );
+  }
+  
+  // Fallback to initials
   return (
-    <span 
-      className="relative inline-flex h-12 w-12 items-center justify-center rounded-full ring-2 shadow-[0_14px_30px_rgba(15,23,42,0.16)] overflow-hidden"
-      style={{ 
-        backgroundColor: 'var(--subtle)',
-        color: 'var(--muted)',
-        '--tw-ring-color': 'var(--surface)'
-      }}
+    <div
+      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${gradient} text-sm font-semibold uppercase text-white shadow-[0_16px_30px_rgba(15,23,42,0.12)] overflow-hidden aspect-square`}
     >
-      <span className="text-sm font-semibold">{participant.initials || "??"}</span>
-      <span className="sr-only">{participant.name}</span>
-    </span>
+      {participant.initials || "??"}
+    </div>
   );
 }
 
 function OrbitCenterButton({ disabled, onPress }) {
+  const [pulseDelay, setPulseDelay] = useState(() => Math.random() * 2);
+  const [pulseDuration, setPulseDuration] = useState(() => 2 + Math.random() * 1.5);
+
+  // Randomize pulse timing periodically to make it feel more alive
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPulseDelay(Math.random() * 2);
+      setPulseDuration(2 + Math.random() * 1.5);
+    }, 10000 + Math.random() * 5000); // Change every 10-15 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onPress}
-      className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:opacity-60"
-      aria-label="Send tilfældig Sladesh"
-    >
-      <div
-        className="grid h-28 w-28 place-items-center rounded-full border shadow-[0_18px_40px_rgba(15,23,42,0.18)]"
-        style={{
-          borderColor: "color-mix(in srgb, var(--surface) 55%, transparent)",
-          backgroundColor: "color-mix(in srgb, var(--surface) 45%, transparent)",
-        }}
+    <>
+      <style>{`
+        @keyframes pulse-shadow {
+          0%, 100% {
+            box-shadow: 0 18px 40px rgba(15,23,42,0.18), 0 0 0 0 rgba(var(--brand-rgb), 0.5);
+          }
+          50% {
+            box-shadow: 0 18px 40px rgba(15,23,42,0.18), 0 0 50px 20px rgba(var(--brand-rgb), 0.9);
+          }
+        }
+        .pulse-shadow-animation {
+          animation: pulse-shadow ${pulseDuration}s ease-in-out infinite;
+          animation-delay: ${pulseDelay}s;
+        }
+      `}</style>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={onPress}
+        className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:opacity-60"
+        aria-label="Send tilfældig Sladesh"
       >
-        <span className="text-4xl leading-none" aria-hidden="true">
-          🤙
-        </span>
-      </div>
-      <span className="sr-only">Tilfældig Sladesh</span>
-    </button>
+        <div
+          className="grid h-28 w-28 place-items-center rounded-full border pulse-shadow-animation"
+          style={{
+            borderColor: "color-mix(in srgb, var(--surface) 55%, transparent)",
+            backgroundColor: "color-mix(in srgb, var(--surface) 45%, transparent)",
+          }}
+        >
+          <span className="text-4xl leading-none" aria-hidden="true">
+            🤙
+          </span>
+        </div>
+        <span className="sr-only">Tilfældig Sladesh</span>
+      </button>
+    </>
   );
 }
 

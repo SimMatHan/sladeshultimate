@@ -3,6 +3,7 @@ import { Outlet, useLocation as useRouteLocation } from 'react-router-dom'
 import TopBar from './TopBar'
 import TabBar from './TabBar'
 import { useAuth } from '../hooks/useAuth'
+import { useScrollLock } from '../hooks/useScrollLock'
 import { addCheckIn, getUser, updateUserLocation } from '../services/userService'
 import { incrementCheckInCount } from '../services/statsService'
 import { useLocation as useGeoLocation } from '../contexts/LocationContext'
@@ -48,6 +49,10 @@ export default function AppShell() {
   const checkInGateTimer = useRef(null)
   const pageInfo = PAGE_TITLES[location.pathname] || { title: 'Sladesh', subtitle: null }
   const blockingOverlayVisible = (!checkedIn && showCheckInGate) || showSuccessOverlay
+
+  // Lock scroll when overlays are open
+  useScrollLock(showSuccessOverlay)
+  useScrollLock(!checkedIn && showCheckInGate)
 
   // Lurker mode: Show check-in gate after 20 seconds if not checked in
   useEffect(() => {

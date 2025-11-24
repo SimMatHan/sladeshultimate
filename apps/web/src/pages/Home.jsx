@@ -6,6 +6,7 @@ import { useCheckInGate } from "../contexts/CheckInContext";
 import { useUserData } from "../contexts/UserDataContext";
 import { useAuth } from "../hooks/useAuth";
 import { useDrinkVariants } from "../hooks/useDrinkVariants";
+import { useScrollLock } from "../hooks/useScrollLock";
 import { addDrink, removeDrink, getNextResetBoundary, resetCurrentRun } from "../services/userService";
 import { incrementDrinkCount } from "../services/statsService";
 import { CATEGORIES, CATEGORY_THEMES, FALLBACK_THEME } from "../constants/drinks";
@@ -69,7 +70,7 @@ export default function Home() {
   const { checkedIn, checkIn: globalCheckIn, checkOut: handleCheckOut } = useCheckInGate();
   const { userData, refreshUserData } = useUserData();
   const { variantsByCategory } = useDrinkVariants();
-  const [expiresAt, setExpiresAt] = useState(null);
+  const [expiresAt, setExpiresAt] = useState(() => getNextResetBoundary(new Date()));
   const [selected, setSelected] = useState("beer");
   const [sheetFor, setSheetFor] = useState(null);
   const [isSheetVisible, setIsSheetVisible] = useState(false);
@@ -300,7 +301,25 @@ export default function Home() {
   const sheetCat = sheetFor ? CATEGORIES.find((c) => c.id === sheetFor) : null;
   const sheetItems = sheetFor ? variantsByCategory[sheetFor] ?? [] : [];
 
-  // ... (keep useEffects)
+  // Lock scroll when overlays are open
+  useScrollLock(!!sheetFor);
+  useScrollLock(showResetConfirm);
+
+  // Update expiresAt when it expires to show the next reset boundary
+  useEffect(() => {
+    const updateExpiresAt = () => {
+      const nextBoundary = getNextResetBoundary(new Date());
+      setExpiresAt(nextBoundary);
+    };
+
+    // Update immediately on mount and whenever checked in
+    updateExpiresAt();
+
+    // Set up interval to update every minute to keep it accurate
+    const interval = setInterval(updateExpiresAt, 60000);
+
+    return () => clearInterval(interval);
+  }, [checkedIn]);
 
   return (
     <>
@@ -351,11 +370,15 @@ export default function Home() {
                   ? "Great! You're checked in."
                   : "Tap to check in when you arrive."}
               </p>
-              {checkedIn && expiresAt && (
+              {expiresAt && (
                 <Countdown
                   target={expiresAt}
                   onExpire={() => {
-                    handleCheckOut();
+                    if (checkedIn) {
+                      handleCheckOut();
+                    }
+                    // Update to next reset boundary after expiration
+                    setExpiresAt(getNextResetBoundary(new Date()));
                   }}
                 />
               )}
@@ -479,7 +502,7 @@ export default function Home() {
                       Pick your favourite variation
                     </div>
                   </div>
-                  <div className="mt-5 h-[calc(100%-92px)] overflow-y-auto px-6 pb-[calc(env(safe-area-inset-bottom,0px)+20px)]">
+                  <div className="mt-5 h-[calc(100%-92px)] overflow-y-auto px-6 pb-[calc(env(safe-area-inset-bottom,0px)+40px)]">
                     <div className="grid gap-3">
                       {sheetItems.map((item) => {
                         const count = variantCounts[sheetFor]?.[item.name] ?? 0;

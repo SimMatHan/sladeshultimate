@@ -424,8 +424,11 @@ export async function getCheckedInChannelMembers(channelId, isDefaultChannel = f
     return {
       id: docSnap.id,
       name: data.fullName || data.displayName || 'Ukendt',
+      username: data.username || data.fullName || data.displayName || 'Ukendt',
       initials: data.initials || '',
-      avatarGradient: data.avatarGradient || 'from-slate-400 to-indigo-500',
+      profileEmoji: data.profileEmoji || '🍹',
+      profileGradient: data.profileGradient || 'from-rose-400 to-orange-500',
+      avatarGradient: data.avatarGradient || data.profileGradient || 'from-slate-400 to-indigo-500',
       checkInStatus: true,
       currentLocation: data.currentLocation || null
     }

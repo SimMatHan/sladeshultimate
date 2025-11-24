@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useMemo } from 'react'
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet'
 import { useLocation } from '../contexts/LocationContext'
 import { useChannel } from '../hooks/useChannel'
+import { useScrollLock } from '../hooks/useScrollLock'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
@@ -73,11 +74,11 @@ function MapResizeHandler() {
 }
 
 // Component to center map on user location when it changes
-function MapCenterHandler({ center }) {
+function MapCenterHandler({ center, skipAutoCenter }) {
   const map = useMap()
   
   useEffect(() => {
-    if (center) {
+    if (center && !skipAutoCenter) {
       // Only center if the location has changed significantly (more than ~50m)
       const currentCenter = map.getCenter()
       const distance = map.distance(currentCenter, center)
@@ -85,7 +86,7 @@ function MapCenterHandler({ center }) {
         map.setView(center, map.getZoom(), { animate: true, duration: 0.5 })
       }
     }
-  }, [center, map])
+  }, [center, map, skipAutoCenter])
   
   return null
 }
@@ -106,19 +107,6 @@ function MapInstanceSetter({ mapRef }) {
 
 // User Pin Overlay Component
 function UserPinOverlay({ user, onClose }) {
-  const getActivityIcon = (type) => {
-    switch (type) {
-      case 'drink':
-        return '🍺'
-      case 'checkin':
-        return '📍'
-      case 'sladesh':
-        return '⚡'
-      default:
-        return '•'
-    }
-  }
-
   const formatTimeAgo = (timestamp) => {
     const now = Date.now()
     const diff = now - timestamp
@@ -183,26 +171,12 @@ function UserPinOverlay({ user, onClose }) {
             </div>
           </div>
 
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--muted)' }}>
-              Seneste aktiviteter
+          <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--line)', backgroundColor: 'var(--subtle)' }}>
+            <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--muted)' }}>
+              Nuværende runde
             </div>
-            <div className="space-y-2">
-              {user.recentActivities.map((activity, index) => (
-                <div
-                  key={index}
-                  className="flex items-start gap-3 rounded-xl border px-3 py-2.5"
-                  style={{ borderColor: 'var(--line)', backgroundColor: 'var(--surface)' }}
-                >
-                  <span className="text-base leading-none mt-0.5">{getActivityIcon(activity.type)}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium" style={{ color: 'var(--ink)' }}>{activity.label}</div>
-                    <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-                      {activity.venue} • {activity.timestamp}
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <div className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>
+              {user.currentRunDrinkCount?.toLocaleString('da-DK') || '0'} drinks
             </div>
           </div>
 
@@ -245,12 +219,28 @@ function UserPinOverlay({ user, onClose }) {
 }
 
 function UserAvatar({ user }) {
+  const gradient = user.avatarGradient || 'from-gray-400 to-gray-600'
+  const emoji = user.profileEmoji
+  
+  // Use emoji if available, otherwise fall back to initials
+  if (emoji) {
+    return (
+      <div
+        className={`relative inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br ${gradient} shadow-[0_14px_30px_rgba(15,23,42,0.16)] ring-2`}
+        style={{ '--tw-ring-color': 'var(--surface)' }}
+      >
+        <span className="text-xl">{emoji}</span>
+      </div>
+    )
+  }
+  
+  // Fallback to initials
   return (
     <div
-      className={`relative inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br ${user.avatarGradient} font-semibold text-white shadow-[0_14px_30px_rgba(15,23,42,0.16)] ring-2`}
+      className={`relative inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br ${gradient} font-semibold text-white shadow-[0_14px_30px_rgba(15,23,42,0.16)] ring-2`}
       style={{ '--tw-ring-color': 'var(--surface)' }}
     >
-      <span className="text-base">{user.initials}</span>
+      <span className="text-base">{user.initials || '??'}</span>
     </div>
   )
 }
@@ -259,8 +249,10 @@ export default function MapPage() {
   const { selectedChannel } = useChannel()
   const { userLocation, otherUsers } = useLocation()
   const [selectedUser, setSelectedUser] = useState(null)
+  const [skipAutoCenter, setSkipAutoCenter] = useState(false)
   const mapRef = useRef(null)
   const containerRef = useRef(null)
+  const savedMapStateRef = useRef(null)
   const visibleUsers = useMemo(
     () => otherUsers.filter((user) => user.checkedIn !== false),
     [otherUsers]
@@ -306,11 +298,39 @@ export default function MapPage() {
     }
   }
 
+  // Lock scroll when overlay is open
+  useScrollLock(!!selectedUser)
+
+  // Store map state when overlay opens
+  useEffect(() => {
+    if (selectedUser && mapRef.current) {
+      const center = mapRef.current.getCenter()
+      const zoom = mapRef.current.getZoom()
+      savedMapStateRef.current = { center, zoom }
+    }
+  }, [selectedUser])
+
+  // Restore map state when overlay closes
+  const handleCloseOverlay = () => {
+    if (mapRef.current && savedMapStateRef.current) {
+      const { center, zoom } = savedMapStateRef.current
+      // Temporarily disable auto-centering
+      setSkipAutoCenter(true)
+      // Restore the saved map state
+      mapRef.current.setView([center.lat, center.lng], zoom, { animate: false })
+      // Re-enable auto-centering after a short delay
+      setTimeout(() => {
+        setSkipAutoCenter(false)
+      }, 1000)
+    }
+    setSelectedUser(null)
+  }
+
   useEffect(() => {
     if (!selectedUser) return
     const stillVisible = visibleUsers.some((user) => user.id === selectedUser.id)
     if (!stillVisible) {
-      setSelectedUser(null)
+      handleCloseOverlay()
     }
   }, [selectedUser, visibleUsers])
 
@@ -340,7 +360,10 @@ export default function MapPage() {
             <MapInstanceSetter mapRef={mapRef} />
             {userLocation && (
               <>
-                <MapCenterHandler center={[userLocation.lat, userLocation.lng]} />
+                <MapCenterHandler 
+                  center={[userLocation.lat, userLocation.lng]} 
+                  skipAutoCenter={skipAutoCenter}
+                />
                 <Marker
                   position={[userLocation.lat, userLocation.lng]}
                   icon={userLocationIcon}
@@ -396,7 +419,7 @@ export default function MapPage() {
       {selectedUser && (
         <UserPinOverlay
           user={selectedUser}
-          onClose={() => setSelectedUser(null)}
+          onClose={handleCloseOverlay}
         />
       )}
       </div>
