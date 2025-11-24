@@ -35,10 +35,23 @@ export default function AppShell() {
   })
   const [isCheckingIn, setIsCheckingIn] = useState(false)
   const [showSuccessOverlay, setShowSuccessOverlay] = useState(false)
+  const [showCheckInGate, setShowCheckInGate] = useState(false)
   const successOverlayTimeout = useRef(null)
   const pageInfo = PAGE_TITLES[location.pathname] || { title: 'Sladesh', subtitle: null }
-  const blockingOverlayVisible = !checkedIn || showSuccessOverlay
-  
+  const blockingOverlayVisible = (!checkedIn && showCheckInGate) || showSuccessOverlay
+
+  // Lurker mode: Show check-in gate after 20 seconds if not checked in
+  useEffect(() => {
+    if (currentUser && !checkedIn) {
+      const timer = setTimeout(() => {
+        setShowCheckInGate(true)
+      }, 20000) // 20 seconds delay
+      return () => clearTimeout(timer)
+    } else {
+      setShowCheckInGate(false)
+    }
+  }, [currentUser, checkedIn])
+
   // Fetch username from Firestore when on home page
   useEffect(() => {
     if (location.pathname === '/home' && currentUser) {
@@ -60,12 +73,12 @@ export default function AppShell() {
       setUsername(null)
     }
   }, [location.pathname, currentUser])
-  
+
   // For home page, set title to "Home" and subtitle to username
   const title = pageInfo.title === null && location.pathname === '/home'
     ? 'Home'
     : pageInfo.title
-  
+
   const subtitle = pageInfo.subtitle === null && location.pathname === '/home'
     ? (username || 'UserName')
     : pageInfo.subtitle
@@ -165,14 +178,13 @@ export default function AppShell() {
   return (
     <CheckInContext.Provider value={checkInContextValue}>
       <div
-        className={`app-shell bg-[var(--bg)] text-[color:var(--text)] ${
-          blockingOverlayVisible ? 'pointer-events-none select-none' : ''
-        }`}
+        className={`app-shell bg-[var(--bg)] text-[color:var(--text)] ${blockingOverlayVisible ? 'pointer-events-none select-none' : ''
+          }`}
       >
         <header className="topbar">
           <div className="max-w-[480px] mx-auto px-4 h-full">
-            <TopBar 
-              title={title} 
+            <TopBar
+              title={title}
               subtitle={subtitle}
             />
           </div>

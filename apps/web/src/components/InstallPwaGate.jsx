@@ -4,7 +4,7 @@ export default function InstallPwaGate({
   isIos,
 }) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--bg,#0F1115)] px-5 py-8 text-[color:var(--text,#F5F6F8)]">
+    <div className="flex h-[80vh] w-screen flex-col items-center justify-center overflow-hidden bg-[var(--bg,#0F1115)] px-5 pt-20 text-[color:var(--text,#F5F6F8)]">
       <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-white/5 p-6 text-center shadow-2xl backdrop-blur-2xl">
         <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--brand,#FF385C)]/15 text-3xl">
           📱

@@ -461,17 +461,6 @@ export async function removeDrink(userId, type, variation) {
  * @returns {Promise<string>} Document ID of the new check-in
  */
 export async function addCheckIn(userId, checkInData) {
-  const checkInsRef = collection(db, 'users', userId, 'checkIns')
-
-  const checkInDoc = {
-    venue: checkInData.venue,
-    location: checkInData.location,
-    timestamp: serverTimestamp(),
-    channelId: checkInData.channelId || null
-  }
-
-  const docRef = await addDoc(checkInsRef, checkInDoc)
-
   // Update user's check-in status and location
   const userRef = doc(db, 'users', userId)
   await updateDoc(userRef, {
@@ -488,7 +477,7 @@ export async function addCheckIn(userId, checkInData) {
     lastActiveAt: serverTimestamp()
   })
 
-  return docRef.id
+  return "check-in-optimized" // Return dummy ID or void since it's unused
 }
 
 /**
@@ -505,20 +494,6 @@ export async function addCheckIn(userId, checkInData) {
  * @returns {Promise<string>} Document ID of the new sladesh
  */
 export async function addSladesh(userId, sladeshData) {
-  const sladeshRef = collection(db, 'users', userId, 'sladesh')
-
-  const sladeshDoc = {
-    type: sladeshData.type,
-    recipientId: sladeshData.recipientId || null,
-    senderId: sladeshData.senderId || null,
-    venue: sladeshData.venue,
-    location: sladeshData.location,
-    timestamp: serverTimestamp(),
-    channelId: sladeshData.channelId || null
-  }
-
-  const docRef = await addDoc(sladeshRef, sladeshDoc)
-
   // Update user's sladesh counts
   const userRef = doc(db, 'users', userId)
   const userSnap = await getDoc(userRef)
@@ -538,7 +513,7 @@ export async function addSladesh(userId, sladeshData) {
 
   await updateDoc(userRef, updates)
 
-  return docRef.id
+  return "sladesh-optimized"
 }
 
 /**
