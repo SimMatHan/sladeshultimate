@@ -50,7 +50,7 @@ const generateMockUsers = () => {
       },
       recentActivities: [
         { type: 'drink', label: 'Sladesh shot', timestamp: 'I dag • 20:14', venue: 'HQ Bar' },
-        { type: 'checkin', label: 'Checked in', timestamp: 'I dag • 19:30', venue: 'HQ Bar' },
+        { type: 'checkin', label: 'Checket ind', timestamp: 'I dag • 19:30', venue: 'HQ Bar' },
         { type: 'drink', label: 'Passion spritz', timestamp: 'I går • 23:02', venue: 'Bar Nexus' },
       ],
       totalDrinks: 148,
@@ -71,7 +71,7 @@ const generateMockUsers = () => {
       },
       recentActivities: [
         { type: 'drink', label: 'Pilsner', timestamp: 'I dag • 19:45', venue: 'Ølbaren' },
-        { type: 'checkin', label: 'Checked in', timestamp: 'I dag • 19:00', venue: 'Ølbaren' },
+        { type: 'checkin', label: 'Checket ind', timestamp: 'I dag • 19:00', venue: 'Ølbaren' },
         { type: 'drink', label: 'Mosaik IPA', timestamp: 'I går • 22:10', venue: 'Taproom' },
       ],
       totalDrinks: 131,
@@ -92,7 +92,7 @@ const generateMockUsers = () => {
       },
       recentActivities: [
         { type: 'drink', label: 'Raspberry sour', timestamp: 'I dag • 18:55', venue: 'Bar Nexus' },
-        { type: 'checkin', label: 'Checked in', timestamp: 'I dag • 18:30', venue: 'Bar Nexus' },
+        { type: 'checkin', label: 'Checket ind', timestamp: 'I dag • 18:30', venue: 'Bar Nexus' },
         { type: 'sladesh', label: 'Sent sladesh', timestamp: 'I går • 23:40', venue: 'Bar Nexus' },
       ],
       totalDrinks: 118,
@@ -113,7 +113,7 @@ const generateMockUsers = () => {
       },
       recentActivities: [
         { type: 'drink', label: 'Gin & tonic', timestamp: 'I dag • 19:05', venue: 'Stuen' },
-        { type: 'checkin', label: 'Checked in', timestamp: 'I dag • 18:45', venue: 'Stuen' },
+        { type: 'checkin', label: 'Checket ind', timestamp: 'I dag • 18:45', venue: 'Stuen' },
         { type: 'drink', label: 'Classic pilsner', timestamp: 'I går • 22:47', venue: 'Taproom' },
       ],
       totalDrinks: 104,
@@ -170,7 +170,7 @@ export function LocationProvider({ children }) {
         )
       } else {
         console.warn('Geolocation is not supported by this browser')
-        setLocationError('Geolocation not supported')
+        setLocationError('Geolokation understøttes ikke')
         // Fallback to default location
         const fallbackLocation = {
           lat: 55.6761,
@@ -214,7 +214,7 @@ export function LocationProvider({ children }) {
               userData.currentLocation.lng) {
             users.push({
               id: docSnap.id,
-              name: userData.fullName || userData.displayName || 'Unknown',
+              name: userData.fullName || userData.displayName || 'Ukendt',
               initials: userData.initials || '??',
               profileEmoji: userData.profileEmoji || null,
               avatarGradient: userData.avatarGradient || 'from-gray-400 to-gray-600',
@@ -223,7 +223,7 @@ export function LocationProvider({ children }) {
                 lat: userData.currentLocation.lat,
                 lng: userData.currentLocation.lng,
                 timestamp: userData.currentLocation.timestamp?.toMillis() || Date.now(),
-                venue: userData.currentLocation.venue || userData.lastCheckInVenue || 'Unknown',
+                venue: userData.currentLocation.venue || userData.lastCheckInVenue || 'Ukendt',
               },
               recentActivities: [], // Would need to fetch from subcollections
               totalDrinks: userData.totalDrinks || 0,

@@ -22,34 +22,34 @@ const slideVariants = {
 const SLIDES = [
   {
     id: 'welcome',
-    title: 'Welcome to SladeshPro!',
-    description: 'Track your hydration and stay on top of your goals.',
+    title: 'Velkommen til SladeshPro!',
+    description: 'Følg dine drinks og hold styr på dine mål.',
     emoji: '🤙',
-    emojiLabel: 'Call me hand',
+    emojiLabel: 'Hånd der siger ring',
     accentBg: 'bg-[rgba(255,179,71,0.20)] dark:bg-[rgba(255,179,71,0.28)]',
   },
   {
     id: 'friends',
-    title: 'Connect with Friends',
-    description: 'Check in and compete with friends in the same channel.',
+    title: 'Forbind med venner',
+    description: 'Check ind og konkurrer med venner i samme kanal.',
     emoji: '🤝',
-    emojiLabel: 'Handshake',
+    emojiLabel: 'Håndtryk',
     accentBg: 'bg-[rgba(255,208,102,0.20)] dark:bg-[rgba(255,208,102,0.28)]',
   },
   {
     id: 'send',
     title: 'Send Sladesh!',
-    description: 'Send a Sladesh to friends when they check in.',
+    description: 'Send en Sladesh til venner, når de checker ind.',
     emoji: '🥤',
-    emojiLabel: 'Drink cup',
+    emojiLabel: 'Drikkebæger',
     accentBg: 'bg-[rgba(255,56,92,0.12)] dark:bg-[rgba(255,56,92,0.20)]',
   },
   {
     id: 'track',
-    title: 'Track Your Drinks',
-    description: 'Log every drink and see your total count.',
+    title: 'Registrer dine drinks',
+    description: 'Log hver drink og se dit samlede antal.',
     emoji: '📈',
-    emojiLabel: 'Chart increasing',
+    emojiLabel: 'Stigende graf',
     accentBg: 'bg-[rgba(0,166,153,0.15)] dark:bg-[rgba(0,166,153,0.25)]',
   },
 ]
@@ -115,8 +115,8 @@ export default function Onboarding() {
     [goTo]
   )
 
-  const progressText = `Step ${index + 1} of ${totalSlides}`
-  const primaryLabel = isLastSlide ? 'Get Started' : 'Next'
+  const progressText = `Trin ${index + 1} af ${totalSlides}`
+  const primaryLabel = isLastSlide ? 'Kom i gang' : 'Næste'
 
   return (
     <div className="min-h-screen bg-[color:var(--bg)] text-[color:var(--text)]">
@@ -130,7 +130,7 @@ export default function Onboarding() {
             onClick={handleSkip}
             className="text-sm font-medium text-[color:var(--text-muted)] transition-opacity hover:opacity-70 focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)] focus:ring-offset-2 focus:ring-offset-[color:var(--bg)]"
           >
-            Skip
+            Spring over
           </button>
         </header>
 
@@ -177,7 +177,7 @@ export default function Onboarding() {
           <div
             className="flex items-center justify-center gap-3"
             role="group"
-            aria-label="Onboarding progress"
+            aria-label="Onboardingfremgang"
           >
             {SLIDES.map((slide, dotIndex) => {
               const isActive = dotIndex === index

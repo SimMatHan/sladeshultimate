@@ -73,7 +73,7 @@ function SplashRouter() {
 function GuardOnboard({ children }) {
   const { isSignedIn, loading } = useAuthGuard()
   
-  if (loading) return <div>Loading...</div> // Or a loading component
+  if (loading) return <div>Indlæser...</div> // Or a loading component
   if (!isSignedIn) return <Navigate to="/auth?mode=signin" replace />
   
   // Check localStorage for onboarding status (can be updated later to use Firestore)
@@ -86,7 +86,7 @@ function GuardOnboard({ children }) {
 function GuardApp({ children }) {
   const { isSignedIn, loading } = useAuthGuard()
   
-  if (loading) return <div>Loading...</div> // Or a loading component
+  if (loading) return <div>Indlæser...</div> // Or a loading component
   if (!isSignedIn) return <Navigate to="/auth?mode=signin" replace />
   
   // Check localStorage for onboarding status (can be updated later to use Firestore)
@@ -99,7 +99,7 @@ function GuardApp({ children }) {
 function RequireAdmin({ children }) {
   const { currentUser, loading } = useAuth()
 
-  if (loading) return <div>Loading...</div>
+  if (loading) return <div>Indlæser...</div>
   if (!currentUser || !isAdminUser(currentUser)) {
     return <Navigate to="/more" replace />
   }

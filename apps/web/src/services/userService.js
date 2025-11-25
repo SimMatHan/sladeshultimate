@@ -248,7 +248,7 @@ async function refreshDrinkDayStatus(userRef, userData, now = new Date()) {
  */
 export async function createUser({ uid, email, fullName, displayName = null }) {
   if (!uid || !email || !fullName) {
-    throw new Error('uid, email, and fullName are required to create a user')
+    throw new Error('uid, email og fullName skal udfyldes for at oprette en bruger')
   }
 
   const userRef = doc(db, 'users', uid)
@@ -370,7 +370,7 @@ export async function addDrink(userId, type, variation) {
   // Refresh drink day status before adding (checks if new day started and resets per-run fields)
   const userSnap = await getDoc(userRef)
   if (!userSnap.exists()) {
-    throw new Error(`User ${userId} not found`)
+    throw new Error(`Bruger ${userId} blev ikke fundet`)
   }
 
   const userData = userSnap.data()
@@ -423,7 +423,7 @@ export async function removeDrink(userId, type, variation) {
   // Refresh drink day status first
   const userSnap = await getDoc(userRef)
   if (!userSnap.exists()) {
-    throw new Error(`User ${userId} not found`)
+    throw new Error(`Bruger ${userId} blev ikke fundet`)
   }
 
   const userData = userSnap.data()

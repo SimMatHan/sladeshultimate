@@ -55,7 +55,7 @@ export default function Auth() {
     try {
       if (mode === "signup") {
         if (!fullName.trim()) {
-          setError("Full name is required");
+          setError("Fulde navn er påkrævet");
           setIsSubmitting(false);
           return;
         }
@@ -71,7 +71,7 @@ export default function Auth() {
     } catch (error) {
       // Error is handled by useAuth hook and set via authError
       console.error("Authentication error:", error);
-      setError(error.message || "An error occurred. Please try again.");
+      setError(error.message || "Der opstod en fejl. Prøv igen.");
     } finally {
       setIsSubmitting(false);
     }
@@ -90,7 +90,7 @@ export default function Auth() {
       <div className="w-full max-w-full mx-auto px-6">
         {/* Header */}
         <h1 className="text-[28px] font-extrabold tracking-tight mb-2">Sladesh</h1>
-        <p className="text-muted mb-6">{mode === "signin" ? "Welcome back 👋" : "Create your account to get started"}</p>
+        <p className="text-muted mb-6">{mode === "signin" ? "Velkommen tilbage 👋" : "Opret din konto for at komme i gang"}</p>
 
         {/* Tabs */}
         <div className="grid grid-cols-2 gap-2 mb-6">
@@ -103,7 +103,7 @@ export default function Auth() {
                 : "text-muted border-line bg-subtle hover:bg-surface"
             }`}
           >
-            Sign in
+            Log ind
           </button>
           <button
             type="button"
@@ -114,7 +114,7 @@ export default function Auth() {
                 : "text-muted border-line bg-subtle hover:bg-surface"
             }`}
           >
-            Sign up
+            Opret konto
           </button>
         </div>
 
@@ -130,7 +130,7 @@ export default function Auth() {
           {mode === "signup" && (
             <input
               type="text"
-              placeholder="Full name"
+              placeholder="Fulde navn"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               required
@@ -141,7 +141,7 @@ export default function Auth() {
 
           <input
             type="email"
-            placeholder="Email"
+            placeholder="E-mail"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -151,7 +151,7 @@ export default function Auth() {
 
           <input
             type="password"
-            placeholder="Password"
+            placeholder="Adgangskode"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -166,10 +166,10 @@ export default function Auth() {
             className="w-full py-3 rounded-md bg-brand text-white font-semibold shadow-soft active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting || loading
-              ? "Please wait..."
+              ? "Vent venligst..."
               : mode === "signin"
-              ? "Continue"
-              : "Create account"}
+              ? "Fortsæt"
+              : "Opret konto"}
           </button>
         </form>
 
@@ -177,26 +177,26 @@ export default function Auth() {
         {mode === "signin" ? (
           <div className="mt-6 text-center text-sm">
             <p className="text-muted">
-              Forgot password?
+              Glemt adgangskode?
               {/* Opdatér evt. sti */}
               {" "}
-              <Link to="/reset" className="text-brand font-medium">Reset</Link>
+              <Link to="/reset" className="text-brand font-medium">Nulstil</Link>
             </p>
             <p className="text-muted mt-2">
-              Need an account? Use the Sign up tab above.
+              Mangler du en konto? Brug fanen "Opret konto" ovenfor.
             </p>
           </div>
         ) : (
           <div className="mt-6 text-center text-sm">
             <p className="text-muted">
-              Already have an account? Use the Sign in tab above.
+              Har du allerede en konto? Brug fanen "Log ind" ovenfor.
             </p>
           </div>
         )}
 
         {/* Back to splash (hvis du vil linke dertil) */}
         <div className="mt-8 text-center">
-          <Link to="/" className="text-muted text-sm hover:text-ink transition">Back to splash</Link>
+          <Link to="/" className="text-muted text-sm hover:text-ink transition">Tilbage til splash</Link>
         </div>
       </div>
     </motion.div>

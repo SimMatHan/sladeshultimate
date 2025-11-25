@@ -14,13 +14,13 @@ const CHECK_IN_GATE_ACTIVATED_KEY = 'sladesh:checkInGateActivated'
 
 const PAGE_TITLES = {
   '/home': { title: null, subtitle: null }, // title and subtitle will be set dynamically
-  '/leaderboard': { title: 'Leaderboard', subtitle: null },
+  '/leaderboard': { title: 'Topliste', subtitle: null },
   '/sladesh': { title: 'Sladesh', subtitle: null },
-  '/map': { title: 'Map', subtitle: null },
-  '/more': { title: 'More', subtitle: null },
-  '/manage-channels': { title: 'Manage Channels', subtitle: null },
-  '/manage-profile': { title: 'Manage Profile', subtitle: null },
-  '/admin': { title: 'Admin Portal', subtitle: null },
+  '/map': { title: 'Kort', subtitle: null },
+  '/more': { title: 'Mere', subtitle: null },
+  '/manage-channels': { title: 'Administrer kanaler', subtitle: null },
+  '/manage-profile': { title: 'Administrer profil', subtitle: null },
+  '/admin': { title: 'Adminportal', subtitle: null },
 }
 
 export default function AppShell() {
@@ -117,11 +117,11 @@ export default function AppShell() {
 
   // For home page, set title to "Home" and subtitle to username
   const title = pageInfo.title === null && location.pathname === '/home'
-    ? 'Home'
+    ? 'Hjem'
     : pageInfo.title
 
   const subtitle = pageInfo.subtitle === null && location.pathname === '/home'
-    ? (username || 'UserName')
+    ? (username || 'Brugernavn')
     : pageInfo.subtitle
 
   const persistCheckedIn = useCallback((nextValue) => {
@@ -167,7 +167,7 @@ export default function AppShell() {
     try {
       setIsCheckingIn(true)
       updateLocation()
-      const venue = 'Current Location'
+      const venue = 'Nuværende placering'
       const locationPayload = userLocation || {
         lat: 55.6761,
         lng: 12.5683,
@@ -258,10 +258,10 @@ export default function AppShell() {
               📍
             </div>
             <h2 className="mt-6 text-xl font-semibold" style={{ color: 'var(--ink)' }}>
-              Check in to join the game
+              Check ind for at være med
             </h2>
             <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
-              You need to check in to use Sladesh, appear on the map, and show up on the leaderboard.
+              Du skal checke ind for at bruge Sladesh, dukke op på kortet og komme på toplisten.
             </p>
             <button
               type="button"
@@ -270,7 +270,7 @@ export default function AppShell() {
               className="mt-6 inline-flex w-full items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold shadow-soft transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:opacity-60"
               style={{ backgroundColor: 'var(--brand)', color: 'var(--brand-ink)' }}
             >
-              {isCheckingIn ? 'Checking in...' : 'Check in'}
+              {isCheckingIn ? 'Checker ind...' : 'Check ind'}
             </button>
           </div>
         </div>
@@ -283,10 +283,10 @@ export default function AppShell() {
               ✅
             </div>
             <h3 className="mt-4 text-lg font-semibold" style={{ color: 'var(--ink)' }}>
-              You’re checked in!
+              Du er checket ind!
             </h3>
             <p className="mt-2 text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
-              Welcome to the game. Your stats and location are now live.
+              Velkommen til spillet. Dine stats og din placering er nu live.
             </p>
           </div>
         </div>

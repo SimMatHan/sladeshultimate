@@ -36,8 +36,8 @@ function ChannelCard({ channel, isActive, onCopyCode }) {
             <div className="text-base font-semibold" style={{ color: "var(--ink)" }}>
               {name}
             </div>
-            {isDefault ? <span className="overlay-card__badge">Default</span> : null}
-            {isActive ? <span className="overlay-card__badge">Active</span> : null}
+            {isDefault ? <span className="overlay-card__badge">Standard</span> : null}
+            {isActive ? <span className="overlay-card__badge">Aktiv</span> : null}
           </div>
           {code ? (
             <button
@@ -61,7 +61,7 @@ function ChannelCard({ channel, isActive, onCopyCode }) {
             </button>
           ) : (
             <span className="text-xs font-medium" style={{ color: "var(--muted)" }}>
-              No code
+              Ingen kode
             </span>
           )}
         </div>
@@ -92,22 +92,22 @@ export default function ManageChannels() {
   const handleCopyCode = async (code) => {
     try {
       await navigator.clipboard.writeText(code)
-      setFeedback({ tone: "success", message: "Invite code copied to clipboard." })
+      setFeedback({ tone: "success", message: "Invitationskoden er kopieret til udklipsholderen." })
     } catch {
-      setFeedback({ tone: "error", message: "Could not copy the invite code. Try manually." })
+      setFeedback({ tone: "error", message: "Kunne ikke kopiere invitationskoden. Prøv manuelt." })
     }
   }
 
   const handleJoinChannel = async (event) => {
     event.preventDefault()
     if (!currentUser) {
-      setFeedback({ tone: "error", message: "You need to be signed in to join a channel." })
+      setFeedback({ tone: "error", message: "Du skal være logget ind for at deltage i en kanal." })
       return
     }
 
     const sanitized = joinCode.trim()
     if (!sanitized) {
-      setFeedback({ tone: "error", message: "Enter an invite code to join a channel." })
+      setFeedback({ tone: "error", message: "Indtast en invitationskode for at deltage i en kanal." })
       return
     }
 
@@ -116,14 +116,14 @@ export default function ManageChannels() {
       const { joinedChannel } = await joinChannelByCode(currentUser.uid, sanitized)
       setFeedback({
         tone: "success",
-        message: `You've joined ${joinedChannel?.name || "the channel"}.`
+        message: `Du er nu med i ${joinedChannel?.name || "kanalen"}.`
       })
       setJoinCode("")
       await refreshChannels()
     } catch (error) {
       setFeedback({
         tone: "error",
-        message: error.message || "Failed to join channel. Try again."
+        message: error.message || "Det lykkedes ikke at deltage i kanalen. Prøv igen."
       })
     } finally {
       setIsJoining(false)
@@ -132,10 +132,10 @@ export default function ManageChannels() {
 
   if (!currentUser) {
     return (
-      <Page title="Manage Channels">
+      <Page title="Administrer kanaler">
         <div className="space-y-4">
           <p className="text-sm" style={{ color: "var(--muted)" }}>
-            Sign in to manage your channels.
+            Log ind for at administrere dine kanaler.
           </p>
           <button
             type="button"
@@ -147,7 +147,7 @@ export default function ManageChannels() {
               color: "var(--ink)"
             }}
           >
-            Go to sign in
+            Gå til log ind
           </button>
         </div>
       </Page>
@@ -155,7 +155,7 @@ export default function ManageChannels() {
   }
 
   return (
-    <Page title="Manage Channels" allowScroll>
+    <Page title="Administrer kanaler" allowScroll>
       <div className="space-y-6">
 
 
@@ -163,10 +163,10 @@ export default function ManageChannels() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--muted)" }}>
-                Your channels
+                Dine kanaler
               </div>
               <div className="text-lg font-semibold" style={{ color: "var(--ink)" }}>
-                {channels.length} joined
+                {channels.length} tilsluttet
               </div>
             </div>
             <div className="rounded-2xl bg-[color:var(--brand,#FF385C)]/10 px-3 py-1 text-sm font-semibold text-[color:var(--brand,#FF385C)]">
@@ -174,20 +174,20 @@ export default function ManageChannels() {
             </div>
           </div>
           <p className="mt-3 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
-            Channels keep your nights organised. Join friends with an invite code.
+            Kanaler holder jeres aftener organiseret. Deltag hos venner med en invitationskode.
           </p>
         </Card>
 
         <Card className="px-5 py-6 space-y-4">
           <div className="space-y-1">
             <div className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--muted)" }}>
-              Join friends
+              Deltag hos venner
             </div>
             <h2 className="text-lg font-semibold" style={{ color: "var(--ink)" }}>
-              Enter invite code
+              Indtast invitationskode
             </h2>
             <p className="text-sm" style={{ color: "var(--muted)" }}>
-              Already have a code? Drop it below to hop in instantly.
+              Har du allerede en kode? Skriv den her og kom med det samme.
             </p>
           </div>
           <form className="flex flex-col gap-3" onSubmit={handleJoinChannel}>
@@ -195,7 +195,7 @@ export default function ManageChannels() {
               type="text"
               value={joinCode}
               onChange={(event) => setJoinCode(event.target.value)}
-              placeholder="e.g. FRI-9024"
+              placeholder="fx FRI-9024"
               className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold tracking-[0.28em] uppercase focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1"
               style={{
                 borderColor: "var(--line)",
@@ -214,18 +214,18 @@ export default function ManageChannels() {
                 color: "var(--ink)"
               }}
             >
-              {isJoining ? "Joining..." : "Join channel"}
+              {isJoining ? "Deltager..." : "Deltag i kanal"}
             </button>
           </form>
         </Card>
 
         <div className="space-y-3">
           <div className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--muted)" }}>
-            Your channels
+            Dine kanaler
           </div>
           {channelsLoading ? (
             <Card className="px-5 py-6 text-sm" style={{ color: "var(--muted)" }}>
-              Loading channels...
+              Indlæser kanaler...
             </Card>
           ) : channels.length ? (
             <div className="space-y-3">
@@ -240,7 +240,7 @@ export default function ManageChannels() {
             </div>
           ) : (
             <Card className="px-5 py-6 text-sm" style={{ color: "var(--muted)" }}>
-              You are not part of any channels yet. Join one using a code.
+              Du er ikke med i nogen kanaler endnu. Brug en kode for at deltage.
             </Card>
           )}
         </div>

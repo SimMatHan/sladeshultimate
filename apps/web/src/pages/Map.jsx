@@ -182,7 +182,7 @@ function UserPinOverlay({ user, onClose }) {
 
           <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--line)', backgroundColor: 'var(--subtle)' }}>
             <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--muted)' }}>
-              Total drinks
+              Drinks i alt
             </div>
             <div className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>
               {user.totalDrinks.toLocaleString('da-DK')}
@@ -394,8 +394,8 @@ export default function MapPage() {
           onClick={handleCenterOnMe}
           disabled={!!selectedUser}
           className={`center-on-me-button ${selectedUser ? 'center-on-me-button--disabled' : ''}`}
-          aria-label="Center on my location"
-          title="Center on my location"
+          aria-label="Centrer på min placering"
+          title="Centrer på min placering"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"

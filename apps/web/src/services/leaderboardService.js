@@ -96,7 +96,7 @@ export async function fetchLeaderboardProfiles(channelId = null) {
       const recentDrinks = []
       
       // Determine top drink
-      let topDrink = 'N/A'
+      let topDrink = 'Ukendt'
       if (userData.drinkVariations && Object.keys(userData.drinkVariations).length > 0) {
         let maxCount = 0
         Object.entries(userData.drinkVariations).forEach(([type, variations]) => {
@@ -113,7 +113,7 @@ export async function fetchLeaderboardProfiles(channelId = null) {
       
       profiles.push({
         id: docSnap.id,
-        name: userData.fullName || userData.displayName || 'Unknown',
+        name: userData.fullName || userData.displayName || 'Ukendt',
         initials: userData.initials || '??',
         profileEmoji: userData.profileEmoji || '🍹',
         profileGradient: userData.profileGradient || 'from-rose-400 to-orange-500',
@@ -123,7 +123,7 @@ export async function fetchLeaderboardProfiles(channelId = null) {
         weeklyAverage: weeklyAverage,
         streakDays: streakDays,
         topDrink: topDrink,
-        favoriteSpot: userData.lastCheckInVenue || 'Unknown',
+        favoriteSpot: userData.lastCheckInVenue || 'Ukendt',
         drinkBreakdown: drinkBreakdown,
         recentDrinks: recentDrinks
       })

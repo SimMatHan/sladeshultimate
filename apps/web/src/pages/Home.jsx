@@ -58,7 +58,7 @@ function Countdown({ target, onExpire }) {
     <div className="mt-3 flex items-center gap-2 text-[11px] uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
       <span>
-        Resets in {pad(hours)}:{pad(minutes)}:{pad(seconds)}
+        Nulstiller om {pad(hours)}:{pad(minutes)}:{pad(seconds)}
       </span>
     </div>
   );
@@ -148,9 +148,9 @@ export default function Home() {
     ...CATEGORIES,
     {
       id: "reset",
-      name: "Reset Run",
+      name: "Nulstil runde",
       icon: "🚨",
-      description: "Start fresh",
+      description: "Start forfra",
       gradient: "linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.05))"
     }
   ], []);
@@ -349,7 +349,7 @@ export default function Home() {
               }}
             >
               <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-                Check-in status
+                Check-in-status
               </div>
               <div
                 className={`mt-2 flex items-center gap-2 text-sm font-semibold ${checkedIn
@@ -363,12 +363,12 @@ export default function Home() {
                     : "bg-[color:var(--brand,#FF385C)]"
                     }`}
                 />
-                {checkedIn ? "Checked in" : "Not checked in"}
+                {checkedIn ? "Checket ind" : "Ikke checket ind"}
               </div>
               <p className="mt-3 text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
                 {checkedIn
-                  ? "Great! You're checked in."
-                  : "Tap to check in when you arrive."}
+                  ? "Fedt! Du er checket ind."
+                  : "Tryk for at checke ind, når du ankommer."}
               </p>
               {expiresAt && (
                 <Countdown
@@ -386,20 +386,20 @@ export default function Home() {
 
             <Card bare className="px-5 py-4">
               <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-                Drinks logged
+                Loggede drinks
               </div>
               <div className="mt-2 flex items-end gap-2">
                 <span className="text-3xl font-semibold" style={{ color: 'var(--ink)' }}>
                   {currentRunDrinkCount}
                 </span>
                 <span className="pb-1 text-xs uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-                  today
+                  i dag
                 </span>
               </div>
               <p className="mt-3 text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
                 {userTotalDrinks > 0
-                  ? `${userTotalDrinks} total lifetime`
-                  : "Track each variation with the drink selector below."}
+                  ? `${userTotalDrinks} i alt`
+                  : "Registrer hver variation med drinkvælgeren nedenfor."}
               </p>
             </Card>
           </div>
@@ -448,7 +448,7 @@ export default function Home() {
               <span>{selectedItem.name}</span>
             </div>
             <div className="text-xs" style={{ color: 'var(--muted)' }}>
-              {selectedItem.id === "reset" ? "Clear today's progress" : "Select your drink"}
+              {selectedItem.id === "reset" ? "Nulstil dagens fremskridt" : "Vælg din drink"}
             </div>
             <div className="mt-4 flex justify-center gap-2">
               {sliderItems.map((item) => (
@@ -486,7 +486,7 @@ export default function Home() {
                   style={{ color: 'var(--muted)' }}
                   onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--ink)')}
                   onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--muted)')}
-                  aria-label="Close"
+                  aria-label="Luk"
                 >
                   ×
                 </button>
@@ -499,7 +499,7 @@ export default function Home() {
                       <span>{sheetCat?.name ?? "Drinks"}</span>
                     </div>
                     <div className="text-xs" style={{ color: 'var(--muted)' }}>
-                      Pick your favourite variation
+                      Vælg din favoritvariation
                     </div>
                   </div>
                   <div className="mt-5 h-[calc(100%-92px)] overflow-y-auto px-6 pb-[calc(env(safe-area-inset-bottom,0px)+40px)]">
@@ -534,7 +534,7 @@ export default function Home() {
                                     backgroundColor: 'var(--line)',
                                     color: 'var(--ink)'
                                   }}
-                                  aria-label={`Remove one ${item.name}`}
+                                  aria-label={`Fjern en ${item.name}`}
                                 >
                                   &minus;
                                 </button>
@@ -549,7 +549,7 @@ export default function Home() {
                                     backgroundColor: 'var(--brand)',
                                     color: 'var(--brand-ink)'
                                   }}
-                                  aria-label={`Add one ${item.name}`}
+                                  aria-label={`Tilføj en ${item.name}`}
                                 >
                                   +
                                 </button>
@@ -566,7 +566,7 @@ export default function Home() {
                             color: 'var(--muted)'
                           }}
                         >
-                          Variations coming soon.
+                          Variationer på vej.
                         </div>
                       )}
                     </div>
@@ -595,7 +595,7 @@ export default function Home() {
               Vil du nulstille dagens drikke?
             </h3>
             <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-              This will reset your current run count to 0. This action cannot be undone.
+              Dette nulstiller dit nuværende løb til 0. Handlingen kan ikke fortrydes.
             </p>
             <div className="mt-6 flex justify-end gap-3">
               <button
@@ -603,7 +603,7 @@ export default function Home() {
                 onClick={() => setShowResetConfirm(false)}
                 className="rounded-lg px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
               >
-                Cancel
+                Annuller
               </button>
               <button
                 type="button"
@@ -611,7 +611,7 @@ export default function Home() {
                 disabled={isSaving}
                 className="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-50"
               >
-                {isSaving ? "Resetting..." : "Confirm"}
+                {isSaving ? "Nulstiller..." : "Bekræft"}
               </button>
             </div>
           </motion.div>

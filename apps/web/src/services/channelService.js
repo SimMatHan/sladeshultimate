@@ -17,7 +17,7 @@ const DEFAULT_CHANNEL_NAME = 'Den Åbne Kanal'
 
 function getUserRef(userId) {
   if (!userId) {
-    throw new Error('User ID is required')
+    throw new Error('Bruger-ID er påkrævet')
   }
   return doc(db, 'users', userId)
 }
@@ -135,7 +135,7 @@ export async function getUserChannels(userId) {
   const userSnap = await getDoc(userRef)
 
   if (!userSnap.exists()) {
-    throw new Error('User not found')
+    throw new Error('Bruger blev ikke fundet')
   }
 
   const userData = userSnap.data()
@@ -213,14 +213,14 @@ export async function getChannelsForUser(userId) {
  */
 export async function createChannel({ name, isDefault = false }) {
   if (!name || !name.trim()) {
-    throw new Error('Channel name is required')
+    throw new Error('Kanalnavn er påkrævet')
   }
 
   // Only one default channel should exist
   if (isDefault) {
     const existingDefault = await getDefaultChannel()
     if (existingDefault) {
-      throw new Error('A default channel already exists')
+      throw new Error('En standardkanal findes allerede')
     }
   }
 
@@ -263,7 +263,7 @@ export async function joinChannel(userId, channelId) {
   const channelSnap = await getDoc(channelRef)
   
   if (!channelSnap.exists()) {
-    throw new Error('Channel not found')
+    throw new Error('Kanalen blev ikke fundet')
   }
   
   // Update user's joinedChannelIds array
@@ -271,7 +271,7 @@ export async function joinChannel(userId, channelId) {
   const userSnap = await getDoc(userRef)
   
   if (!userSnap.exists()) {
-    throw new Error('User not found')
+    throw new Error('Bruger blev ikke fundet')
   }
   
   const userData = userSnap.data()
@@ -296,7 +296,7 @@ export async function leaveChannel(userId, channelId) {
   const userSnap = await getDoc(userRef)
   
   if (!userSnap.exists()) {
-    throw new Error('User not found')
+    throw new Error('Bruger blev ikke fundet')
   }
   
   const userData = userSnap.data()
@@ -315,19 +315,19 @@ export async function leaveChannel(userId, channelId) {
  */
 export async function setActiveChannel(userId, channelId) {
   if (!channelId) {
-    throw new Error('Channel ID is required')
+    throw new Error('Kanal-ID er påkrævet')
   }
 
   const userRef = await getUserRef(userId)
   const userSnap = await getDoc(userRef)
 
   if (!userSnap.exists()) {
-    throw new Error('User not found')
+    throw new Error('Bruger blev ikke fundet')
   }
 
   const joinedIds = userSnap.data().joinedChannelIds || []
   if (!joinedIds.includes(channelId)) {
-    throw new Error('User is not a member of this channel')
+    throw new Error('Brugeren er ikke medlem af denne kanal')
   }
 
   await updateDoc(userRef, {
@@ -346,24 +346,24 @@ export async function setActiveChannel(userId, channelId) {
 export async function joinChannelByCode(userId, joinCode) {
   const sanitized = joinCode?.trim()
   if (!sanitized) {
-    throw new Error('A join code is required')
+    throw new Error('Der kræves en invitationskode')
   }
 
   const channel = await findChannelByCode(sanitized)
   if (!channel) {
-    throw new Error('No channel found with that code')
+    throw new Error('Ingen kanal blev fundet med den kode')
   }
 
   const userRef = await getUserRef(userId)
   const userSnap = await getDoc(userRef)
   if (!userSnap.exists()) {
-    throw new Error('User not found')
+    throw new Error('Bruger blev ikke fundet')
   }
 
   const userData = userSnap.data()
   const joinedIds = Array.isArray(userData.joinedChannelIds) ? userData.joinedChannelIds : []
   if (joinedIds.includes(channel.id)) {
-    throw new Error('You are already a member of that channel')
+    throw new Error('Du er allerede medlem af den kanal')
   }
 
   const updates = {
@@ -383,7 +383,7 @@ export async function joinChannelByCode(userId, joinCode) {
   const confirmedJoinedIds = Array.isArray(updatedData.joinedChannelIds) ? updatedData.joinedChannelIds : []
 
   if (!confirmedJoinedIds.includes(channel.id)) {
-    throw new Error('Channel join did not persist. Please try again.')
+    throw new Error('Kanaltilmeldingen blev ikke gemt. Prøv igen.')
   }
 
   console.log('[channelService:joinChannelByCode]', {
@@ -446,7 +446,7 @@ export async function getCheckedInChannelMembers(channelId, isDefaultChannel = f
  */
 export async function addComment(channelId, { userId, userName, content }) {
   if (!userId || !userName || !content) {
-    throw new Error('userId, userName, and content are required to add a comment')
+    throw new Error('userId, userName og content skal udfyldes for at tilføje en kommentar')
   }
   
   const commentsRef = collection(db, 'channels', channelId, 'comments')

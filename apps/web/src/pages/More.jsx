@@ -10,7 +10,7 @@ function ActionCard({
   description,
   to,
   onClick,
-  actionLabel = "Open",
+  actionLabel = "Åbn",
   tone = "default",
 }) {
   const gradientMap = {
@@ -104,45 +104,45 @@ export default function More() {
   };
 
   return (
-    <Page title="More">
+    <Page title="Mere">
       <div className="flex flex-1 flex-col space-y-6">
         <div className="space-y-4">
           {isAdmin && (
             <ActionCard
               icon="🛠️"
               title="Admin"
-              description="Manage drink variations and channels."
+              description="Administrer drinkvariationer og kanaler."
               to="/admin"
               actionLabel="Admin"
             />
           )}
           <ActionCard
             icon="📡"
-            title="Manage Channels"
-            description="Invite friends, create new spaces, and tune channel visibility."
+            title="Administrer kanaler"
+            description="Invitér venner, opret nye rum og justér kanal-synlighed."
             to="/manage-channels"
-            actionLabel="Channels"
+            actionLabel="Kanaler"
             tone="channels"
           />
           <ActionCard
             icon="🧑‍🎨"
-            title="Manage Profile"
-            description="Update your display name, vibe, and notification preferences."
+            title="Administrer profil"
+            description="Opdater dit displaynavn, din vibe og dine notifikationer."
             to="/manage-profile"
-            actionLabel="Profile"
+            actionLabel="Profil"
             tone="profile"
           />
         </div>
 
         <div className="space-y-3">
           <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-            Account
+            Konto
           </div>
           <ActionCard
             icon="🚪"
-            title="Sign out of Sladesh"
+            title="Log ud af Sladesh"
             onClick={handleSignOut}
-            actionLabel="Sign out"
+            actionLabel="Log ud"
             tone="critical"
           />
         </div>

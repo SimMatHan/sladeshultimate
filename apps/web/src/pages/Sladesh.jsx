@@ -681,7 +681,7 @@ function RequestOverlay({ participant, onClose, onConfirm, loading }) {
             Dine venner får et ping, og du kan først sende igen i næste blok.
           </div>
           <p className="text-sm" style={{ color: "var(--muted)" }}>
-            “Are you sure?” – bare for en sikkerheds skyld. Du sender kun én Sladesh ad gangen.
+            “Er du sikker?” – bare for en sikkerheds skyld. Du sender kun én Sladesh ad gangen.
           </p>
         </div>
 

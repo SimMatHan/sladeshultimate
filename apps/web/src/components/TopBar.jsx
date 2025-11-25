@@ -8,17 +8,17 @@ import { USE_MOCK_DATA } from "../config/env";
 const DEFAULT_NOTIFICATIONS = [
   {
     id: "notification-1",
-    title: "Welcome to Sladesh!",
-    body: "Start by checking in and logging your first drink.",
-    meta: "Just now",
-    badge: "New",
+    title: "Velkommen til Sladesh!",
+    body: "Begynd med at checke ind og logge din første drink.",
+    meta: "Lige nu",
+    badge: "Ny",
     icon: "✨",
   },
   {
     id: "notification-2",
-    title: "Leaderboard update",
-    body: "Sofie just moved to 1st place with 12 points.",
-    meta: "15 min ago",
+    title: "Topliste opdateret",
+    body: "Sofie gik lige i front med 12 point.",
+    meta: "For 15 min siden",
     icon: "🏆",
   },
 ];
@@ -27,16 +27,16 @@ const DEFAULT_MESSAGES = [
   {
     id: "message-1",
     title: "Mikkel",
-    body: "Should we meet at the bar in 10?",
-    meta: "2 min ago",
+    body: "Skal vi mødes i baren om 10?",
+    meta: "For 2 min siden",
     icon: "💬",
-    badge: "Reply",
+    badge: "Svar",
   },
   {
     id: "message-2",
     title: "Emma",
-    body: "Loved the cocktail menu you recommended!",
-    meta: "30 min ago",
+    body: "Elskede cocktailkortet du anbefalede!",
+    meta: "For 30 min siden",
     icon: "🍸",
   },
 ];
@@ -129,7 +129,7 @@ function OverlayPanel({ open, onClose, title, description, items, variant = "not
           </ul>
         ) : (
           <div className="sheet-empty py-10 text-center text-xs">
-            Nothing here yet. Stay tuned!
+            Intet her endnu. Kig snart igen!
           </div>
         )}
       </div>
@@ -143,8 +143,8 @@ function ChannelPickerSheet({ open, onClose, channels, selectedChannel, onSelect
       open={open}
       onClose={onClose}
       position="top"
-      title="Select Channel"
-      description="Choose a channel to filter content"
+      title="Vælg kanal"
+      description="Vælg en kanal for at filtrere indhold"
       height="min(60vh, 400px)"
       animationDuration={300}
     >
@@ -166,14 +166,14 @@ function ChannelPickerSheet({ open, onClose, channels, selectedChannel, onSelect
                         <div className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
                           {channel.name}
                         </div>
-                        {channel.isDefault ? <span className="overlay-card__badge">Default</span> : null}
+                        {channel.isDefault ? <span className="overlay-card__badge">Standard</span> : null}
                       </div>
                       <div className="mt-1 text-xs" style={{ color: 'var(--muted)' }}>
-                        {channel.isDefault ? "Default channel" : "Tap to switch"}
+                        {channel.isDefault ? "Standardkanal" : "Tryk for at skifte"}
                       </div>
                       {isActive && (
                         <div className="mt-3">
-                          <span className="overlay-card__badge">Active</span>
+                          <span className="overlay-card__badge">Aktiv</span>
                         </div>
                       )}
                     </div>
@@ -199,7 +199,7 @@ function ChannelPickerSheet({ open, onClose, channels, selectedChannel, onSelect
         </ul>
       ) : (
         <div className="sheet-empty py-10 text-center text-xs">
-          No channels available
+          Ingen kanaler tilgængelige
         </div>
       )}
     </Sheet>
@@ -276,7 +276,7 @@ export default function TopBar({
           onClick={() => navigate(-1)}
           className="grid h-12 w-12 place-items-center rounded-2xl border text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
           style={{ borderColor: 'var(--line)', backgroundColor: 'var(--surface)', color: 'var(--muted)' }}
-          aria-label="Go back"
+          aria-label="Gå tilbage"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M15 18l-6-6 6-6" />
@@ -288,7 +288,7 @@ export default function TopBar({
           onClick={handleProfileClick}
           className="h-12 w-12 rounded-2xl border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white overflow-hidden"
           style={{ borderColor: 'var(--line)', backgroundColor: 'var(--surface)' }}
-          aria-label="Open profile settings"
+          aria-label="Åbn profilindstillinger"
         >
           {userData?.profileEmoji && userData?.profileGradient ? (
             <div
@@ -319,7 +319,7 @@ export default function TopBar({
             onClick={handleChannelButtonClick}
             aria-haspopup="dialog"
             aria-expanded={activeOverlay === 'channels'}
-            aria-label="Select channel"
+            aria-label="Vælg kanal"
             className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
             style={{
               color: activeOverlay === 'channels' ? 'var(--brand, #FF385C)' : 'var(--ink)'
@@ -375,7 +375,7 @@ export default function TopBar({
             onClick={() => handleOverlayToggle('notifications')}
             aria-haspopup="dialog"
             aria-expanded={activeOverlay === 'notifications'}
-            aria-label="Open notifications"
+            aria-label="Åbn notifikationer"
             className="grid h-10 w-10 place-items-center rounded-full border transition-colors"
             style={{
               borderColor: activeOverlay === 'notifications' ? 'var(--brand, #FF385C)' : 'var(--line)',
@@ -413,8 +413,8 @@ export default function TopBar({
           <OverlayPanel
             open={activeOverlay === 'notifications'}
             onClose={() => setActiveOverlay(null)}
-            title="Notifications"
-            description="Latest updates and alerts"
+            title="Notifikationer"
+            description="Seneste opdateringer og beskeder"
             items={notifications}
             variant="notifications"
           />
@@ -426,7 +426,7 @@ export default function TopBar({
             onClick={() => handleOverlayToggle('messages')}
             aria-haspopup="dialog"
             aria-expanded={activeOverlay === 'messages'}
-            aria-label="Open messages"
+            aria-label="Åbn beskeder"
             className="grid h-10 w-10 place-items-center rounded-full border transition-colors"
             style={{
               borderColor: activeOverlay === 'messages' ? 'var(--brand, #FF385C)' : 'var(--line)',
@@ -464,8 +464,8 @@ export default function TopBar({
           <OverlayPanel
             open={activeOverlay === 'messages'}
             onClose={() => setActiveOverlay(null)}
-            title="Messages"
-            description="Your latest conversations"
+            title="Beskeder"
+            description="Dine seneste samtaler"
             items={messages}
             variant="messages"
           />

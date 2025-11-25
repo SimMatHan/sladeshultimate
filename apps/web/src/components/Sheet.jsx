@@ -201,7 +201,7 @@ export default function Sheet({
                 type="button"
                 onClick={onClose}
                 className="text-xl text-[color:var(--muted)] transition-colors hover:text-[color:var(--ink)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2"
-                aria-label="Close sheet"
+                aria-label="Luk panel"
               >
                 ×
               </button>

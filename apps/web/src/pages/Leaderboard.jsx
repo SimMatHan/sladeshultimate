@@ -372,7 +372,7 @@ export default function Leaderboard() {
   }, [selectedProfile]);
 
   return (
-    <Page title="Leaderboard">
+    <Page title="Topliste">
       <div className="flex flex-col gap-4">
         <div ref={topSectionRef} className="shrink-0 space-y-4 pt-1">
           <p className="text-sm" style={{ color: 'var(--muted)' }}>
@@ -517,7 +517,7 @@ function ProfileCard({ profile, rank, onSelect, isActive, sortMode }) {
 
         <div className="text-right leading-tight">
           <span className="block text-base font-semibold tabular-nums" style={{ color: 'var(--ink)' }}>{valueFormatted}</span>
-          <span className="block text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>Drinks</span>
+          <span className="block text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>Drikke</span>
         </div>
       </div>
     </button>

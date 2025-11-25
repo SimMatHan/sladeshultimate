@@ -53,7 +53,7 @@ function FeedbackBanner({ feedback, onDismiss }) {
         onClick={onDismiss}
         className="text-xs underline decoration-dotted"
       >
-        Dismiss
+        Luk
       </button>
     </div>
   );
@@ -116,7 +116,7 @@ export default function AdminPortal() {
       },
       (error) => {
         console.error("[AdminPortal] Failed to load drink variations", error);
-        setVariationsError(error.message || "Failed to load drink variations.");
+        setVariationsError(error.message || "Kunne ikke indlæse drinkvariationer.");
         setVariationsLoading(false);
       }
     );
@@ -149,7 +149,7 @@ export default function AdminPortal() {
       },
       (error) => {
         console.error("[AdminPortal] Failed to load channels", error);
-        setChannelsError(error.message || "Failed to load channels.");
+        setChannelsError(error.message || "Kunne ikke indlæse kanaler.");
         setChannelsLoading(false);
       }
     );
@@ -230,7 +230,7 @@ export default function AdminPortal() {
     if (!editingForm.name.trim() || !editingForm.description.trim()) {
       setVariationFeedback({
         status: "error",
-        message: "All fields are required to update a variation.",
+        message: "Alle felter skal udfyldes for at opdatere en variation.",
       });
       return;
     }
@@ -245,7 +245,7 @@ export default function AdminPortal() {
       });
       setVariationFeedback({
         status: "success",
-        message: "Drink variation updated.",
+        message: "Drinkvariation opdateret.",
       });
       cancelEditingVariation();
     } catch (error) {
@@ -256,7 +256,7 @@ export default function AdminPortal() {
       });
       setVariationFeedback({
         status: "error",
-        message: error?.message || "Could not update variation.",
+        message: error?.message || "Kunne ikke opdatere variationen.",
       });
     } finally {
       setIsUpdatingVariation(false);
@@ -265,7 +265,7 @@ export default function AdminPortal() {
 
   const handleDeleteVariation = async (variationId) => {
     if (!variationId) return;
-    if (!window.confirm("Delete this drink variation?")) {
+    if (!window.confirm("Slet denne drinkvariation?")) {
       return;
     }
 
@@ -273,7 +273,7 @@ export default function AdminPortal() {
       await deleteDoc(doc(db, "drinkVariations", variationId));
       setVariationFeedback({
         status: "success",
-        message: "Drink variation deleted.",
+        message: "Drinkvariation slettet.",
       });
       if (editingId === variationId) {
         cancelEditingVariation();
@@ -286,7 +286,7 @@ export default function AdminPortal() {
       });
       setVariationFeedback({
         status: "error",
-        message: error?.message || "Could not delete variation.",
+        message: error?.message || "Kunne ikke slette variationen.",
       });
     }
   };
@@ -302,7 +302,7 @@ export default function AdminPortal() {
     if (!trimmedName || !trimmedCode) {
       setChannelFeedback({
         status: "error",
-        message: "Name and code are required to update a channel.",
+        message: "Navn og kode skal udfyldes for at opdatere en kanal.",
       });
       return;
     }
@@ -317,7 +317,7 @@ export default function AdminPortal() {
       });
       setChannelFeedback({
         status: "success",
-        message: "Channel updated.",
+        message: "Kanal opdateret.",
       });
       cancelEditingChannel();
     } catch (error) {
@@ -328,7 +328,7 @@ export default function AdminPortal() {
       });
       setChannelFeedback({
         status: "error",
-        message: error?.message || "Could not update channel.",
+        message: error?.message || "Kunne ikke opdatere kanalen.",
       });
     } finally {
       setIsUpdatingChannel(false);
@@ -337,7 +337,7 @@ export default function AdminPortal() {
 
   const handleDeleteChannel = async (channelId) => {
     if (!channelId) return;
-    if (!window.confirm("Are you sure you want to delete this channel?")) {
+    if (!window.confirm("Er du sikker på, at du vil slette denne kanal?")) {
       return;
     }
 
@@ -345,7 +345,7 @@ export default function AdminPortal() {
       await deleteDoc(doc(db, "channels", channelId));
       setChannelFeedback({
         status: "success",
-        message: "Channel deleted.",
+        message: "Kanal slettet.",
       });
       if (channelEditingId === channelId) {
         cancelEditingChannel();
@@ -358,7 +358,7 @@ export default function AdminPortal() {
       });
       setChannelFeedback({
         status: "error",
-        message: error?.message || "Could not delete channel.",
+        message: error?.message || "Kunne ikke slette kanalen.",
       });
     }
   };
@@ -370,7 +370,7 @@ export default function AdminPortal() {
     if (!currentUser || !isAdmin) {
       setVariationFeedback({
         status: "error",
-        message: "You must be signed in as the admin to create variations.",
+        message: "Du skal være logget ind som admin for at oprette variationer.",
       });
       return;
     }
@@ -378,7 +378,7 @@ export default function AdminPortal() {
     if (!variationForm.name.trim()) {
       setVariationFeedback({
         status: "error",
-        message: "Name is required.",
+        message: "Navn er påkrævet.",
       });
       return;
     }
@@ -386,7 +386,7 @@ export default function AdminPortal() {
     if (!variationForm.description.trim()) {
       setVariationFeedback({
         status: "error",
-        message: "Description is required.",
+        message: "Beskrivelse er påkrævet.",
       });
       return;
     }
@@ -421,7 +421,7 @@ export default function AdminPortal() {
       });
       setVariationFeedback({
         status: "success",
-        message: "Drink variation created.",
+        message: "Drinkvariation oprettet.",
       });
       setVariationForm(initialVariationState);
     } catch (error) {
@@ -432,7 +432,7 @@ export default function AdminPortal() {
       });
       setVariationFeedback({
         status: "error",
-        message: error.message || "Could not create variation.",
+        message: error.message || "Kunne ikke oprette variationen.",
       });
     } finally {
       setIsSavingVariation(false);
@@ -446,7 +446,7 @@ export default function AdminPortal() {
     if (!currentUser || !isAdmin) {
       setChannelFeedback({
         status: "error",
-        message: "You must be signed in as the admin to create channels.",
+        message: "Du skal være logget ind som admin for at oprette kanaler.",
       });
       return;
     }
@@ -454,7 +454,7 @@ export default function AdminPortal() {
     if (!channelForm.name.trim()) {
       setChannelFeedback({
         status: "error",
-        message: "Channel name is required.",
+        message: "Kanalnavn er påkrævet.",
       });
       return;
     }
@@ -462,7 +462,7 @@ export default function AdminPortal() {
     if (!channelForm.code.trim()) {
       setChannelFeedback({
         status: "error",
-        message: "Channel code is required.",
+        message: "Kanalkode er påkrævet.",
       });
       return;
     }
@@ -481,14 +481,14 @@ export default function AdminPortal() {
 
       setChannelFeedback({
         status: "success",
-        message: "Channel created.",
+        message: "Kanal oprettet.",
       });
       setChannelForm(initialChannelState);
     } catch (error) {
       console.error("Failed to create channel", error);
       setChannelFeedback({
         status: "error",
-        message: error.message || "Could not create channel.",
+        message: error.message || "Kunne ikke oprette kanalen.",
       });
     } finally {
       setIsSavingChannel(false);
@@ -496,15 +496,15 @@ export default function AdminPortal() {
   };
 
   return (
-    <Page title="Admin Portal">
+    <Page title="Adminportal">
       <div className="flex flex-col gap-6">
         <section className="space-y-3">
           <div>
             <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
-              Drink Variations
+              Drinkvariationer
             </div>
             <p className="text-sm text-[color:var(--muted)]">
-              Add new drink variations for everyone to use.
+              Tilføj nye drinkvariationer, som alle kan bruge.
             </p>
           </div>
           <Card className="space-y-4 px-5 py-6">
@@ -515,13 +515,13 @@ export default function AdminPortal() {
             <form className="space-y-4" onSubmit={handleVariationSubmit}>
               <div className="space-y-2">
                 <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
-                  Name
+                  Navn
                 </label>
                 <input
                   type="text"
                   value={variationForm.name}
                   onChange={handleVariationChange("name")}
-                  placeholder="e.g. IPA"
+                  placeholder="fx IPA"
                   className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1"
                   style={{
                     borderColor: "var(--line)",
@@ -533,13 +533,13 @@ export default function AdminPortal() {
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
-                  Description
+                  Beskrivelse
                 </label>
                 <textarea
                   value={variationForm.description}
                   onChange={handleVariationChange("description")}
                   rows={3}
-                  placeholder="Short description of the drink."
+                  placeholder="Kort beskrivelse af drinken."
                   className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1"
                   style={{
                     borderColor: "var(--line)",
@@ -551,7 +551,7 @@ export default function AdminPortal() {
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
-                  Category
+                  Kategori
                 </label>
                 <select
                   value={variationForm.categoryId}
@@ -576,7 +576,7 @@ export default function AdminPortal() {
                 disabled={isSavingVariation}
                 className="w-full rounded-2xl bg-[color:var(--brand,#FF385C)] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isSavingVariation ? "Saving..." : "Create variation"}
+                {isSavingVariation ? "Gemmer..." : "Opret variation"}
               </button>
             </form>
           </Card>
@@ -584,10 +584,10 @@ export default function AdminPortal() {
           <Card className="space-y-4 px-5 py-6">
             <div className="flex items-center justify-between">
               <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
-                Custom Variations
+                Brugerdefinerede variationer
               </div>
               {variationsLoading && (
-                <span className="text-xs text-[color:var(--muted)]">Loading…</span>
+                <span className="text-xs text-[color:var(--muted)]">Indlæser…</span>
               )}
             </div>
             {variationsError && (
@@ -596,8 +596,8 @@ export default function AdminPortal() {
               </div>
             )}
             {!variationsLoading && customVariations.length === 0 && !variationsError && (
-              <div className="rounded-2xl border border-dashed px-4 py-3 text-sm text-[color:var(--muted)]">
-                No custom variations yet.
+                <div className="rounded-2xl border border-dashed px-4 py-3 text-sm text-[color:var(--muted)]">
+                  Ingen brugerdefinerede variationer endnu.
               </div>
             )}
             <div className="space-y-6">
@@ -626,7 +626,7 @@ export default function AdminPortal() {
                               <form className="space-y-3" onSubmit={handleUpdateVariation}>
                                 <div className="space-y-2">
                                   <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
-                                    Name
+                                    Navn
                                   </label>
                                   <input
                                     type="text"
@@ -643,7 +643,7 @@ export default function AdminPortal() {
                                 </div>
                                 <div className="space-y-2">
                                   <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
-                                    Description
+                                    Beskrivelse
                                   </label>
                                   <textarea
                                     value={editingForm.description}
@@ -660,7 +660,7 @@ export default function AdminPortal() {
                                 </div>
                                 <div className="space-y-2">
                                   <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
-                                    Category
+                                    Kategori
                                   </label>
                                   <select
                                     value={editingForm.categoryId}
@@ -688,14 +688,14 @@ export default function AdminPortal() {
                                     style={{ borderColor: "var(--line)" }}
                                     disabled={isUpdatingVariation}
                                   >
-                                    Cancel
+                                    Annuller
                                   </button>
                                   <button
                                     type="submit"
                                     disabled={isUpdatingVariation}
                                     className="flex-1 rounded-2xl bg-[color:var(--brand,#FF385C)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition disabled:opacity-60"
                                   >
-                                    {isUpdatingVariation ? "Saving..." : "Save"}
+                                    {isUpdatingVariation ? "Gemmer..." : "Gem"}
                                   </button>
                                 </div>
                               </form>
@@ -721,14 +721,14 @@ export default function AdminPortal() {
                                     className="rounded-2xl border px-3 py-1 text-xs font-semibold text-[color:var(--muted)] hover:text-[color:var(--ink)]"
                                     style={{ borderColor: "var(--line)" }}
                                   >
-                                    Edit
+                                    Redigér
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => handleDeleteVariation(variation.id)}
                                     className="rounded-2xl border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
                                   >
-                                    Delete
+                                    Slet
                                   </button>
                                 </div>
                               </div>
@@ -747,10 +747,10 @@ export default function AdminPortal() {
         <section className="space-y-3">
           <div>
             <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
-              Channels
+              Kanaler
             </div>
             <p className="text-sm text-[color:var(--muted)]">
-              Spin up new channels. Membership logic comes later.
+              Opret nye kanaler. Medlemslogik kommer senere.
             </p>
           </div>
           <Card className="space-y-4 px-5 py-6">
@@ -761,14 +761,14 @@ export default function AdminPortal() {
             <form className="space-y-4" onSubmit={handleChannelSubmit}>
               <div className="space-y-2">
                 <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
-                  Name
+                  Navn
                 </label>
                 <input
                   type="text"
                   value={channelForm.name}
                   onChange={handleChannelChange("name")}
                   required
-                  placeholder="e.g. CPH Friday Bar"
+                  placeholder="fx CPH Friday Bar"
                   className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1"
                   style={{
                     borderColor: "var(--line)",
@@ -780,14 +780,14 @@ export default function AdminPortal() {
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
-                  Code
+                  Kode
                 </label>
                 <input
                   type="text"
                   value={channelForm.code}
                   onChange={handleChannelChange("code")}
                   required
-                  placeholder="e.g. FRI-9024"
+                  placeholder="fx FRI-9024"
                   className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold uppercase tracking-[0.2em] focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1"
                   style={{
                     borderColor: "var(--line)",
@@ -799,13 +799,13 @@ export default function AdminPortal() {
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
-                  Description (optional)
+                  Beskrivelse (valgfri)
                 </label>
                 <textarea
                   value={channelForm.description}
                   onChange={handleChannelChange("description")}
                   rows={3}
-                  placeholder="What is this channel for?"
+                  placeholder="Hvad bruges denne kanal til?"
                   className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1"
                   style={{
                     borderColor: "var(--line)",
@@ -820,7 +820,7 @@ export default function AdminPortal() {
                 disabled={isSavingChannel}
                 className="w-full rounded-2xl bg-[color:var(--brand,#FF385C)] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isSavingChannel ? "Saving..." : "Create channel"}
+                {isSavingChannel ? "Gemmer..." : "Opret kanal"}
               </button>
             </form>
           </Card>
@@ -829,10 +829,10 @@ export default function AdminPortal() {
             <Card className="space-y-4 px-5 py-6">
               <div className="flex items-center justify-between">
                 <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
-                  All Channels
+                  Alle kanaler
                 </div>
                 {channelsLoading && (
-                  <span className="text-xs text-[color:var(--muted)]">Loading…</span>
+                  <span className="text-xs text-[color:var(--muted)]">Indlæser…</span>
                 )}
               </div>
               {channelsError && (
@@ -842,7 +842,7 @@ export default function AdminPortal() {
               )}
               {!channelsLoading && channels.length === 0 && !channelsError && (
                 <div className="rounded-2xl border border-dashed px-4 py-3 text-sm text-[color:var(--muted)]">
-                  No channels yet.
+                  Ingen kanaler endnu.
                 </div>
               )}
               <div className="space-y-3">
@@ -861,7 +861,7 @@ export default function AdminPortal() {
                         <form className="space-y-3" onSubmit={handleUpdateChannel}>
                           <div className="space-y-2">
                             <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
-                              Name
+                              Navn
                             </label>
                             <input
                               type="text"
@@ -879,7 +879,7 @@ export default function AdminPortal() {
                           </div>
                           <div className="space-y-2">
                             <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
-                              Code
+                              Kode
                             </label>
                             <input
                               type="text"
@@ -897,7 +897,7 @@ export default function AdminPortal() {
                           </div>
                           <div className="space-y-2">
                             <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
-                              Description
+                              Beskrivelse
                             </label>
                             <textarea
                               value={channelEditingForm.description}
@@ -920,14 +920,14 @@ export default function AdminPortal() {
                               style={{ borderColor: "var(--line)" }}
                               disabled={isUpdatingChannel}
                             >
-                              Cancel
+                              Annuller
                             </button>
                             <button
                               type="submit"
                               disabled={isUpdatingChannel}
                               className="flex-1 rounded-2xl bg-[color:var(--brand,#FF385C)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition disabled:opacity-60"
                             >
-                              {isUpdatingChannel ? "Saving..." : "Save"}
+                              {isUpdatingChannel ? "Gemmer..." : "Gem"}
                             </button>
                           </div>
                         </form>
@@ -950,7 +950,7 @@ export default function AdminPortal() {
                             <div className="flex items-center gap-2">
                               {channel.isDefault && (
                                 <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
-                                  Default
+                                  Standard
                                 </span>
                               )}
                             </div>
@@ -962,14 +962,14 @@ export default function AdminPortal() {
                               className="rounded-2xl border px-3 py-1 text-xs font-semibold text-[color:var(--muted)] hover:text-[color:var(--ink)]"
                               style={{ borderColor: "var(--line)" }}
                             >
-                              Edit
+                              Redigér
                             </button>
                             <button
                               type="button"
                               onClick={() => handleDeleteChannel(channel.id)}
                               className="rounded-2xl border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
                             >
-                              Delete
+                              Slet
                             </button>
                           </div>
                         </div>

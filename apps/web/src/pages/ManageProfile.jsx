@@ -136,12 +136,12 @@ export default function ManageProfile() {
       profileGradient: tempProfile.gradient,
     }));
     setProfileSheetOpen(false);
-    setFeedback("Profile picture updated!");
+    setFeedback("Profilbillede opdateret!");
   };
 
   const handleSave = async () => {
     if (!currentUser) {
-      setFeedback("You must be logged in to save changes.");
+      setFeedback("Du skal være logget ind for at gemme ændringer.");
       return;
     }
 
@@ -160,10 +160,10 @@ export default function ManageProfile() {
         profileGradient: userData.profileGradient,
       }));
 
-      setFeedback("Profile updated successfully!");
+      setFeedback("Profilen er gemt!");
     } catch (error) {
       console.error("Error saving profile:", error);
-      setFeedback("Failed to save profile. Please try again.");
+      setFeedback("Kunne ikke gemme profilen. Prøv igen.");
     } finally {
       setSaving(false);
     }
@@ -172,31 +172,31 @@ export default function ManageProfile() {
   const handleDarkModeToggle = () => {
     const newMode = !isDarkMode;
     toggleDarkMode();
-    setFeedback(newMode ? "Switched to dark mode" : "Switched to light mode");
+    setFeedback(newMode ? "Skiftede til mørkt tema" : "Skiftede til lyst tema");
   };
 
   if (loading) {
     return (
-      <Page title="Manage Profile" allowScroll={true}>
+      <Page title="Administrer profil" allowScroll={true}>
         <div className="flex items-center justify-center py-12">
-          <div className="text-sm" style={{ color: 'var(--muted)' }}>Loading...</div>
+          <div className="text-sm" style={{ color: 'var(--muted)' }}>Indlæser...</div>
         </div>
       </Page>
     );
   }
 
   return (
-    <Page title="Manage Profile" allowScroll={true}>
+    <Page title="Administrer profil" allowScroll={true}>
       <div className="space-y-6">
 
 
         <Card className="px-5 py-6 space-y-5">
           <div className="space-y-1">
             <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-              Profile Picture
+              Profilbillede
             </div>
             <p className="text-sm" style={{ color: 'var(--muted)' }}>
-              This picture will appear across the application.
+              Dette billede vises i hele appen.
             </p>
           </div>
 
@@ -227,7 +227,7 @@ export default function ManageProfile() {
                   e.target.style.color = 'var(--ink)';
                 }}
               >
-                Change Picture
+                Skift billede
               </button>
             </div>
           </div>
@@ -236,27 +236,27 @@ export default function ManageProfile() {
         <Card className="px-5 py-6 space-y-5">
           <div className="space-y-1">
             <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-              Account Information
+              Kontoinformation
             </div>
             <h2 className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>
-              Your details
+              Dine oplysninger
             </h2>
             <p className="text-sm" style={{ color: 'var(--muted)' }}>
-              Your account information as it appears in the app.
+              Din kontoinfo, som den ser ud i appen.
             </p>
           </div>
 
           <div className="space-y-4">
             <div className="space-y-2">
               <label htmlFor="username" className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-                Username
+                Brugernavn
               </label>
               <input
                 id="username"
                 type="text"
                 value={userData.username}
                 onChange={handleUsernameChange}
-                placeholder="@username"
+                placeholder="@brugernavn"
                 className="w-full rounded-2xl border px-4 py-3 text-sm font-mono font-medium tracking-wide transition focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-2"
                 style={{
                   borderColor: 'var(--line)',
@@ -268,7 +268,7 @@ export default function ManageProfile() {
 
             <div className="space-y-2">
               <label className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-                Full Name
+                Fulde navn
               </label>
               <div className="w-full rounded-2xl border px-4 py-3 text-sm font-medium" style={{
                 borderColor: 'var(--line)',
@@ -281,7 +281,7 @@ export default function ManageProfile() {
 
             <div className="space-y-2">
               <label className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-                Email
+                E-mail
               </label>
               <div className="w-full rounded-2xl border px-4 py-3 text-sm font-medium" style={{
                 borderColor: 'var(--line)',
@@ -297,13 +297,13 @@ export default function ManageProfile() {
         <Card className="px-5 py-6 space-y-4">
           <div className="space-y-1">
             <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-              Appearance
+              Udseende
             </div>
             <h2 className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>
-              Dark Mode
+              Mørkt tema
             </h2>
             <p className="text-sm" style={{ color: 'var(--muted)' }}>
-              Toggle dark mode for the application.
+              Slå mørkt tema til eller fra i appen.
             </p>
           </div>
 
@@ -326,10 +326,10 @@ export default function ManageProfile() {
           >
             <span className="space-y-1">
               <span className="block text-sm font-semibold" style={{ color: 'var(--ink)' }}>
-                Enable Dark Mode
+                Aktivér mørkt tema
               </span>
               <span className="block text-xs" style={{ color: 'var(--muted)' }}>
-                Switch to dark theme
+                Skift til mørkt tema
               </span>
             </span>
             <span
@@ -353,7 +353,7 @@ export default function ManageProfile() {
             className="w-full inline-flex items-center justify-center rounded-full bg-[color:var(--brand,#FF385C)] px-4 py-3 text-sm font-semibold text-[color:var(--brand-ink,#fff)] shadow-[0_12px_24px_rgba(255,56,92,0.2)] transition hover:-translate-y-[1px] hover:shadow-[0_18px_32px_rgba(255,56,92,0.24)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-70"
             disabled={saving}
           >
-            {saving ? "Saving…" : "Save Changes"}
+            {saving ? "Gemmer…" : "Gem ændringer"}
           </button>
         </div>
 
@@ -378,8 +378,8 @@ export default function ManageProfile() {
         open={profileSheetOpen}
         onClose={() => setProfileSheetOpen(false)}
         position="bottom"
-        title="Customize Profile Picture"
-        description="Choose an emoji and color combination"
+        title="Tilpas profilbillede"
+        description="Vælg en emoji og farvekombination"
         height="min(85vh, 700px)"
       >
         <div className="space-y-6">
@@ -395,7 +395,7 @@ export default function ManageProfile() {
           {/* Emoji Picker */}
           <div className="space-y-3">
             <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-              Choose Emoji
+              Vælg emoji
             </div>
             <div className="grid grid-cols-6 gap-2">
               {EMOJI_OPTIONS.map((emoji) => {
@@ -421,7 +421,7 @@ export default function ManageProfile() {
           {/* Gradient Picker */}
           <div className="space-y-3">
             <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-              Choose Color
+              Vælg farve
             </div>
             <div className="grid grid-cols-4 gap-2">
               {GRADIENT_OPTIONS.map((option) => {
@@ -471,7 +471,7 @@ export default function ManageProfile() {
               onClick={handleProfileSheetSave}
               className="w-full inline-flex items-center justify-center rounded-full bg-[color:var(--brand,#FF385C)] px-4 py-3 text-sm font-semibold text-[color:var(--brand-ink,#fff)] shadow-[0_12px_24px_rgba(255,56,92,0.2)] transition hover:-translate-y-[1px] hover:shadow-[0_18px_32px_rgba(255,56,92,0.24)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
             >
-              Save Changes
+              Gem ændringer
             </button>
           </div>
         </div>

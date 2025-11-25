@@ -127,7 +127,7 @@ export function requireAuth(Component) {
     const { currentUser, loading } = useAuth()
 
     if (loading) {
-      return <div>Loading...</div>
+      return <div>Indlæser...</div>
     }
 
     if (!currentUser) {
