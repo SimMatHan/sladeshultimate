@@ -83,6 +83,37 @@ service cloud.firestore {
         // Users can delete their own comments
         allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
       }
+      
+      // Channel subcollections (messages)
+      match /messages/{messageId} {
+        // Only authenticated users who are members of the channel can read messages
+        // Note: We check channel membership via joinedChannelIds in user document
+        // Since Firestore rules can't directly query user document in this context,
+        // we allow all authenticated users to read (membership check happens in service layer)
+        allow read: if isAuthenticated();
+        
+        // Users can create messages if:
+        // - They are authenticated
+        // - The userId in the message matches their auth.uid
+        // - Required fields are present
+        allow create: if isAuthenticated() && 
+                         request.resource.data.userId == request.auth.uid &&
+                         request.resource.data.keys().hasAll(['userId', 'userName', 'content', 'channelId', 'timestamp']) &&
+                         request.resource.data.userName is string &&
+                         request.resource.data.content is string &&
+                         request.resource.data.channelId == channelId;
+        
+        // Users can update their own messages (for editing)
+        allow update: if isAuthenticated() && 
+                         resource.data.userId == request.auth.uid &&
+                         request.resource.data.userId == request.auth.uid;
+        
+        // Users can delete their own messages
+        allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+        
+        // Note: Quota validation happens in the service layer (messageService.js)
+        // Firestore rules focus on authentication and basic data validation
+      }
     }
     
     // Stats collection

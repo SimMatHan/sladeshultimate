@@ -61,3 +61,93 @@ exports.manualResetCheckInStatus = functions
             res.status(500).send("Error resetting checkInStatus.");
         }
     });
+
+/**
+ * Delete all messages older than 24 hours from all channels.
+ * Runs daily at 12:00 Europe/Copenhagen time.
+ */
+async function deleteOldMessages() {
+    const cutoffTime = admin.firestore.Timestamp.fromDate(
+        new Date(Date.now() - 24 * 60 * 60 * 1000) // 24 hours ago
+    );
+
+    console.log(`Deleting messages older than ${cutoffTime.toDate().toISOString()}`);
+
+    // Get all channels
+    const channelsRef = db.collection("channels");
+    const channelsSnapshot = await channelsRef.get();
+
+    if (channelsSnapshot.empty) {
+        console.log("No channels found.");
+        return { deletedCount: 0 };
+    }
+
+    let totalDeleted = 0;
+    const bulkWriter = db.bulkWriter();
+
+    // Process each channel
+    for (const channelDoc of channelsSnapshot.docs) {
+        const channelId = channelDoc.id;
+        const messagesRef = channelDoc.ref.collection("messages");
+        
+        // Query messages older than 24 hours
+        const oldMessagesQuery = messagesRef
+            .where("timestamp", "<", cutoffTime)
+            .limit(500); // Process in batches to avoid timeout
+
+        const messagesSnapshot = await oldMessagesQuery.get();
+
+        messagesSnapshot.docs.forEach((messageDoc) => {
+            bulkWriter.delete(messageDoc.ref);
+            totalDeleted++;
+        });
+    }
+
+    await bulkWriter.close();
+    console.log(`Successfully deleted ${totalDeleted} old messages.`);
+    
+    return { deletedCount: totalDeleted };
+}
+
+/**
+ * Scheduled function that deletes old messages daily at 12:00 Europe/Copenhagen time.
+ */
+exports.deleteOldMessages = functions
+    .region("europe-west1")
+    .pubsub.schedule("0 12 * * *") // Every day at 12:00
+    .timeZone("Europe/Copenhagen")
+    .onRun(async (context) => {
+        console.log("Running scheduled deletion of old messages...");
+        try {
+            const result = await deleteOldMessages();
+            console.log(`Scheduled message deletion completed. Deleted ${result.deletedCount} messages.`);
+            return null;
+        } catch (error) {
+            console.error("Error deleting old messages:", error);
+            throw error;
+        }
+    });
+
+/**
+ * Manual trigger for development and testing purposes.
+ * Can be called via HTTP or Firebase Console to delete old messages.
+ */
+exports.manualDeleteOldMessages = functions
+    .region("europe-west1")
+    .https.onRequest(async (req, res) => {
+        try {
+            console.log("Running manual deletion of old messages...");
+            const result = await deleteOldMessages();
+            res.status(200).json({ 
+                success: true, 
+                deletedCount: result.deletedCount,
+                message: `Successfully deleted ${result.deletedCount} old messages.`
+            });
+        } catch (error) {
+            console.error("Error deleting old messages:", error);
+            res.status(500).json({ 
+                success: false, 
+                error: error.message || "Error deleting old messages."
+            });
+        }
+    });
