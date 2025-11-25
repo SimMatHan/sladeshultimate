@@ -9,6 +9,7 @@ import { db } from '../firebase';
 const leaderboardProfiles = [
   {
     id: 'sara-holm',
+    username: 'saraholm',
     name: 'Sara Holm',
     initials: 'SH',
     profileEmoji: '🍹',
@@ -34,6 +35,7 @@ const leaderboardProfiles = [
   },
   {
     id: 'mads-larsen',
+    username: 'madslarsen',
     name: 'Mads Larsen',
     initials: 'ML',
     profileEmoji: '🍺',
@@ -59,6 +61,7 @@ const leaderboardProfiles = [
   },
   {
     id: 'camilla-beck',
+    username: 'camillabeck',
     name: 'Camilla Beck',
     initials: 'CB',
     profileEmoji: '🍸',
@@ -84,6 +87,7 @@ const leaderboardProfiles = [
   },
   {
     id: 'jonas-mikkelsen',
+    username: 'jonasmikkelsen',
     name: 'Jonas Mikkelsen',
     initials: 'JM',
     profileEmoji: '🥃',
@@ -109,6 +113,7 @@ const leaderboardProfiles = [
   },
   {
     id: 'aline-thomsen',
+    username: 'alinethomsen',
     name: 'Aline Thomsen',
     initials: 'AT',
     profileEmoji: '🍷',
@@ -134,6 +139,7 @@ const leaderboardProfiles = [
   },
   {
     id: 'frederik-olsen',
+    username: 'frederikolsen',
     name: 'Frederik Olsen',
     initials: 'FO',
     profileEmoji: '☕',
@@ -159,6 +165,7 @@ const leaderboardProfiles = [
   },
   {
     id: 'cecilie-knudsen',
+    username: 'cecilieknudsen',
     name: 'Cecilie Knudsen',
     initials: 'CK',
     profileEmoji: '🍾',
@@ -184,6 +191,7 @@ const leaderboardProfiles = [
   },
   {
     id: 'mathias-hansen',
+    username: 'mathiashansen',
     name: 'Mathias Hansen',
     initials: 'MH',
     profileEmoji: '🍺',
@@ -231,6 +239,22 @@ export default function Leaderboard() {
   const topSectionRef = useRef(null);
   const listContainerRef = useRef(null);
   const [listMaxHeight, setListMaxHeight] = useState(null);
+
+  // Lock the page scroll so only the member list can scroll
+  useEffect(() => {
+    const scrollRegion = document.querySelector('.scroll-region');
+    if (!scrollRegion) return undefined;
+
+    const previousOverflow = scrollRegion.style.overflow;
+    const previousOverscroll = scrollRegion.style.overscrollBehavior;
+    scrollRegion.style.overflow = 'hidden';
+    scrollRegion.style.overscrollBehavior = 'contain';
+
+    return () => {
+      scrollRegion.style.overflow = previousOverflow || '';
+      scrollRegion.style.overscrollBehavior = previousOverscroll || '';
+    };
+  }, []);
 
   // Fetch leaderboard data from Firestore when not using mock data
   useEffect(() => {
@@ -475,6 +499,7 @@ function SortToggle({ options, active, onChange }) {
 
 function ProfileCard({ profile, rank, onSelect, isActive, sortMode }) {
   const rankBadge = `#${rank}`;
+  const displayName = profile.username || profile.name || 'Ukendt';
   
   // Determine which value to display based on sort mode
   const displayValue = sortMode === 'all-time-total' 
@@ -513,7 +538,7 @@ function ProfileCard({ profile, rank, onSelect, isActive, sortMode }) {
           initials={profile.initials}
         />
 
-        <span className="min-w-0 truncate text-sm font-semibold" style={{ color: 'var(--ink)' }}>{profile.name}</span>
+        <span className="min-w-0 truncate text-sm font-semibold" style={{ color: 'var(--ink)' }}>{displayName}</span>
 
         <div className="text-right leading-tight">
           <span className="block text-base font-semibold tabular-nums" style={{ color: 'var(--ink)' }}>{valueFormatted}</span>
@@ -550,6 +575,7 @@ function ProfileDetailSheet({ profile, sortMode, onClose }) {
   const [isVisible, setIsVisible] = useState(false);
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const displayName = profile.username || profile.name || 'Ukendt';
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => setIsVisible(true));
@@ -766,7 +792,7 @@ function ProfileDetailSheet({ profile, sortMode, onClose }) {
             }}
           >
             <div>
-              <h2 className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>{profile.name}</h2>
+              <h2 className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>{displayName}</h2>
               <p className="text-sm" style={{ color: 'var(--muted)' }}>
                 {isCurrentRun ? (
                   <>

@@ -7,27 +7,49 @@ import { UserDataProvider } from './contexts/UserDataContext'
 import App from './App.jsx'
 import './index.css'
 
-// Lock screen orientation to portrait mode
-if (window.screen && window.screen.orientation && window.screen.orientation.lock) {
-  window.screen.orientation.lock('portrait').catch(() => {
-    // Orientation lock not supported or failed, CSS will handle it
-  })
-}
+/**
+ * Try to lock orientation via Screen Orientation API when available.
+ * Always fall back to a CSS-based blocker so landscape mode never exposes the UI.
+ */
+const orientationBlockClass = 'orientation-lock--landscape'
 
-// Prevent orientation change on mobile devices
-const handleOrientationChange = () => {
-  if (window.orientation !== undefined) {
-    // If device is in landscape, show message or rotate back
-    if (Math.abs(window.orientation) === 90) {
-      // Device is in landscape mode
-      // The CSS will handle the visual rotation
-    }
+const updateLandscapeFallbackClass = () => {
+  if (typeof document === 'undefined') return
+  const html = document.documentElement
+  const isLandscape = window.matchMedia?.('(orientation: landscape)')?.matches
+
+  if (isLandscape) {
+    html.classList.add(orientationBlockClass)
+  } else {
+    html.classList.remove(orientationBlockClass)
   }
 }
 
-// Listen for orientation changes
-window.addEventListener('orientationchange', handleOrientationChange)
-window.addEventListener('resize', handleOrientationChange)
+const lockOrientationToPortrait = async () => {
+  try {
+    if (window.screen?.orientation?.lock) {
+      await window.screen.orientation.lock('portrait')
+    }
+  } catch {
+    // ignored – we fall back to CSS overlay
+  } finally {
+    updateLandscapeFallbackClass()
+  }
+}
+
+const bootstrapOrientationLock = () => {
+  lockOrientationToPortrait()
+  updateLandscapeFallbackClass()
+
+  ;['orientationchange', 'resize'].forEach((eventName) => {
+    window.addEventListener(eventName, updateLandscapeFallbackClass, { passive: true })
+  })
+}
+
+if (typeof window !== 'undefined' && !window.__slaOrientationLockInitialized) {
+  window.__slaOrientationLockInitialized = true
+  bootstrapOrientationLock()
+}
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

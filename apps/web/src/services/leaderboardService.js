@@ -28,27 +28,21 @@ export async function fetchLeaderboardProfiles(channelId = null) {
   if (cached && (now - cached.timestamp) < CACHE_TTL_MS) {
     return cached.data
   }
+
+  if (!channelId) {
+    cache.set(cacheKey, { data: [], timestamp: now })
+    return []
+  }
   try {
     const usersRef = collection(db, 'users')
     
-    // Build query - order by totalDrinks descending
-    // If channelId is provided, filter by activeChannelId
-    let q
-    if (channelId) {
-      q = query(
-        usersRef,
-        where('activeChannelId', '==', channelId),
-        orderBy('totalDrinks', 'desc'),
-        limit(50) // Limit to top 50 users
-      )
-    } else {
-      // Default channel: show all users
-      q = query(
-        usersRef,
-        orderBy('totalDrinks', 'desc'),
-        limit(50) // Limit to top 50 users
-      )
-    }
+    // Build query - order by totalDrinks descending and filter by channel membership
+    const q = query(
+      usersRef,
+      where('joinedChannelIds', 'array-contains', channelId),
+      orderBy('totalDrinks', 'desc'),
+      limit(50) // Limit to top 50 users
+    )
     
     const querySnapshot = await getDocs(q)
     
@@ -113,6 +107,7 @@ export async function fetchLeaderboardProfiles(channelId = null) {
       
       profiles.push({
         id: docSnap.id,
+        username: userData.username || userData.fullName || userData.displayName || 'Ukendt',
         name: userData.fullName || userData.displayName || 'Ukendt',
         initials: userData.initials || '??',
         profileEmoji: userData.profileEmoji || '🍹',

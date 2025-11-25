@@ -19,6 +19,7 @@ import ManageProfile from './pages/ManageProfile'
 import AdminPortal from './pages/AdminPortal'
 import { isAdminUser } from './config/admin'
 import useDisplayMode from './hooks/useDisplayMode'
+import useStandaloneOverscrollBlock from './hooks/useStandaloneOverscrollBlock'
 
 /** Firebase Auth guards - check if user is authenticated */
 function useAuthGuard() {
@@ -120,6 +121,7 @@ function RedirectToAuth({ mode = 'signin' }) {
 
 export default function RoutesView() {
   const { isStandalone, canPromptInstall, handleInstallClick, isIos } = useDisplayMode()
+  useStandaloneOverscrollBlock(isStandalone)
 
   if (!isStandalone) {
     return (
