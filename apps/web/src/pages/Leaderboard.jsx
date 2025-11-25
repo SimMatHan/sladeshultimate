@@ -575,7 +575,8 @@ function ProfileDetailSheet({ profile, sortMode, onClose }) {
   const [isVisible, setIsVisible] = useState(false);
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const displayName = profile.username || profile.name || 'Ukendt';
+  const overlayFullName = profile.name || profile.username || 'Ukendt';
+  const overlayUsername = profile.username;
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => setIsVisible(true));
@@ -792,7 +793,14 @@ function ProfileDetailSheet({ profile, sortMode, onClose }) {
             }}
           >
             <div>
-              <h2 className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>{displayName}</h2>
+              <h2 className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>
+                {overlayFullName}
+                {profile.name && overlayUsername ? (
+                  <span className="ml-2 text-sm font-medium" style={{ color: 'var(--muted)' }}>
+                    ({overlayUsername})
+                  </span>
+                ) : null}
+              </h2>
               <p className="text-sm" style={{ color: 'var(--muted)' }}>
                 {isCurrentRun ? (
                   <>

@@ -76,16 +76,25 @@ function MapResizeHandler() {
 // Component to center map on user location when it changes
 function MapCenterHandler({ center, skipAutoCenter }) {
   const map = useMap()
+  const lastCenteredRef = useRef(null)
   
   useEffect(() => {
-    if (center && !skipAutoCenter) {
-      // Only center if the location has changed significantly (more than ~50m)
-      const currentCenter = map.getCenter()
-      const distance = map.distance(currentCenter, center)
-      if (distance > 50) {
-        map.setView(center, map.getZoom(), { animate: true, duration: 0.5 })
-      }
+    if (!center || skipAutoCenter) return
+
+    const targetLatLng = L.latLng(center[0], center[1])
+    const lastCentered = lastCenteredRef.current
+    const hasLocationChanged = !lastCentered || map.distance(lastCentered, targetLatLng) > 5
+
+    if (!hasLocationChanged) return
+
+    const currentCenter = map.getCenter()
+    const distanceToTarget = map.distance(currentCenter, targetLatLng)
+
+    if (distanceToTarget > 50) {
+      map.setView(targetLatLng, map.getZoom(), { animate: true, duration: 0.5 })
     }
+
+    lastCenteredRef.current = targetLatLng
   }, [center, map, skipAutoCenter])
   
   return null
