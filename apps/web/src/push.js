@@ -1,3 +1,5 @@
+import { initServiceWorkerUpdates } from './utils/serviceWorkerUpdates';
+
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
 const API_BASE = import.meta.env.VITE_API_BASE;
 
@@ -10,6 +12,13 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
+const getServiceWorkerRegistration = async () => {
+  const registration = await initServiceWorkerUpdates();
+  if (registration) return registration;
+  if (!('serviceWorker' in navigator)) return null;
+  return navigator.serviceWorker.ready.catch(() => null);
+};
+
 export async function enablePushAndSendTest() {
   if (!('serviceWorker' in navigator)) {
     alert('Service workers ikke understøttet i denne browser.');
@@ -20,9 +29,12 @@ export async function enablePushAndSendTest() {
     return;
   }
 
-  // 1) Registrér SW
-  const reg = await navigator.serviceWorker.register('/sw.js');
-  await navigator.serviceWorker.ready;
+  // 1) Sørg for at SW er klar
+  const reg = await getServiceWorkerRegistration();
+  if (!reg) {
+    alert('Service worker kunne ikke initialiseres.');
+    return;
+  }
 
   // 2) Permission
   const permission = await Notification.requestPermission();

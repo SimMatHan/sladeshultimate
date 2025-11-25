@@ -6,6 +6,7 @@ import { ThemeProvider } from './contexts/ThemeContext'
 import { UserDataProvider } from './contexts/UserDataContext'
 import App from './App.jsx'
 import './index.css'
+import { initServiceWorkerUpdates } from './utils/serviceWorkerUpdates'
 
 /**
  * Try to lock orientation via Screen Orientation API when available.
@@ -49,6 +50,10 @@ const bootstrapOrientationLock = () => {
 if (typeof window !== 'undefined' && !window.__slaOrientationLockInitialized) {
   window.__slaOrientationLockInitialized = true
   bootstrapOrientationLock()
+}
+
+if (typeof window !== 'undefined') {
+  initServiceWorkerUpdates()
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(
