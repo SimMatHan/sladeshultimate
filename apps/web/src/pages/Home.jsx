@@ -370,7 +370,7 @@ export default function Home() {
                   ? "Fedt! Du er checket ind."
                   : "Tryk for at checke ind, når du ankommer."}
               </p>
-              {expiresAt && (
+              {checkedIn && expiresAt && (
                 <Countdown
                   target={expiresAt}
                   onExpire={() => {

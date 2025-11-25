@@ -6,7 +6,7 @@ admin.initializeApp();
 const db = admin.firestore();
 
 /**
- * Resets the checkInStatus field for all users to false.
+ * Resets the checkInStatus field for all users to false and clears currentLocation.
  * This logic is shared between the scheduled function and the manual trigger.
  */
 async function resetAllUsersCheckInStatus() {
@@ -21,7 +21,10 @@ async function resetAllUsersCheckInStatus() {
     const bulkWriter = db.bulkWriter();
 
     snapshot.docs.forEach((doc) => {
-        bulkWriter.update(doc.ref, { checkInStatus: false });
+        bulkWriter.update(doc.ref, {
+            checkInStatus: false,
+            currentLocation: null,
+        });
     });
 
     await bulkWriter.close();
