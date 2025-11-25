@@ -402,21 +402,21 @@ export async function joinChannelByCode(userId, joinCode) {
 }
 
 /**
- * Fetch checked-in members for a channel.
- * Default channel returns all checked-in users; otherwise filter by membership.
- * @param {string | null} channelId
- * @param {boolean} isDefaultChannel
+ * Fetch checked-in members for a channel (filters by joinedChannelIds)
+ * @param {string} channelId
  * @returns {Promise<Array>} Array of checked-in user summaries
  */
-export async function getCheckedInChannelMembers(channelId, isDefaultChannel = false) {
-  const usersRef = collection(db, 'users')
-  const constraints = [where('checkInStatus', '==', true)]
-
-  if (!isDefaultChannel && channelId) {
-    constraints.push(where('joinedChannelIds', 'array-contains', channelId))
+export async function getCheckedInChannelMembers(channelId) {
+  if (!channelId) {
+    return []
   }
 
-  const q = query(usersRef, ...constraints)
+  const usersRef = collection(db, 'users')
+  const q = query(
+    usersRef,
+    where('checkInStatus', '==', true),
+    where('joinedChannelIds', 'array-contains', channelId)
+  )
   const snapshot = await getDocs(q)
 
   return snapshot.docs.map((docSnap) => {

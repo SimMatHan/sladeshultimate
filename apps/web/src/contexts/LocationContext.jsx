@@ -1,8 +1,9 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { USE_MOCK_DATA } from '../config/env'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useChannel } from '../hooks/useChannel'
+import { resolveMockChannelKey, isMemberOfMockChannel, MOCK_CHANNEL_KEYS } from '../utils/mockChannels'
 
 const LocationContext = createContext(null)
 
@@ -55,6 +56,7 @@ const generateMockUsers = () => {
       ],
       totalDrinks: 148,
       currentRunDrinkCount: 12,
+      mockChannels: [MOCK_CHANNEL_KEYS.OPEN],
     },
     {
       id: 'mads-larsen',
@@ -76,6 +78,7 @@ const generateMockUsers = () => {
       ],
       totalDrinks: 131,
       currentRunDrinkCount: 8,
+      mockChannels: [MOCK_CHANNEL_KEYS.OPEN],
     },
     {
       id: 'camilla-beck',
@@ -97,6 +100,7 @@ const generateMockUsers = () => {
       ],
       totalDrinks: 118,
       currentRunDrinkCount: 15,
+      mockChannels: [MOCK_CHANNEL_KEYS.BALLADE],
     },
     {
       id: 'jonas-mikkelsen',
@@ -118,15 +122,26 @@ const generateMockUsers = () => {
       ],
       totalDrinks: 104,
       currentRunDrinkCount: 5,
+      mockChannels: [MOCK_CHANNEL_KEYS.BALLADE],
     },
   ]
 }
 
 export function LocationProvider({ children }) {
   const { selectedChannel } = useChannel()
+  const activeChannelId = selectedChannel?.id || null
+  const mockUsersRef = useRef(USE_MOCK_DATA ? generateMockUsers() : null)
   const [userLocation, setUserLocation] = useState(null)
   const [locationHistory, setLocationHistory] = useState([])
-  const [otherUsers, setOtherUsers] = useState(() => USE_MOCK_DATA ? generateMockUsers() : [])
+  const [otherUsers, setOtherUsers] = useState(() => {
+    if (!USE_MOCK_DATA) {
+      return []
+    }
+    const base = mockUsersRef.current || []
+    return base.filter((user) =>
+      isMemberOfMockChannel(user.mockChannels, MOCK_CHANNEL_KEYS.OPEN)
+    )
+  })
   const [locationError, setLocationError] = useState(null)
 
   // Initialize location based on environment
@@ -187,31 +202,33 @@ export function LocationProvider({ children }) {
   useEffect(() => {
     if (USE_MOCK_DATA) return
 
+    if (!activeChannelId) {
+      setOtherUsers([])
+      return
+    }
+
+    let isMounted = true
+
     const fetchOtherUsers = async () => {
       try {
         const usersRef = collection(db, 'users')
-        
-        // Build query with channel filter if channel is selected and not default
-        const channelId = selectedChannel && !selectedChannel.isDefault ? selectedChannel.id : null
-        let q = query(usersRef)
-        
-        // If channelId is provided, filter by activeChannelId
-        if (channelId) {
-          q = query(usersRef, where('activeChannelId', '==', channelId))
-        }
-        
+        const q = query(
+          usersRef,
+          where('checkInStatus', '==', true),
+          where('joinedChannelIds', 'array-contains', activeChannelId)
+        )
+
         const querySnapshot = await getDocs(q)
         const users = []
-        
+
         querySnapshot.forEach((docSnap) => {
           const userData = docSnap.data()
-          if (!userData.checkInStatus) {
-            return
-          }
           // Filter for users with valid currentLocation
-          if (userData.currentLocation && 
-              userData.currentLocation.lat && 
-              userData.currentLocation.lng) {
+          if (
+            userData.currentLocation &&
+            userData.currentLocation.lat &&
+            userData.currentLocation.lng
+          ) {
             users.push({
               id: docSnap.id,
               name: userData.fullName || userData.displayName || 'Ukendt',
@@ -225,26 +242,40 @@ export function LocationProvider({ children }) {
                 timestamp: userData.currentLocation.timestamp?.toMillis() || Date.now(),
                 venue: userData.currentLocation.venue || userData.lastCheckInVenue || 'Ukendt',
               },
-              recentActivities: [], // Would need to fetch from subcollections
+              recentActivities: [],
               totalDrinks: userData.totalDrinks || 0,
               currentRunDrinkCount: userData.currentRunDrinkCount || 0,
             })
           }
         })
-        
-        setOtherUsers(users)
+
+        if (isMounted) {
+          setOtherUsers(users)
+        }
       } catch (error) {
         console.error('Error fetching other users:', error)
-        // Keep existing users or empty array on error
       }
     }
 
+    setOtherUsers([])
     fetchOtherUsers()
-    
-    // Set up periodic refresh (every 30 seconds)
+
     const interval = setInterval(fetchOtherUsers, 30000)
-    return () => clearInterval(interval)
-  }, [selectedChannel])
+    return () => {
+      isMounted = false
+      clearInterval(interval)
+    }
+  }, [activeChannelId])
+
+  useEffect(() => {
+    if (!USE_MOCK_DATA) return
+    const channelKey = resolveMockChannelKey(selectedChannel)
+    const baseUsers = mockUsersRef.current || []
+    const filteredUsers = baseUsers.filter((user) =>
+      isMemberOfMockChannel(user.mockChannels, channelKey)
+    )
+    setOtherUsers(filteredUsers)
+  }, [selectedChannel?.name, selectedChannel?.isDefault])
 
   // Function to update location (called when user interacts)
   // This is called when:

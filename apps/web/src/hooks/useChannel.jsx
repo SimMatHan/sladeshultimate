@@ -11,6 +11,7 @@ export function useChannel() {
   const [channels, setChannels] = useState([])
   const [activeChannelId, setActiveChannelId] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [switching, setSwitching] = useState(false)
 
   const refreshChannels = useCallback(async () => {
     if (!currentUser) {
@@ -62,13 +63,32 @@ export function useChannel() {
     }
   }, [channels, currentUser, refreshChannels])
 
+  const switchChannel = useCallback(async (channelId) => {
+    if (!channelId) return
+    if (!currentUser) return
+    if (channelId === activeChannelId) return
+
+    setSwitching(true)
+    try {
+      await setActiveChannel(currentUser.uid, channelId)
+      await refreshChannels()
+    } catch (error) {
+      console.error('Failed to switch channel:', error)
+      await refreshChannels()
+    } finally {
+      setSwitching(false)
+    }
+  }, [activeChannelId, currentUser, refreshChannels])
+
   return {
     selectedChannel,
     activeChannelId,
     setSelectedChannel: setSelectedChannelId,
     channels,
     loading,
-    refreshChannels
+    refreshChannels,
+    isChannelSwitching: switching,
+    switchChannel
   }
 }
 

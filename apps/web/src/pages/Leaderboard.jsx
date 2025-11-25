@@ -5,6 +5,7 @@ import { useChannel } from '../hooks/useChannel';
 import { USE_MOCK_DATA } from '../config/env';
 import { fetchLeaderboardProfiles, fetchUserRecentDrinks, clearLeaderboardCache } from '../services/leaderboardService';
 import { db } from '../firebase';
+import { resolveMockChannelKey, isMemberOfMockChannel, MOCK_CHANNEL_KEYS } from '../utils/mockChannels';
 
 const leaderboardProfiles = [
   {
@@ -32,6 +33,7 @@ const leaderboardProfiles = [
       { id: 'sara-recent-2', label: 'Passion spritz', timestamp: 'I går • 23:02' },
       { id: 'sara-recent-3', label: 'Cold IPA', timestamp: 'I går • 21:38' },
     ],
+    mockChannels: [MOCK_CHANNEL_KEYS.OPEN],
   },
   {
     id: 'mads-larsen',
@@ -58,6 +60,7 @@ const leaderboardProfiles = [
       { id: 'mads-recent-2', label: 'Mosaik IPA', timestamp: 'I går • 22:10' },
       { id: 'mads-recent-3', label: 'Sladesh shot', timestamp: 'I går • 21:58' },
     ],
+    mockChannels: [MOCK_CHANNEL_KEYS.OPEN],
   },
   {
     id: 'camilla-beck',
@@ -84,6 +87,7 @@ const leaderboardProfiles = [
       { id: 'camilla-recent-2', label: 'Sladesh shot', timestamp: 'I går • 23:40' },
       { id: 'camilla-recent-3', label: 'Mango seltzer', timestamp: 'I går • 21:12' },
     ],
+    mockChannels: [MOCK_CHANNEL_KEYS.BALLADE],
   },
   {
     id: 'jonas-mikkelsen',
@@ -110,6 +114,7 @@ const leaderboardProfiles = [
       { id: 'jonas-recent-2', label: 'Classic pilsner', timestamp: 'I går • 22:47' },
       { id: 'jonas-recent-3', label: 'Cucumber cooler', timestamp: 'I går • 17:30' },
     ],
+    mockChannels: [MOCK_CHANNEL_KEYS.BALLADE],
   },
   {
     id: 'aline-thomsen',
@@ -136,6 +141,7 @@ const leaderboardProfiles = [
       { id: 'aline-recent-2', label: 'Rosé', timestamp: 'I går • 20:35' },
       { id: 'aline-recent-3', label: 'Sladesh shot', timestamp: 'I går • 19:55' },
     ],
+    mockChannels: [MOCK_CHANNEL_KEYS.OPEN],
   },
   {
     id: 'frederik-olsen',
@@ -162,6 +168,7 @@ const leaderboardProfiles = [
       { id: 'frederik-recent-2', label: 'Nitro stout', timestamp: 'I går • 21:17' },
       { id: 'frederik-recent-3', label: 'Sladesh shot', timestamp: 'I går • 20:11' },
     ],
+    mockChannels: [MOCK_CHANNEL_KEYS.BALLADE],
   },
   {
     id: 'cecilie-knudsen',
@@ -188,6 +195,7 @@ const leaderboardProfiles = [
       { id: 'cecilie-recent-2', label: 'Celebration bubbles', timestamp: 'I går • 22:41' },
       { id: 'cecilie-recent-3', label: 'Sladesh shot', timestamp: 'I går • 21:03' },
     ],
+    mockChannels: [MOCK_CHANNEL_KEYS.OPEN],
   },
   {
     id: 'mathias-hansen',
@@ -214,6 +222,7 @@ const leaderboardProfiles = [
       { id: 'mathias-recent-2', label: 'Summer lager', timestamp: 'I går • 19:22' },
       { id: 'mathias-recent-3', label: 'Sladesh shot', timestamp: 'I går • 18:49' },
     ],
+    mockChannels: [MOCK_CHANNEL_KEYS.BALLADE],
   },
 ];
 
@@ -231,6 +240,7 @@ const sortComparators = {
 
 export default function Leaderboard() {
   const { selectedChannel } = useChannel();
+  const activeChannelId = selectedChannel?.id || null;
   const [sortMode, setSortMode] = useState('all-time-total');
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [profiles, setProfiles] = useState([]);
@@ -259,31 +269,55 @@ export default function Leaderboard() {
   // Fetch leaderboard data from Firestore when not using mock data
   useEffect(() => {
     if (USE_MOCK_DATA) {
-      setProfiles(leaderboardProfiles.filter((profile) => profile.checkedIn !== false));
+      const channelKey = resolveMockChannelKey(selectedChannel);
+      const filteredProfiles = leaderboardProfiles.filter(
+        (profile) =>
+          profile.checkedIn !== false &&
+          isMemberOfMockChannel(profile.mockChannels, channelKey)
+      );
+      setProfiles(filteredProfiles);
       setLoading(false);
       return;
     }
+
+    if (!activeChannelId) {
+      setProfiles([]);
+      setLoading(true);
+      setError(null);
+      return;
+    }
+
+    let isMounted = true;
 
     const loadProfiles = async () => {
       try {
         setLoading(true);
         setError(null);
-        const channelId = selectedChannel && !selectedChannel.isDefault ? selectedChannel.id : null;
-        // Clear cache when channel changes
-        clearLeaderboardCache(channelId);
-        const fetchedProfiles = await fetchLeaderboardProfiles(channelId);
-        setProfiles(fetchedProfiles);
+        setProfiles([]);
+        clearLeaderboardCache(activeChannelId);
+        const fetchedProfiles = await fetchLeaderboardProfiles(activeChannelId);
+        if (isMounted) {
+          setProfiles(fetchedProfiles);
+        }
       } catch (err) {
         console.error('Error loading leaderboard:', err);
-        setError('Kunne ikke indlæse leaderboard');
-        setProfiles([]);
+        if (isMounted) {
+          setError('Kunne ikke indlæse leaderboard');
+          setProfiles([]);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     loadProfiles();
-  }, [selectedChannel]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeChannelId, selectedChannel?.name, selectedChannel?.isDefault]);
 
   // Fetch recent drinks when a profile is selected (only in production mode)
   useEffect(() => {

@@ -198,7 +198,7 @@ export default function Onboarding() {
             type="button"
             whileTap={{ scale: 0.98 }}
             onClick={handleNext}
-            className="w-full rounded-full bg-[color:var(--brand)] py-3 text-base font-semibold text-white shadow-[0_16px_40px_rgba(255,56,92,0.35)] transition-shadow hover:shadow-[0_20px_48px_rgba(255,56,92,0.45)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)] focus:ring-offset-2 focus:ring-offset-[color:var(--bg)]"
+            className="w-full rounded-full bg-[color:var(--brand)] py-3 text-base font-semibold text-white shadow-[0_16px_40px_rgba(255,56,92,0.35)] transition-shadow hover:shadow-[0_20px_48px_rgba(255,56,92,0.45)] focus-visible:outline-none"
           >
             {primaryLabel}
           </motion.button>

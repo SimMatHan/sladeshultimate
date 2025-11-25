@@ -218,7 +218,15 @@ export default function TopBar({
   const navigate = useNavigate();
   const location = useLocation();
   const [activeOverlay, setActiveOverlay] = useState(null);
-  const { selectedChannel, setSelectedChannel, channels, loading: channelsLoading, refreshChannels } = useChannel();
+  const {
+    selectedChannel,
+    channels,
+    loading: channelsLoading,
+    refreshChannels,
+    switchChannel,
+    isChannelSwitching,
+  } = useChannel();
+  const [displayChannelName, setDisplayChannelName] = useState(selectedChannel?.name ?? "");
   const { userData } = useUserData();
 
   // Use mock data in development, empty arrays in production (unless explicitly provided)
@@ -233,6 +241,14 @@ export default function TopBar({
   useEffect(() => {
     setActiveOverlay(null);
   }, [location.pathname]);
+
+  // Keep showing the previously resolved channel label during switching
+  useEffect(() => {
+    if (channelsLoading) return;
+    if (selectedChannel?.name) {
+      setDisplayChannelName(selectedChannel.name);
+    }
+  }, [channelsLoading, selectedChannel]);
 
   // Handler for overlay toggle
   const handleOverlayToggle = (overlay) => {
@@ -267,6 +283,8 @@ export default function TopBar({
     (() => {
       navigate("/manage-profile");
     });
+
+  const shouldShowChannelButton = Boolean(selectedChannel || displayChannelName);
 
   return (
     <div className={`flex items-center gap-3 h-16 ${className}`}>
@@ -312,17 +330,20 @@ export default function TopBar({
         </button>
       )}
 
-      {selectedChannel && !channelsLoading && (
+      {shouldShowChannelButton && (
         <div className="flex-1 relative">
           <button
             type="button"
             onClick={handleChannelButtonClick}
+            disabled={isChannelSwitching}
             aria-haspopup="dialog"
             aria-expanded={activeOverlay === 'channels'}
             aria-label="Vælg kanal"
             className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
             style={{
-              color: activeOverlay === 'channels' ? 'var(--brand, #FF385C)' : 'var(--ink)'
+              color: activeOverlay === 'channels' ? 'var(--brand, #FF385C)' : 'var(--ink)',
+              opacity: isChannelSwitching ? 0.5 : 1,
+              cursor: isChannelSwitching ? 'not-allowed' : 'pointer',
             }}
             onMouseEnter={(e) => {
               if (activeOverlay !== 'channels') {
@@ -336,7 +357,7 @@ export default function TopBar({
             }}
           >
             <span className="text-xl font-semibold leading-tight">
-              {selectedChannel.name}
+              {selectedChannel?.name ?? displayChannelName}
             </span>
             <svg
               width="16"
@@ -360,9 +381,13 @@ export default function TopBar({
             onClose={() => setActiveOverlay(null)}
             channels={pickerChannels}
             selectedChannel={selectedChannel}
-            onSelectChannel={(channelId) => {
-              setSelectedChannel(channelId);
+            onSelectChannel={async (channelId) => {
               setActiveOverlay(null);
+              try {
+                await switchChannel(channelId);
+              } catch (error) {
+                console.error('Failed to switch channel via picker:', error);
+              }
             }}
           />
         </div>

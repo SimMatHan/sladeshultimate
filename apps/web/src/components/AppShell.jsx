@@ -8,6 +8,7 @@ import { addCheckIn, getUser, updateUserLocation } from '../services/userService
 import { incrementCheckInCount } from '../services/statsService'
 import { useLocation as useGeoLocation } from '../contexts/LocationContext'
 import CheckInContext from '../contexts/CheckInContext'
+import { useChannel } from '../hooks/useChannel'
 
 const CHECK_IN_STORAGE_KEY = 'sladesh:checkedIn'
 const CHECK_IN_GATE_ACTIVATED_KEY = 'sladesh:checkInGateActivated'
@@ -27,6 +28,7 @@ export default function AppShell() {
   const location = useRouteLocation()
   const { currentUser } = useAuth()
   const { updateLocation, userLocation } = useGeoLocation()
+  const { isChannelSwitching, loading: channelsLoading, selectedChannel } = useChannel()
   const [username, setUsername] = useState(null)
   const [checkedIn, setCheckedIn] = useState(() => {
     try {
@@ -49,6 +51,7 @@ export default function AppShell() {
   const checkInGateTimer = useRef(null)
   const pageInfo = PAGE_TITLES[location.pathname] || { title: 'Sladesh', subtitle: null }
   const blockingOverlayVisible = (!checkedIn && showCheckInGate) || showSuccessOverlay
+  const showChannelLoader = isChannelSwitching || (!selectedChannel && channelsLoading)
 
   // Lock scroll when overlays are open
   useScrollLock(showSuccessOverlay)
@@ -287,6 +290,20 @@ export default function AppShell() {
             </h3>
             <p className="mt-2 text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
               Velkommen til spillet. Dine stats og din placering er nu live.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {showChannelLoader && (
+        <div className="pointer-events-auto fixed inset-0 z-[1150] flex items-center justify-center bg-[color:var(--bg,#FFFFFF)]/85 backdrop-blur-sm px-6 text-center transition-opacity">
+          <div className="flex flex-col items-center gap-4 rounded-3xl border border-[var(--line)] bg-[var(--surface)] px-8 py-6 shadow-2xl">
+            <div
+              className="h-12 w-12 rounded-full border-4 border-[var(--line)] border-t-[color:var(--brand,#FF385C)] animate-spin"
+              aria-hidden="true"
+            />
+            <p className="text-sm font-medium" style={{ color: 'var(--ink)' }}>
+              Henter kanaldata...
             </p>
           </div>
         </div>

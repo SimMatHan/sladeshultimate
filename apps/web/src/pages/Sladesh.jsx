@@ -28,6 +28,7 @@ import { USE_MOCK_DATA } from "../config/env";
 import { getUser, getSladeshCooldownState, addSladesh } from "../services/userService";
 import { getCheckedInChannelMembers } from "../services/channelService";
 import { incrementSladeshCount } from "../services/statsService";
+import { resolveMockChannelKey, isMemberOfMockChannel, MOCK_CHANNEL_KEYS } from "../utils/mockChannels";
 
 const MOCK_PARTICIPANTS = [
   {
@@ -40,6 +41,7 @@ const MOCK_PARTICIPANTS = [
     accent: "from-rose-400 to-pink-500",
     radius: 128,
     duration: 28,
+    mockChannels: [MOCK_CHANNEL_KEYS.OPEN],
   },
   {
     id: "malte",
@@ -51,6 +53,7 @@ const MOCK_PARTICIPANTS = [
     accent: "from-amber-400 to-orange-500",
     radius: 122,
     duration: 24,
+    mockChannels: [MOCK_CHANNEL_KEYS.OPEN],
   },
   {
     id: "olivia",
@@ -62,6 +65,7 @@ const MOCK_PARTICIPANTS = [
     accent: "from-violet-400 to-purple-500",
     radius: 116,
     duration: 32,
+    mockChannels: [MOCK_CHANNEL_KEYS.BALLADE],
   },
   {
     id: "noah",
@@ -73,6 +77,7 @@ const MOCK_PARTICIPANTS = [
     accent: "from-emerald-400 to-teal-500",
     radius: 128,
     duration: 30,
+    mockChannels: [MOCK_CHANNEL_KEYS.BALLADE],
   },
   {
     id: "emma",
@@ -84,6 +89,7 @@ const MOCK_PARTICIPANTS = [
     accent: "from-sky-400 to-cyan-500",
     radius: 118,
     duration: 22,
+    mockChannels: [MOCK_CHANNEL_KEYS.OPEN],
   },
   {
     id: "lars",
@@ -95,6 +101,7 @@ const MOCK_PARTICIPANTS = [
     accent: "from-slate-400 to-indigo-500",
     radius: 132,
     duration: 26,
+    mockChannels: [MOCK_CHANNEL_KEYS.BALLADE],
   },
 ];
 
@@ -136,7 +143,6 @@ export default function Sladesh() {
   });
 
   const activeChannelId = selectedChannel?.id || null;
-  const isDefaultChannel = !selectedChannel || selectedChannel?.isDefault;
 
   // Lock scroll when overlay is open
   useScrollLock(!!pendingTarget);
@@ -185,7 +191,11 @@ export default function Sladesh() {
 
   useEffect(() => {
     if (USE_MOCK_DATA) {
-      setMembers(MOCK_PARTICIPANTS);
+      const channelKey = resolveMockChannelKey(selectedChannel);
+      const filteredParticipants = MOCK_PARTICIPANTS.filter((participant) =>
+        isMemberOfMockChannel(participant.mockChannels, channelKey)
+      );
+      setMembers(filteredParticipants);
       setMembersLoading(false);
       setMembersError(null);
       return;
@@ -196,12 +206,19 @@ export default function Sladesh() {
       setMembersError("Log ind for at se kanalens medlemmer.");
       return;
     }
+    if (!activeChannelId) {
+      setMembers([]);
+      setMembersLoading(true);
+      setMembersError(null);
+      return;
+    }
 
     let cancelled = false;
     setMembersLoading(true);
     setMembersError(null);
+    setMembers([]);
 
-    getCheckedInChannelMembers(activeChannelId, isDefaultChannel)
+    getCheckedInChannelMembers(activeChannelId)
       .then((list) => {
         if (cancelled) return;
         const filtered = list.filter((member) => member.id !== currentUser.uid);
@@ -223,7 +240,7 @@ export default function Sladesh() {
     return () => {
       cancelled = true;
     };
-  }, [activeChannelId, isDefaultChannel, currentUser]);
+  }, [activeChannelId, currentUser, selectedChannel?.name, selectedChannel?.isDefault]);
 
   const eligibleTargets = useMemo(() => {
     if (USE_MOCK_DATA) {
