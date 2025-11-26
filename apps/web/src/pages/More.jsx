@@ -139,6 +139,13 @@ export default function More() {
             Konto
           </div>
           <ActionCard
+            icon="🔔"
+            title="Notifikationstest"
+            description="Se status, prøv igen og send en test til dig selv."
+            to="/notifications"
+            actionLabel="Notifikationer"
+          />
+          <ActionCard
             icon="🚪"
             title="Log ud af Sladesh"
             onClick={handleSignOut}

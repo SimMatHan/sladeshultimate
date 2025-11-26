@@ -1,71 +1,110 @@
-const webpush = require('web-push');
-const fs = require('fs');
-const path = require('path');
+const webpush = require('web-push')
+const { buildNotificationPayload } = require('../lib/notificationTemplates')
 
-// Tillad localhost og dine hosting-domæner
+// Allow localhost and hosted origins. Keep in sync with frontend fetches.
 const ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'https://sladeshultimate-1.web.app',
   'https://sladeshultimate-1.firebaseapp.com'
-];
+]
+
+const REQUIRED_ENVS = ['VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY']
+let vapidConfigured = false
 
 function setCors(req, res) {
-  const origin = req.headers.origin || '';
-  const allow = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
-  res.setHeader('Access-Control-Allow-Origin', allow);
-  res.setHeader('Vary', 'Origin');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  const origin = req.headers.origin || ''
+  const allow = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
+  res.setHeader('Access-Control-Allow-Origin', allow)
+  res.setHeader('Vary', 'Origin')
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 }
 
-// (resten af filen uændret)
-webpush.setVapidDetails(
-  'mailto:you@example.com',
-  process.env.VAPID_PUBLIC_KEY,
-  process.env.VAPID_PRIVATE_KEY
-);
+function ensureEnv() {
+  const missing = REQUIRED_ENVS.filter((key) => !process.env[key])
+  if (missing.length) {
+    throw new Error(`Missing Web Push env vars: ${missing.join(', ')}`)
+  }
+  if (!vapidConfigured) {
+    webpush.setVapidDetails(
+      'mailto:notifications@sladeshultimate.app',
+      process.env.VAPID_PUBLIC_KEY,
+      process.env.VAPID_PRIVATE_KEY
+    )
+    vapidConfigured = true
+  }
+}
+
+async function readBody(req) {
+  const chunks = []
+  for await (const chunk of req) chunks.push(chunk)
+  const raw = Buffer.concat(chunks).toString('utf8')
+  if (!raw) return {}
+  try {
+    return JSON.parse(raw)
+  } catch (error) {
+    throw new Error('Invalid JSON body')
+  }
+}
 
 module.exports = async (req, res) => {
-  setCors(req, res); // <-- VIGTIGT: giv req med her
+  setCors(req, res)
 
   if (req.method === 'OPTIONS') {
-    res.status(204).end();
-    return;
+    res.status(204).end()
+    return
   }
   if (req.method !== 'POST') {
-    res.status(405).send('Method Not Allowed');
-    return;
+    res.status(405).json({ ok: false, error: 'Method Not Allowed' })
+    return
   }
 
   try {
-    const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
-    const raw = Buffer.concat(chunks).toString('utf8');
-    const body = raw ? JSON.parse(raw) : {};
-
-    let subscription = body.subscription;
-    const message = body.message || 'Test besked';
-    const url = body.url || '/';
-
-    if (!subscription) {
-      const p = path.join(process.cwd(), 'subscriptions', 'dummy.json');
-      if (fs.existsSync(p)) {
-        subscription = JSON.parse(fs.readFileSync(p, 'utf8'));
-      } else {
-        return res.status(400).send('No subscription provided and no dummy.json found.');
-      }
-    }
-
-    const payload = JSON.stringify({ title: 'SladeshPro', body: message, url });
-    await webpush.sendNotification(subscription, payload);
-
-    res.status(200).json({ ok: true });
-  } catch (err) {
-    console.error(err);
-    if (err.statusCode) {
-      res.status(err.statusCode).send(err.body || String(err));
-    } else {
-      res.status(500).send('Internal Server Error');
-    }
+    ensureEnv()
+  } catch (error) {
+    console.error('[sendPush] Missing env vars', error)
+    return res.status(500).json({ ok: false, error: error.message })
   }
-};
+
+  try {
+    const body = await readBody(req)
+    const subscription = body.subscription
+
+    if (!subscription || !subscription.endpoint) {
+      return res.status(400).json({ ok: false, error: 'subscription missing or invalid' })
+    }
+
+    const notificationPayload = buildNotificationPayload(body.type || 'test', {
+      title: body.title,
+      body: body.body || body.message,
+      tag: body.tag,
+      data: body.data,
+      channelId: body.channelId,
+      channelName: body.channelName,
+      senderName: body.senderName,
+      preview: body.preview,
+      messageId: body.messageId
+    })
+
+    try {
+      await webpush.sendNotification(subscription, JSON.stringify(notificationPayload))
+    } catch (error) {
+      console.error('[sendPush] web-push error', error)
+      if (error.statusCode) {
+        return res.status(error.statusCode).json({
+          ok: false,
+          error: error.body || error.message
+        })
+      }
+      throw error
+    }
+
+    res.status(200).json({
+      ok: true,
+      payload: notificationPayload
+    })
+  } catch (error) {
+    console.error('[sendPush] Handler error', error)
+    res.status(500).json({ ok: false, error: error.message || 'Internal Server Error' })
+  }
+}

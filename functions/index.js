@@ -1,9 +1,11 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+const { buildNotificationPayload, sendWebPush, isUnrecoverablePushError } = require("./notifications");
 
 admin.initializeApp();
 
 const db = admin.firestore();
+const FieldValue = admin.firestore.FieldValue;
 
 /**
  * Resets the checkInStatus field for all users to false and clears currentLocation.
@@ -150,4 +152,120 @@ exports.manualDeleteOldMessages = functions
                 error: error.message || "Error deleting old messages."
             });
         }
+    });
+
+async function loadChannel(channelId) {
+    if (!channelId) return null;
+    const snap = await db.collection("channels").doc(channelId).get();
+    return snap.exists ? { id: snap.id, ...snap.data() } : null;
+}
+
+async function loadRecipients(channelId, senderId) {
+    const snapshot = await db
+        .collection("users")
+        .where("joinedChannelIds", "array-contains", channelId)
+        .get();
+    return snapshot.docs.filter((docSnap) => docSnap.id !== senderId);
+}
+
+async function loadSubscriptionsForUser(userDoc) {
+    const subsSnap = await userDoc.ref.collection("pushSubscriptions").get();
+    return subsSnap.docs;
+}
+
+async function notifySubscriptions(subDocs, payload) {
+    const results = await Promise.allSettled(
+        subDocs.map(async (docSnap) => {
+            const subscription = {
+                endpoint: docSnap.get("endpoint"),
+                keys: docSnap.get("keys")
+            };
+            if (!subscription.endpoint || !subscription.keys) {
+                await docSnap.ref.delete().catch(() => {});
+                return { status: "skipped" };
+            }
+            try {
+                await sendWebPush(subscription, payload);
+                await docSnap.ref.update({ lastUsedAt: FieldValue.serverTimestamp() }).catch(() => {});
+                return { status: "sent" };
+            } catch (error) {
+                console.error("[push] send error", { subscriptionId: docSnap.id, error: error.message });
+                if (isUnrecoverablePushError(error)) {
+                    await docSnap.ref.delete().catch(() => {});
+                }
+                return { status: "failed", error };
+            }
+        })
+    );
+
+    return results.reduce((acc, result) => {
+        if (result.status === "fulfilled") {
+            if (result.value?.status === "sent") acc.sent += 1;
+            if (result.value?.status === "failed") acc.failed += 1;
+            if (result.value?.status === "skipped") acc.skipped += 1;
+        } else {
+            acc.failed += 1;
+        }
+        return acc;
+    }, { sent: 0, failed: 0, skipped: 0 });
+}
+
+exports.onChannelMessageCreated = functions
+    .region("europe-west1")
+    .firestore.document("channels/{channelId}/messages/{messageId}")
+    .onCreate(async (snap, context) => {
+        const message = snap.data();
+        const channelId = context.params.channelId;
+
+        if (!message || !channelId) {
+            console.warn("[push] Missing message data or channelId");
+            return null;
+        }
+
+        const channel = await loadChannel(channelId);
+        const channelName = channel?.name || "din kanal";
+        const senderId = message.userId;
+        const senderName = message.userName || "En ven";
+        const preview = (message.content || "").slice(0, 120);
+
+        const recipients = await loadRecipients(channelId, senderId);
+        if (!recipients.length) {
+            console.log("[push] No recipients for message", { channelId, messageId: context.params.messageId });
+            return null;
+        }
+
+        const payload = buildNotificationPayload("new_message", {
+            channelId,
+            channelName,
+            senderName,
+            preview,
+            messageId: context.params.messageId,
+            data: {
+                url: `/home?channel=${channelId}`
+            }
+        });
+
+        let totals = { sent: 0, failed: 0, skipped: 0 };
+
+        for (const recipient of recipients) {
+            const subDocs = await loadSubscriptionsForUser(recipient);
+            if (!subDocs.length) {
+                continue;
+            }
+            const result = await notifySubscriptions(subDocs, payload);
+            totals.sent += result.sent;
+            totals.failed += result.failed;
+            totals.skipped += result.skipped;
+        }
+
+        console.log("[push] new_message completed", {
+            channelId,
+            messageId: context.params.messageId,
+            recipients: recipients.length,
+            sent: totals.sent,
+            failed: totals.failed,
+            skipped: totals.skipped
+        });
+
+        return null;
     });

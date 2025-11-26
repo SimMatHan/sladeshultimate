@@ -17,6 +17,7 @@ import More from './pages/More'
 import ManageChannels from './pages/ManageChannels'
 import ManageProfile from './pages/ManageProfile'
 import AdminPortal from './pages/AdminPortal'
+import NotificationsDebug from './pages/NotificationsDebug'
 import { isAdminUser } from './config/admin'
 import useDisplayMode from './hooks/useDisplayMode'
 import useStandaloneOverscrollBlock from './hooks/useStandaloneOverscrollBlock'
@@ -170,6 +171,7 @@ export default function RoutesView() {
         <Route path="more" element={<More />} />
         <Route path="manage-channels" element={<ManageChannels />} />
         <Route path="manage-profile" element={<ManageProfile />} />
+        <Route path="notifications" element={<NotificationsDebug />} />
         <Route
           path="admin"
           element={

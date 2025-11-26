@@ -9,6 +9,14 @@ import { incrementCheckInCount } from '../services/statsService'
 import { useLocation as useGeoLocation } from '../contexts/LocationContext'
 import CheckInContext from '../contexts/CheckInContext'
 import { useChannel } from '../hooks/useChannel'
+import {
+  ensurePushSubscription,
+  getNotificationPermission,
+  hasShownPermissionPrompt,
+  isPushSupported,
+  markPermissionPromptShown,
+  requestBrowserPermission
+} from '../push'
 
 const CHECK_IN_STORAGE_KEY = 'sladesh:checkedIn'
 const CHECK_IN_GATE_ACTIVATED_KEY = 'sladesh:checkInGateActivated'
@@ -21,6 +29,7 @@ const PAGE_TITLES = {
   '/more': { title: 'Mere', subtitle: null },
   '/manage-channels': { title: 'Administrer kanaler', subtitle: null },
   '/manage-profile': { title: 'Administrer profil', subtitle: null },
+  '/notifications': { title: 'Notifikationer', subtitle: null },
   '/admin': { title: 'Adminportal', subtitle: null },
 }
 
@@ -28,7 +37,7 @@ export default function AppShell() {
   const location = useRouteLocation()
   const { currentUser } = useAuth()
   const { updateLocation, userLocation } = useGeoLocation()
-  const { isChannelSwitching, loading: channelsLoading, selectedChannel } = useChannel()
+  const { isChannelSwitching, loading: channelsLoading, selectedChannel, switchChannel } = useChannel()
   const [username, setUsername] = useState(null)
   const [checkedIn, setCheckedIn] = useState(() => {
     try {
@@ -50,7 +59,11 @@ export default function AppShell() {
   const successOverlayTimeout = useRef(null)
   const checkInGateTimer = useRef(null)
   const pageInfo = PAGE_TITLES[location.pathname] || { title: 'Sladesh', subtitle: null }
-  const blockingOverlayVisible = (!checkedIn && showCheckInGate) || showSuccessOverlay
+  const [showNotificationPrompt, setShowNotificationPrompt] = useState(false)
+  const [isRequestingNotifications, setIsRequestingNotifications] = useState(false)
+  const [notificationError, setNotificationError] = useState(null)
+  const blockingOverlayVisible =
+    (!checkedIn && showCheckInGate) || showSuccessOverlay || showNotificationPrompt
   const showChannelLoader = isChannelSwitching || (!selectedChannel && channelsLoading)
 
   // Lock scroll when overlays are open
@@ -95,6 +108,36 @@ export default function AppShell() {
       }
     }
   }, [currentUser, checkedIn])
+
+  useEffect(() => {
+    if (!currentUser || !isPushSupported()) {
+      setShowNotificationPrompt(false)
+      return
+    }
+    const permission = getNotificationPermission()
+    if (permission === 'default' && !hasShownPermissionPrompt()) {
+      setShowNotificationPrompt(true)
+      markPermissionPromptShown()
+    } else {
+      setShowNotificationPrompt(false)
+    }
+  }, [currentUser])
+
+  useEffect(() => {
+    if (!currentUser?.uid || !isPushSupported()) return
+    if (getNotificationPermission() !== 'granted') return
+    ensurePushSubscription({ currentUser }).catch((error) => {
+      console.warn('[push] Unable to sync subscription', error)
+    })
+  }, [currentUser])
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const channelFromQuery = params.get('channel')
+    if (!channelFromQuery || !currentUser) return
+    if (selectedChannel?.id === channelFromQuery || isChannelSwitching) return
+    switchChannel(channelFromQuery)
+  }, [location.search, currentUser, selectedChannel, switchChannel, isChannelSwitching])
 
   // Fetch username from Firestore when on home page
   useEffect(() => {
@@ -226,6 +269,32 @@ export default function AppShell() {
     isCheckingIn,
   }
 
+  const handleEnableNotifications = useCallback(async () => {
+    setIsRequestingNotifications(true)
+    setNotificationError(null)
+    try {
+      const permission = await requestBrowserPermission()
+      if (permission === 'granted' && currentUser) {
+        const result = await ensurePushSubscription({ currentUser, forceRefresh: true })
+        if (!result.ok) {
+          throw new Error('Kunne ikke oprette abonnement. Prøv igen fra debug-skærmen.')
+        }
+        setShowNotificationPrompt(false)
+      } else if (permission !== 'granted') {
+        setShowNotificationPrompt(false)
+      }
+    } catch (error) {
+      console.error('[push] Permission flow failed', error)
+      setNotificationError(error.message || 'Ukendt fejl')
+    } finally {
+      setIsRequestingNotifications(false)
+    }
+  }, [currentUser])
+
+  const handleSkipNotifications = useCallback(() => {
+    setShowNotificationPrompt(false)
+  }, [])
+
   return (
     <CheckInContext.Provider value={checkInContextValue}>
       <div
@@ -305,6 +374,46 @@ export default function AppShell() {
             <p className="text-sm font-medium" style={{ color: 'var(--ink)' }}>
               Henter kanaldata...
             </p>
+          </div>
+        </div>
+      )}
+
+      {currentUser && showNotificationPrompt && (
+        <div className="pointer-events-auto fixed inset-0 z-[1200] flex items-center justify-center bg-black/20 backdrop-blur-md px-6 text-center">
+          <div className="w-full max-w-md rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-7 shadow-2xl">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[color:var(--brand,#FF385C)]/15 text-2xl">
+              🔔
+            </div>
+            <h2 className="mt-5 text-xl font-semibold" style={{ color: 'var(--ink)' }}>
+              Aktiver notifikationer
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
+              Vi giver kun lyd når der sker noget i dine kanaler. Du kan altid ændre det senere under
+              “Mere” → “Notifikationer”.
+            </p>
+            {notificationError && (
+              <p className="mt-3 rounded-2xl bg-red-50 px-4 py-2 text-xs font-medium text-red-600">
+                {notificationError}
+              </p>
+            )}
+            <div className="mt-6 flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={handleEnableNotifications}
+                disabled={isRequestingNotifications}
+                className="inline-flex w-full items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold shadow-soft transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:opacity-60"
+                style={{ backgroundColor: 'var(--brand)', color: 'var(--brand-ink)' }}
+              >
+                {isRequestingNotifications ? 'Aktiverer...' : 'Tænd notifikationer'}
+              </button>
+              <button
+                type="button"
+                onClick={handleSkipNotifications}
+                className="inline-flex w-full items-center justify-center rounded-2xl border border-[var(--line)] px-4 py-3 text-sm font-semibold text-[color:var(--ink)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+              >
+                Ikke nu
+              </button>
+            </div>
           </div>
         </div>
       )}
