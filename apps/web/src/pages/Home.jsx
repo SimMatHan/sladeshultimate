@@ -6,7 +6,6 @@ import { useCheckInGate } from "../contexts/CheckInContext";
 import { useUserData } from "../contexts/UserDataContext";
 import { useAuth } from "../hooks/useAuth";
 import { useDrinkVariants } from "../hooks/useDrinkVariants";
-import { useScrollLock } from "../hooks/useScrollLock";
 import { addDrink, removeDrink, getNextResetBoundary, resetCurrentRun } from "../services/userService";
 import { incrementDrinkCount } from "../services/statsService";
 import { CATEGORIES, CATEGORY_THEMES, FALLBACK_THEME } from "../constants/drinks";
@@ -79,12 +78,19 @@ export default function Home() {
 
   // Get values from context with fallbacks
   const userTotalDrinks = userData?.totalDrinks || 0;
-  const currentRunDrinkCount = userData?.currentRunDrinkCount || 0;
   const drinkVariations = userData?.drinkVariations || {};
 
   const [variantCounts, setVariantCounts] = useState(() =>
     createZeroCounts(variantsByCategory)
   );
+  
+  // Calculate currentRunDrinkCount from local variantCounts instead of waiting for context
+  // This prevents reload/buffering when logging drinks
+  const currentRunDrinkCount = useMemo(() => {
+    return Object.values(variantCounts).reduce((total, category) => {
+      return total + Object.values(category).reduce((sum, count) => sum + count, 0);
+    }, 0);
+  }, [variantCounts]);
 
   // Update variantCounts when variantsByCategory changes or when userData is loaded/updated
   useEffect(() => {
@@ -202,14 +208,29 @@ export default function Home() {
   }, [checkedIn, currentUser, globalCheckIn]);
 
   const adjustVariantCount = async (catId, variantName, delta) => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      console.log("[drink-log] adjustVariantCount: No current user, aborting");
+      return;
+    }
+
+    console.log("[drink-log] adjustVariantCount: Starting", { catId, variantName, delta });
 
     // Optimistically update local state
     setVariantCounts((prev) => {
       const category = prev[catId] ?? {};
       const current = category[variantName] ?? 0;
       const next = Math.max(0, current + delta);
-      if (next === current) return prev;
+      if (next === current) {
+        console.log("[drink-log] adjustVariantCount: No change needed, skipping");
+        return prev;
+      }
+
+      console.log("[drink-log] adjustVariantCount: Optimistic update", { 
+        catId, 
+        variantName, 
+        from: current, 
+        to: next 
+      });
 
       return {
         ...prev,
@@ -222,28 +243,39 @@ export default function Home() {
 
     try {
       setIsSaving(true);
+      console.log("[drink-log] adjustVariantCount: Saving to Firestore...");
 
       // Call appropriate service function based on delta
-      // The service function handles Firestore increment, we don't manually update local state
+      // The service function handles Firestore increment
+      // We update local state optimistically, so no need to refresh context
       if (delta > 0) {
         await addDrink(currentUser.uid, catId, variantName);
+        console.log("[drink-log] adjustVariantCount: Drink added successfully");
       } else if (delta < 0) {
         await removeDrink(currentUser.uid, catId, variantName);
+        console.log("[drink-log] adjustVariantCount: Drink removed successfully");
       }
 
-      // Refresh user data from Firestore to get the updated values
-      // This updates the context, which will automatically update our displayed values
-      await refreshUserData();
-
-      // Note: After refreshUserData, the context will update and trigger a re-render
-      // The variant counts will be updated via the useEffect that watches userData
+      // NOTE: We intentionally do NOT call refreshUserData() here
+      // This prevents the loading state from being set, which causes GuardApp
+      // to show a loading screen and remount the entire app
+      // The local state (variantCounts) is already updated optimistically,
+      // and currentRunDrinkCount is calculated from variantCounts
+      // Firestore sync happens in the background, and notifications are
+      // handled server-side by onUserActivityUpdated Firebase function
 
     } catch (error) {
-      console.error("Error updating drink in Firestore:", error);
+      console.error("[drink-log] adjustVariantCount: Error updating drink in Firestore:", error);
       // Revert the optimistic update if save failed
       setVariantCounts((prev) => {
         const category = prev[catId] ?? {};
         const current = category[variantName] ?? 0;
+        console.log("[drink-log] adjustVariantCount: Reverting optimistic update", {
+          catId,
+          variantName,
+          from: current,
+          to: Math.max(0, current - delta)
+        });
         return {
           ...prev,
           [catId]: {
@@ -254,25 +286,41 @@ export default function Home() {
       });
     } finally {
       setIsSaving(false);
+      console.log("[drink-log] adjustVariantCount: Complete");
     }
   };
 
   const handleResetRun = async () => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      console.log("[drink-log] handleResetRun: No current user, aborting");
+      return;
+    }
+    
+    console.log("[drink-log] handleResetRun: Starting reset");
+    
+    // Optimistically reset local state first
+    setVariantCounts(createZeroCounts(variantsByCategory));
+    
     try {
       setIsSaving(true);
       await resetCurrentRun(currentUser.uid);
+      console.log("[drink-log] handleResetRun: Reset successful in Firestore");
 
-      // Refresh user data from context, which will update all displayed values
-      await refreshUserData();
+      // NOTE: We intentionally do NOT call refreshUserData() here
+      // This prevents the loading state from being set, which causes GuardApp
+      // to show a loading screen and remount the entire app
+      // The local state (variantCounts) is already reset optimistically,
+      // and currentRunDrinkCount is calculated from variantCounts
 
-      // Reset variant counts to zero
-      setVariantCounts(createZeroCounts(variantsByCategory));
       setShowResetConfirm(false);
     } catch (error) {
-      console.error("Error resetting run:", error);
+      console.error("[drink-log] handleResetRun: Error resetting run:", error);
+      // On error, refresh from context to get correct state
+      // This is acceptable since it's an error case
+      await refreshUserData();
     } finally {
       setIsSaving(false);
+      console.log("[drink-log] handleResetRun: Complete");
     }
   };
 
@@ -300,10 +348,6 @@ export default function Home() {
   const selectedItem = sliderItems[selIndex] || sliderItems[0];
   const sheetCat = sheetFor ? CATEGORIES.find((c) => c.id === sheetFor) : null;
   const sheetItems = sheetFor ? variantsByCategory[sheetFor] ?? [] : [];
-
-  // Lock scroll when overlays are open
-  useScrollLock(!!sheetFor);
-  useScrollLock(showResetConfirm);
 
   // Update expiresAt when it expires to show the next reset boundary
   useEffect(() => {
@@ -479,17 +523,6 @@ export default function Home() {
                   }`}
                 style={{ height: "75vh" }}
               >
-                <button
-                  type="button"
-                  onClick={closeSheet}
-                  className="absolute right-6 top-6 text-2xl transition-colors"
-                  style={{ color: 'var(--muted)' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--ink)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--muted)')}
-                  aria-label="Luk"
-                >
-                  ×
-                </button>
                 <div className="h-full overflow-hidden pt-6">
                   <div className="px-6">
                     <div className="flex items-center gap-2 text-lg font-semibold" style={{ color: 'var(--ink)' }}>

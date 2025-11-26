@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Card from "../components/Card";
 import Page from "../components/Page";
@@ -40,6 +40,7 @@ export default function ManageProfile() {
     profileGradient: "from-rose-400 to-orange-500",
   });
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState(null);
   const [profileSheetOpen, setProfileSheetOpen] = useState(false);
@@ -47,6 +48,8 @@ export default function ManageProfile() {
     emoji: userData.profileEmoji,
     gradient: userData.profileGradient,
   });
+  const isInitialLoad = useRef(true);
+  const saveTimeoutRef = useRef(null);
 
   // Load user data from Firestore
   useEffect(() => {
@@ -86,11 +89,62 @@ export default function ManageProfile() {
         }));
       } finally {
         setLoading(false);
+        isInitialLoad.current = false;
       }
     };
 
     loadUserData();
   }, [currentUser]);
+
+  // Auto-save with debounce
+  useEffect(() => {
+    // Don't save on initial load
+    if (isInitialLoad.current || !currentUser) {
+      return;
+    }
+
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Set saving state
+    setSaving(true);
+    setSaved(false);
+
+    // Debounce save operation (400ms)
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        await updateUser(currentUser.uid, {
+          username: userData.username.trim(),
+          profileEmoji: userData.profileEmoji,
+          profileGradient: userData.profileGradient,
+        });
+
+        // Also save to localStorage for profile picture (for now)
+        localStorage.setItem("sladesh:profile", JSON.stringify({
+          profileEmoji: userData.profileEmoji,
+          profileGradient: userData.profileGradient,
+        }));
+
+        setSaving(false);
+        setSaved(true);
+        // Hide saved indicator after 2 seconds
+        setTimeout(() => setSaved(false), 2000);
+      } catch (error) {
+        console.error("Error auto-saving profile:", error);
+        setSaving(false);
+        setFeedback("Kunne ikke gemme profilen. Prøv igen.");
+      }
+    }, 400);
+
+    // Cleanup timeout on unmount or dependency change
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [userData.username, userData.profileEmoji, userData.profileGradient, currentUser]);
 
   useEffect(() => {
     if (!feedback) return undefined;
@@ -136,37 +190,7 @@ export default function ManageProfile() {
       profileGradient: tempProfile.gradient,
     }));
     setProfileSheetOpen(false);
-    setFeedback("Profilbillede opdateret!");
-  };
-
-  const handleSave = async () => {
-    if (!currentUser) {
-      setFeedback("Du skal være logget ind for at gemme ændringer.");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      // Save username and profile settings to Firestore
-      await updateUser(currentUser.uid, {
-        username: userData.username.trim(),
-        profileEmoji: userData.profileEmoji,
-        profileGradient: userData.profileGradient,
-      });
-
-      // Also save to localStorage for profile picture (for now)
-      localStorage.setItem("sladesh:profile", JSON.stringify({
-        profileEmoji: userData.profileEmoji,
-        profileGradient: userData.profileGradient,
-      }));
-
-      setFeedback("Profilen er gemt!");
-    } catch (error) {
-      console.error("Error saving profile:", error);
-      setFeedback("Kunne ikke gemme profilen. Prøv igen.");
-    } finally {
-      setSaving(false);
-    }
+    // Auto-save will be triggered by the useEffect
   };
 
   const handleDarkModeToggle = () => {
@@ -346,16 +370,36 @@ export default function ManageProfile() {
           </button>
         </Card>
 
-        <div className="pb-4">
-          <button
-            type="button"
-            onClick={handleSave}
-            className="w-full inline-flex items-center justify-center rounded-full bg-[color:var(--brand,#FF385C)] px-4 py-3 text-sm font-semibold text-[color:var(--brand-ink,#fff)] shadow-[0_12px_24px_rgba(255,56,92,0.2)] transition hover:-translate-y-[1px] hover:shadow-[0_18px_32px_rgba(255,56,92,0.24)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-70"
-            disabled={saving}
-          >
-            {saving ? "Gemmer…" : "Gem ændringer"}
-          </button>
-        </div>
+        {/* Auto-save indicator */}
+        {(saving || saved) && (
+          <div className="flex justify-center pb-2">
+            <div
+              className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium shadow-sm"
+              style={{
+                borderColor: saved ? 'rgb(34, 197, 94)' : 'var(--line)',
+                backgroundColor: saved ? 'rgba(34, 197, 94, 0.1)' : 'var(--surface)',
+                color: saved ? 'rgb(34, 197, 94)' : 'var(--ink)'
+              }}
+            >
+              {saving ? (
+                <>
+                  <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span>Gemmer…</span>
+                </>
+              ) : (
+                <>
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>Gemt</span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {feedback ? (
           <div className="sticky bottom-5 z-10 flex justify-center pt-4">
@@ -471,7 +515,7 @@ export default function ManageProfile() {
               onClick={handleProfileSheetSave}
               className="w-full inline-flex items-center justify-center rounded-full bg-[color:var(--brand,#FF385C)] px-4 py-3 text-sm font-semibold text-[color:var(--brand-ink,#fff)] shadow-[0_12px_24px_rgba(255,56,92,0.2)] transition hover:-translate-y-[1px] hover:shadow-[0_18px_32px_rgba(255,56,92,0.24)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
             >
-              Gem ændringer
+              Gem
             </button>
           </div>
         </div>

@@ -176,35 +176,25 @@ export default function Sheet({
               paddingTop: isTop ? "10px" : "24px",
             }}
           >
-            <div className="flex items-center justify-between">
-              <div>
-                {title && (
-                  <div
-                    id="sheet-title"
-                    className="text-lg font-semibold"
-                    style={{ color: 'var(--ink)' }}
-                  >
-                    {title}
-                  </div>
-                )}
-                {description && (
-                  <p
-                    id="sheet-description"
-                    className="mt-1 text-xs"
-                    style={{ color: 'var(--muted)' }}
-                  >
-                    {description}
-                  </p>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={onClose}
-                className="text-xl text-[color:var(--muted)] transition-colors hover:text-[color:var(--ink)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2"
-                aria-label="Luk panel"
-              >
-                ×
-              </button>
+            <div>
+              {title && (
+                <div
+                  id="sheet-title"
+                  className="text-lg font-semibold"
+                  style={{ color: 'var(--ink)' }}
+                >
+                  {title}
+                </div>
+              )}
+              {description && (
+                <p
+                  id="sheet-description"
+                  className="mt-1 text-xs"
+                  style={{ color: 'var(--muted)' }}
+                >
+                  {description}
+                </p>
+              )}
             </div>
           </div>
         )}

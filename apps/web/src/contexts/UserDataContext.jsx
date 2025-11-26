@@ -10,7 +10,7 @@ export function UserDataProvider({ children }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const fetchUserData = useCallback(async () => {
+  const fetchUserData = useCallback(async (silent = false) => {
     if (!currentUser) {
       setUserData(null)
       setLoading(false)
@@ -19,7 +19,10 @@ export function UserDataProvider({ children }) {
     }
 
     try {
-      setLoading(true)
+      // Only set loading state if not silent (prevents UI reload/buffering)
+      if (!silent) {
+        setLoading(true)
+      }
       setError(null)
       const data = await getUser(currentUser.uid)
       setUserData(data)
@@ -28,7 +31,9 @@ export function UserDataProvider({ children }) {
       setError(err)
       // Don't clear userData on error - keep last known state
     } finally {
-      setLoading(false)
+      if (!silent) {
+        setLoading(false)
+      }
     }
   }, [currentUser])
 
@@ -38,8 +43,9 @@ export function UserDataProvider({ children }) {
   }, [fetchUserData])
 
   // Refresh function that can be called manually
-  const refreshUserData = useCallback(async () => {
-    await fetchUserData()
+  // silent: if true, doesn't set loading state (prevents UI reload/buffering)
+  const refreshUserData = useCallback(async (silent = false) => {
+    await fetchUserData(silent)
   }, [fetchUserData])
 
   const value = {

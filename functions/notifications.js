@@ -72,15 +72,15 @@ const builders = {
     }
   },
   usage_reminder: (context = {}) => {
-    const channelId = context.channelId
+    const channelId = context.channelId || context.data?.channelId
     return {
-      title: context.title || 'Lille Sladesh-pause?',
-      body: context.body || 'Det er tid til at logge næste drink eller sige hej 👋',
+      title: context.title || 'Tid til en Sladesh-update?',
+      body: context.body || 'Log næste drink eller check ind igen for holdet 🍹',
       tag: context.tag || 'usage_reminder',
       data: {
         type: 'usage_reminder',
         channelId,
-        userId: context.userId,
+        userId: context.userId || context.data?.userId,
         url: context.data?.url || `/home?channel=${channelId || ''}`,
         ...context.data
       }

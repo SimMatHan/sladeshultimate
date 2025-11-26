@@ -168,7 +168,14 @@ export default function RoutesView() {
         <Route path="more" element={<More />} />
         <Route path="manage-channels" element={<ManageChannels />} />
         <Route path="manage-profile" element={<ManageProfile />} />
-        <Route path="notifications" element={<NotificationsDebug />} />
+        <Route
+          path="notifications"
+          element={
+            <RequireAdmin>
+              <NotificationsDebug />
+            </RequireAdmin>
+          }
+        />
         <Route
           path="admin"
           element={

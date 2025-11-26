@@ -23,7 +23,6 @@ import { useLocation } from "../contexts/LocationContext";
 import { useTheme } from "../contexts/ThemeContext";
 import { useChannel } from "../hooks/useChannel";
 import { useAuth } from "../hooks/useAuth";
-import { useScrollLock } from "../hooks/useScrollLock";
 import { USE_MOCK_DATA } from "../config/env";
 import { getUser, getSladeshCooldownState, addSladesh } from "../services/userService";
 import { getCheckedInChannelMembers } from "../services/channelService";
@@ -143,9 +142,6 @@ export default function Sladesh() {
   });
 
   const activeChannelId = selectedChannel?.id || null;
-
-  // Lock scroll when overlay is open
-  useScrollLock(!!pendingTarget);
 
   useEffect(() => {
     if (USE_MOCK_DATA) {

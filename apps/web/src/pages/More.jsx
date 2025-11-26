@@ -138,13 +138,15 @@ export default function More() {
           <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
             Konto
           </div>
-          <ActionCard
-            icon="🔔"
-            title="Notifikationstest"
-            description="Se status, prøv igen og send en test til dig selv."
-            to="/notifications"
-            actionLabel="Notifikationer"
-          />
+          {isAdmin && (
+            <ActionCard
+              icon="🔔"
+              title="Notifikationstest"
+              description="Se status, prøv igen og send en test til dig selv."
+              to="/notifications"
+              actionLabel="Notifikationer"
+            />
+          )}
           <ActionCard
             icon="🚪"
             title="Log ud af Sladesh"

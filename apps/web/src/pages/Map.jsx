@@ -2,7 +2,6 @@ import { useEffect, useState, useRef, useMemo } from 'react'
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet'
 import { useLocation } from '../contexts/LocationContext'
 import { useChannel } from '../hooks/useChannel'
-import { useScrollLock } from '../hooks/useScrollLock'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
@@ -138,7 +137,7 @@ function UserPinOverlay({ user, onClose }) {
         style={{ backgroundColor: 'var(--surface)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-4">
           <div className="flex items-center gap-3">
             <UserAvatar user={user} />
             <div>
@@ -148,23 +147,6 @@ function UserPinOverlay({ user, onClose }) {
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full border border-transparent p-1 text-xl leading-none transition"
-            style={{ color: 'var(--muted)' }}
-            onMouseEnter={(e) => {
-              e.target.style.backgroundColor = 'var(--subtle)';
-              e.target.style.color = 'var(--ink)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.backgroundColor = 'transparent';
-              e.target.style.color = 'var(--muted)';
-            }}
-            aria-label="Luk"
-          >
-            ×
-          </button>
         </div>
 
         <div className="mt-5 space-y-4">
@@ -304,9 +286,6 @@ export default function MapPage() {
       })
     }
   }
-
-  // Lock scroll when overlay is open
-  useScrollLock(!!selectedUser)
 
   // Store map state when overlay opens
   useEffect(() => {

@@ -349,16 +349,22 @@ function getHighestMilestone(before = 0, after = 0) {
     return Math.max(...reached);
 }
 
-function getCopenhagenDate(date = new Date()) {
-    return new Date(
-        date.toLocaleString("en-US", {
-            timeZone: CPH_TIMEZONE
-        })
-    );
+function getCopenhagenTime(date = new Date()) {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: CPH_TIMEZONE,
+        hour: "numeric",
+        minute: "numeric",
+        hour12: false
+    });
+    const parts = formatter.formatToParts(date);
+    const hour = parseInt(parts.find(p => p.type === "hour").value, 10);
+    const minute = parseInt(parts.find(p => p.type === "minute").value, 10);
+    return { hour, minute };
 }
 
 function isWithinReminderWindow(date = new Date()) {
-    const minutes = date.getHours() * 60 + date.getMinutes();
+    const { hour, minute } = getCopenhagenTime(date);
+    const minutes = hour * 60 + minute;
     return minutes >= REMINDER_WINDOW.startMinutes || minutes <= REMINDER_WINDOW.endMinutes;
 }
 
@@ -605,7 +611,7 @@ exports.sendUsageReminders = functions
     .pubsub.schedule(USAGE_REMINDER_CRON)
     .timeZone(CPH_TIMEZONE)
     .onRun(async () => {
-        const now = getCopenhagenDate();
+        const now = new Date();
         if (!isWithinReminderWindow(now)) {
             console.log("[notifications] usage_reminder skipped outside time window");
             return null;
@@ -642,7 +648,8 @@ exports.sendUsageReminders = functions
                     continue;
                 }
 
-                if (now - anchor < USAGE_REMINDER_INTERVAL_MS) {
+                const timeSinceAnchor = now.getTime() - anchor.getTime();
+                if (timeSinceAnchor < USAGE_REMINDER_INTERVAL_MS) {
                     skipped += 1;
                     continue;
                 }

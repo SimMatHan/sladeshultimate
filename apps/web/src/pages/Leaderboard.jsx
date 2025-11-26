@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { getDoc, doc } from 'firebase/firestore';
 import Page from '../components/Page';
 import { useChannel } from '../hooks/useChannel';
+import { useAuth } from '../hooks/useAuth';
 import { USE_MOCK_DATA } from '../config/env';
 import { fetchLeaderboardProfiles, fetchUserRecentDrinks, clearLeaderboardCache } from '../services/leaderboardService';
 import { db } from '../firebase';
@@ -227,21 +228,20 @@ const leaderboardProfiles = [
 ];
 
 const sortOptions = [
-  { id: 'current-run-most', label: 'Nuværende runde – flest' },
-  { id: 'current-run-least', label: 'Nuværende runde – færrest' },
-  { id: 'all-time-total', label: 'Alle tiders drinks' },
+  { id: 'current-run-most', label: 'Topslugere' },
+  { id: 'current-run-least', label: 'Letvægtere' },
 ];
 
 const sortComparators = {
   'current-run-most': (a, b) => (b.currentRunDrinkCount || 0) - (a.currentRunDrinkCount || 0),
   'current-run-least': (a, b) => (a.currentRunDrinkCount || 0) - (b.currentRunDrinkCount || 0),
-  'all-time-total': (a, b) => (b.totalDrinks || 0) - (a.totalDrinks || 0),
 };
 
 export default function Leaderboard() {
   const { selectedChannel } = useChannel();
+  const { currentUser } = useAuth();
   const activeChannelId = selectedChannel?.id || null;
-  const [sortMode, setSortMode] = useState('all-time-total');
+  const [sortMode, setSortMode] = useState('current-run-most');
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(!USE_MOCK_DATA);
@@ -295,7 +295,8 @@ export default function Leaderboard() {
         setError(null);
         setProfiles([]);
         clearLeaderboardCache(activeChannelId);
-        const fetchedProfiles = await fetchLeaderboardProfiles(activeChannelId);
+        const currentUserId = currentUser?.uid || null;
+        const fetchedProfiles = await fetchLeaderboardProfiles(activeChannelId, currentUserId);
         if (isMounted) {
           setProfiles(fetchedProfiles);
         }
@@ -317,7 +318,7 @@ export default function Leaderboard() {
     return () => {
       isMounted = false;
     };
-  }, [activeChannelId, selectedChannel?.name, selectedChannel?.isDefault]);
+  }, [activeChannelId, selectedChannel?.name, selectedChannel?.isDefault, currentUser?.uid]);
 
   // Fetch recent drinks when a profile is selected (only in production mode)
   useEffect(() => {
@@ -339,7 +340,7 @@ export default function Leaderboard() {
   }, [selectedProfile?.id, USE_MOCK_DATA]);
 
   const sortedProfiles = useMemo(() => {
-    const comparator = sortComparators[sortMode] || sortComparators['all-time-total'];
+    const comparator = sortComparators[sortMode] || sortComparators['current-run-most'];
     return [...profiles].sort(comparator);
   }, [profiles, sortMode]);
 
@@ -535,10 +536,8 @@ function ProfileCard({ profile, rank, onSelect, isActive, sortMode }) {
   const rankBadge = `#${rank}`;
   const displayName = profile.username || profile.name || 'Ukendt';
   
-  // Determine which value to display based on sort mode
-  const displayValue = sortMode === 'all-time-total' 
-    ? (profile.totalDrinks || 0)
-    : (profile.currentRunDrinkCount || 0);
+  // Always display currentRunDrinkCount for "Nuværende runde" filters
+  const displayValue = profile.currentRunDrinkCount || 0;
   
   const valueFormatted = displayValue.toLocaleString('da-DK');
 
@@ -704,77 +703,38 @@ function ProfileDetailSheet({ profile, sortMode, onClose }) {
     return Math.round((totalDrinks / diffWeeks) * 10) / 10; // Round to 1 decimal
   };
 
-  // Build drink breakdown based on sortMode
+  // Build drink breakdown - always use drinkVariations for current run
   const buildDrinkBreakdown = () => {
     if (!userData) return [];
 
-    const isCurrentRun = sortMode === 'current-run-most' || sortMode === 'current-run-least';
+    // Always use drinkVariations for current run
+    const breakdown = [];
+    const variations = userData.drinkVariations || {};
     
-    if (isCurrentRun) {
-      // Current run: use drinkVariations
-      const breakdown = [];
-      const variations = userData.drinkVariations || {};
-      
-      Object.entries(variations).forEach(([type, typeVariations]) => {
-        if (typeVariations && typeof typeVariations === 'object') {
-          Object.entries(typeVariations).forEach(([variation, count]) => {
-            if (count > 0) {
-              breakdown.push({
-                id: `${type}-${variation}`,
-                label: variation,
-                count: count
-              });
-            }
-          });
-        }
-      });
-      
-      return breakdown.sort((a, b) => b.count - a.count);
-    } else {
-      // All time: use drinkTypes
-      const breakdown = [];
-      const drinkTypes = userData.drinkTypes || {};
-      
-      // Format drink type labels
-      const formatDrinkTypeLabel = (type) => {
-        const labels = {
-          beer: 'Øl',
-          cider: 'Cider',
-          wine: 'Vin',
-          cocktail: 'Cocktails',
-          shot: 'Shots',
-          spritz: 'Spritz',
-          soda: 'Sodavand',
-          other: 'Andre'
-        };
-        return labels[type] || type.charAt(0).toUpperCase() + type.slice(1);
-      };
-      
-      Object.entries(drinkTypes).forEach(([type, count]) => {
-        if (count > 0) {
-          breakdown.push({
-            id: type,
-            label: formatDrinkTypeLabel(type),
-            count: count
-          });
-        }
-      });
-      
-      return breakdown.sort((a, b) => b.count - a.count);
-    }
+    Object.entries(variations).forEach(([type, typeVariations]) => {
+      if (typeVariations && typeof typeVariations === 'object') {
+        Object.entries(typeVariations).forEach(([variation, count]) => {
+          if (count > 0) {
+            breakdown.push({
+              id: `${type}-${variation}`,
+              label: variation,
+              count: count
+            });
+          }
+        });
+      }
+    });
+    
+    return breakdown.sort((a, b) => b.count - a.count);
   };
 
   const drinkBreakdown = userData ? buildDrinkBreakdown() : [];
   const breakdownTotal = drinkBreakdown.reduce((sum, item) => sum + item.count, 0);
   
-  // Determine main number and description based on sortMode
+  // Show totalDrinks in header instead of currentRunDrinkCount
   const isCurrentRun = sortMode === 'current-run-most' || sortMode === 'current-run-least';
-  const mainNumber = userData 
-    ? (isCurrentRun ? userData.currentRunDrinkCount : userData.totalDrinks)
-    : 0;
-  const weeklyAverage = userData && !isCurrentRun 
-    ? calculateWeeklyAverage(userData.totalDrinks, userData.createdAt)
-    : null;
+  const mainNumber = userData ? (userData.totalDrinks || 0) : 0;
+  const weeklyAverage = null; // Not shown for current run filters
 
   if (loading) {
     return (
@@ -836,18 +796,7 @@ function ProfileDetailSheet({ profile, sortMode, onClose }) {
                 ) : null}
               </h2>
               <p className="text-sm" style={{ color: 'var(--muted)' }}>
-                {isCurrentRun ? (
-                  <>
-                    {mainNumber.toLocaleString('da-DK')} drinks i nuværende runde
-                  </>
-                ) : (
-                  <>
-                    {mainNumber.toLocaleString('da-DK')} drinks totalt
-                    {weeklyAverage !== null && weeklyAverage > 0 && (
-                      <> · {weeklyAverage.toLocaleString('da-DK', { maximumFractionDigits: 1 })} pr. uge</>
-                    )}
-                  </>
-                )}
+                {mainNumber.toLocaleString('da-DK')} All-time counter
               </p>
             </div>
           </header>
@@ -856,7 +805,7 @@ function ProfileDetailSheet({ profile, sortMode, onClose }) {
             {drinkBreakdown.length > 0 && breakdownTotal > 0 ? (
               <section className="space-y-3">
                 <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-                  {isCurrentRun ? 'Fordeling af nuværende drinks' : 'Fordeling af drinks'}
+                  Fordeling af nuværende drinks
                 </h3>
                 <ul className="space-y-3">
                   {drinkBreakdown.map((item) => {

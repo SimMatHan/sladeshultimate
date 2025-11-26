@@ -233,9 +233,10 @@ Channel-facing payload example:
 
 ##### `usage_reminder`
 - **Trigger:** `sendUsageReminders` scheduled function (every 15 minutes, Europe/Copenhagen). Runs only when the local time is between 10:00 and 02:00 and at least 2 hours have passed since the user's last reminder or check-in.
+- **Eligibility:** Users become eligible for reminders after checking in (when `checkInStatus` becomes `true` and `lastCheckIn` is set).
 - **Audience:** The checked-in user (active channel must not be Den Åbne Kanal).
 - **Data:** `userId`, `channelId`, a short encouragement message, and a deep link back into the active channel.
-- **State:** Updates `users/{uid}.lastUsageReminderAt` after each send to enforce the 2-hour cooldown.
+- **State:** Updates `users/{uid}.lastUsageReminderAt` after each send to enforce the 2-hour cooldown. Uses `max(lastUsageReminderAt, lastCheckIn)` as the anchor timestamp for the 2-hour interval check.
 
 Example payload:
 
