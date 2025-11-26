@@ -31,6 +31,60 @@ const builders = {
         ...context.data
       }
     }
+  },
+  check_in: (context = {}) => {
+    const channelName = context.channelName || 'din kanal'
+    const userName = context.userName || 'En ven'
+    const channelId = context.channelId
+    return {
+      title: context.title || `${userName} er checket ind`,
+      body: context.body || `Kom og si' hej i ${channelName}`,
+      tag: context.tag || (channelId ? `checkin_${channelId}` : 'check_in'),
+      data: {
+        type: 'check_in',
+        channelId,
+        channelName,
+        userId: context.userId,
+        userName,
+        url: context.data?.url || `/home?channel=${channelId || ''}`,
+        ...context.data
+      }
+    }
+  },
+  drink_milestone: (context = {}) => {
+    const milestone = context.milestone || context.data?.milestone || 0
+    const channelId = context.channelId
+    const userName = context.userName || 'En ven'
+    const channelName = context.channelName || 'din kanal'
+    return {
+      title: context.title || `${userName} ramte ${milestone} drinks`,
+      body: context.body || `Hold dampen oppe i ${channelName}`,
+      tag: context.tag || `milestone_${milestone}_${channelId || 'solo'}`,
+      data: {
+        type: 'drink_milestone',
+        milestone,
+        channelId,
+        channelName,
+        userId: context.userId,
+        url: context.data?.url || `/home?channel=${channelId || ''}`,
+        ...context.data
+      }
+    }
+  },
+  usage_reminder: (context = {}) => {
+    const channelId = context.channelId
+    return {
+      title: context.title || 'Lille Sladesh-pause?',
+      body: context.body || 'Det er tid til at logge næste drink eller sige hej 👋',
+      tag: context.tag || 'usage_reminder',
+      data: {
+        type: 'usage_reminder',
+        channelId,
+        userId: context.userId,
+        url: context.data?.url || `/home?channel=${channelId || ''}`,
+        ...context.data
+      }
+    }
   }
 }
 

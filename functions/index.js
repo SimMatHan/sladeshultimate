@@ -7,6 +7,19 @@ admin.initializeApp();
 const db = admin.firestore();
 const FieldValue = admin.firestore.FieldValue;
 
+const NOTIFICATION_RETENTION_HOURS = 24;
+const MAX_BATCH_DELETE = 500;
+const DEFAULT_REGION = "europe-west1";
+const CPH_TIMEZONE = "Europe/Copenhagen";
+const DEN_AABNE_CHANNEL_ID = "RFYoEHhScYOkDaIbGSYA";
+const DRINK_MILESTONES = [5, 10, 15, 20, 25, 30];
+const USAGE_REMINDER_INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 hours
+const USAGE_REMINDER_CRON = "*/15 * * * *";
+const REMINDER_WINDOW = {
+    startMinutes: 10 * 60, // 10:00
+    endMinutes: 2 * 60 // 02:00 next day
+};
+
 /**
  * Resets the checkInStatus field for all users to false and clears currentLocation.
  * This logic is shared between the scheduled function and the manual trigger.
@@ -154,6 +167,105 @@ exports.manualDeleteOldMessages = functions
         }
     });
 
+/**
+ * Delete notification items older than 24 hours for every user.
+ * Runs daily at 12:00 Europe/Copenhagen time.
+ */
+async function deleteOldNotifications() {
+    const cutoffTime = admin.firestore.Timestamp.fromDate(
+        new Date(Date.now() - NOTIFICATION_RETENTION_HOURS * 60 * 60 * 1000)
+    );
+
+    console.log(`[notifications] Deleting items older than ${cutoffTime.toDate().toISOString()}`);
+
+    const notificationsRef = db.collection("notifications");
+    const usersSnapshot = await notificationsRef.get();
+
+    if (usersSnapshot.empty) {
+        console.log("[notifications] No notification documents found.");
+        return { deletedCount: 0 };
+    }
+
+    const bulkWriter = db.bulkWriter();
+    let totalDeleted = 0;
+
+    for (const userDoc of usersSnapshot.docs) {
+        const userId = userDoc.id;
+        const itemsRef = userDoc.ref.collection("items");
+        let deletedForUser = 0;
+
+        try {
+            while (true) {
+                const itemsSnapshot = await itemsRef
+                    .where("timestamp", "<", cutoffTime)
+                    .limit(MAX_BATCH_DELETE)
+                    .get();
+
+                if (itemsSnapshot.empty) {
+                    break;
+                }
+
+                itemsSnapshot.docs.forEach((itemDoc) => {
+                    bulkWriter.delete(itemDoc.ref);
+                    deletedForUser += 1;
+                    totalDeleted += 1;
+                });
+
+                if (itemsSnapshot.size < MAX_BATCH_DELETE) {
+                    break;
+                }
+            }
+
+            if (deletedForUser > 0) {
+                console.log(`[notifications] Deleted ${deletedForUser} old items for user ${userId}.`);
+            }
+        } catch (error) {
+            console.error(`[notifications] Failed to delete items for user ${userId}`, error);
+        }
+    }
+
+    await bulkWriter.close();
+    console.log(`[notifications] Successfully deleted ${totalDeleted} old notification items.`);
+
+    return { deletedCount: totalDeleted };
+}
+
+exports.deleteOldNotifications = functions
+    .region("europe-west1")
+    .pubsub.schedule("0 12 * * *")
+    .timeZone("Europe/Copenhagen")
+    .onRun(async () => {
+        console.log("[notifications] Running scheduled deletion of old notification items...");
+        try {
+            const result = await deleteOldNotifications();
+            console.log(`[notifications] Scheduled notification cleanup completed. Deleted ${result.deletedCount} items.`);
+            return null;
+        } catch (error) {
+            console.error("[notifications] Error deleting old notification items", error);
+            throw error;
+        }
+    });
+
+exports.manualDeleteOldNotifications = functions
+    .region("europe-west1")
+    .https.onRequest(async (req, res) => {
+        try {
+            console.log("[notifications] Running manual deletion of old notification items...");
+            const result = await deleteOldNotifications();
+            res.status(200).json({
+                success: true,
+                deletedCount: result.deletedCount,
+                message: `Successfully deleted ${result.deletedCount} old notification items.`
+            });
+        } catch (error) {
+            console.error("[notifications] Manual deletion error", error);
+            res.status(500).json({
+                success: false,
+                error: error.message || "Error deleting old notification items."
+            });
+        }
+    });
+
 async function loadChannel(channelId) {
     if (!channelId) return null;
     const snap = await db.collection("channels").doc(channelId).get();
@@ -208,6 +320,99 @@ async function notifySubscriptions(subDocs, payload) {
         }
         return acc;
     }, { sent: 0, failed: 0, skipped: 0 });
+}
+
+function isChannelExcluded(channelId) {
+    return !channelId || channelId === DEN_AABNE_CHANNEL_ID;
+}
+
+function getDisplayName(userData = {}) {
+    return (
+        userData.fullName ||
+        userData.displayName ||
+        userData.username ||
+        userData.name ||
+        "En ven"
+    );
+}
+
+function getHighestMilestone(before = 0, after = 0) {
+    const previous = Number.isFinite(before) ? before : 0;
+    const current = Number.isFinite(after) ? after : 0;
+    if (current <= previous) {
+        return null;
+    }
+    const reached = DRINK_MILESTONES.filter((value) => current >= value && previous < value);
+    if (!reached.length) {
+        return null;
+    }
+    return Math.max(...reached);
+}
+
+function getCopenhagenDate(date = new Date()) {
+    return new Date(
+        date.toLocaleString("en-US", {
+            timeZone: CPH_TIMEZONE
+        })
+    );
+}
+
+function isWithinReminderWindow(date = new Date()) {
+    const minutes = date.getHours() * 60 + date.getMinutes();
+    return minutes >= REMINDER_WINDOW.startMinutes || minutes <= REMINDER_WINDOW.endMinutes;
+}
+
+async function writeNotificationItem(userId, payload, extra = {}) {
+    if (!userId || !payload) {
+        return;
+    }
+    const itemsRef = db.collection("notifications").doc(userId).collection("items");
+    const doc = {
+        type: payload.data?.type || "generic",
+        title: payload.title || "",
+        body: payload.body || "",
+        data: payload.data || {},
+        channelId: payload.data?.channelId || null,
+        read: false,
+        timestamp: FieldValue.serverTimestamp(),
+        ...extra
+    };
+    try {
+        await itemsRef.add(doc);
+    } catch (error) {
+        console.error("[notifications] Failed to persist notification item", { userId, error: error.message });
+    }
+}
+
+async function deliverNotificationToUserDoc(userDoc, payload, feedExtra = {}) {
+    if (!userDoc?.exists) {
+        return { sent: 0, failed: 0, skipped: 1 };
+    }
+    const userId = userDoc.id;
+    await writeNotificationItem(userId, payload, feedExtra);
+    const subDocs = await loadSubscriptionsForUser(userDoc);
+    if (!subDocs.length) {
+        return { sent: 0, failed: 0, skipped: 1 };
+    }
+    return notifySubscriptions(subDocs, payload);
+}
+
+async function deliverNotificationToUserDocs(userDocs, payload, feedExtra) {
+    const totals = { sent: 0, failed: 0, skipped: 0 };
+    const getFeedData =
+        typeof feedExtra === "function"
+            ? feedExtra
+            : () => feedExtra || {};
+
+    for (const doc of userDocs) {
+        const extra = getFeedData(doc);
+        const result = await deliverNotificationToUserDoc(doc, payload, extra);
+        totals.sent += result.sent;
+        totals.failed += result.failed;
+        totals.skipped += result.skipped;
+    }
+
+    return totals;
 }
 
 exports.onChannelMessageCreated = functions
@@ -265,6 +470,215 @@ exports.onChannelMessageCreated = functions
             sent: totals.sent,
             failed: totals.failed,
             skipped: totals.skipped
+        });
+
+        return null;
+    });
+
+async function maybeSendCheckInNotification(userId, beforeData = {}, afterData = {}) {
+    const wasCheckedIn = !!beforeData.checkInStatus;
+    const isCheckedIn = !!afterData.checkInStatus;
+
+    if (wasCheckedIn || !isCheckedIn) {
+        return;
+    }
+
+    const channelId = afterData.activeChannelId;
+    if (isChannelExcluded(channelId)) {
+        return;
+    }
+
+    const channel = await loadChannel(channelId);
+    if (!channel) {
+        console.warn("[notifications] check_in skipped, channel missing", { userId, channelId });
+        return;
+    }
+
+    const recipients = await loadRecipients(channelId, userId);
+    if (!recipients.length) {
+        console.log("[notifications] check_in no recipients", { channelId, userId });
+        return;
+    }
+
+    const userName = getDisplayName(afterData);
+    const payload = buildNotificationPayload("check_in", {
+        channelId,
+        channelName: channel.name || "din kanal",
+        userId,
+        userName,
+        data: {
+            url: `/home?channel=${channelId}`
+        }
+    });
+
+    await deliverNotificationToUserDocs(recipients, payload, {
+        channelId,
+        actorId: userId,
+        actorName: userName,
+        type: "check_in"
+    });
+
+    console.log("[notifications] check_in delivered", {
+        channelId,
+        userId,
+        recipients: recipients.length
+    });
+}
+
+async function maybeSendDrinkMilestoneNotification(userId, beforeData = {}, afterData = {}, userSnapshot) {
+    const beforeCount = Number(beforeData.currentRunDrinkCount || 0);
+    const afterCount = Number(afterData.currentRunDrinkCount || 0);
+    const milestone = getHighestMilestone(beforeCount, afterCount);
+
+    if (!milestone) {
+        return;
+    }
+
+    const channelId = afterData.activeChannelId || null;
+    const channel = channelId ? await loadChannel(channelId) : null;
+    const channelName = channel?.name || "din kanal";
+    const userName = getDisplayName(afterData);
+
+    const context = {
+        userId,
+        userName,
+        milestone,
+        channelId,
+        channelName,
+        data: {
+            summary: `${userName} har nået ${milestone} drinks`
+        }
+    };
+
+    const selfPayload = buildNotificationPayload("drink_milestone", {
+        ...context,
+        title: `Du ramte ${milestone} drinks`,
+        body: channelId ? `Del sejren i ${channelName}` : "God stil – hold loggen kørende!"
+    });
+
+    await deliverNotificationToUserDoc(userSnapshot, selfPayload, {
+        channelId,
+        milestone,
+        actorId: userId,
+        type: "drink_milestone",
+        target: "self"
+    });
+
+    if (!isChannelExcluded(channelId)) {
+        const recipients = await loadRecipients(channelId, userId);
+        if (recipients.length) {
+            const fanOutPayload = buildNotificationPayload("drink_milestone", context);
+            await deliverNotificationToUserDocs(recipients, fanOutPayload, {
+                channelId,
+                milestone,
+                actorId: userId,
+                actorName: userName,
+                type: "drink_milestone"
+            });
+
+            console.log("[notifications] drink_milestone delivered to channel", {
+                userId,
+                channelId,
+                milestone,
+                recipients: recipients.length
+            });
+        }
+    }
+}
+
+exports.onUserActivityUpdated = functions
+    .region(DEFAULT_REGION)
+    .firestore.document("users/{userId}")
+    .onUpdate(async (change, context) => {
+        const before = change.before.data() || {};
+        const after = change.after.data() || {};
+        const userId = context.params.userId;
+
+        await maybeSendCheckInNotification(userId, before, after);
+        await maybeSendDrinkMilestoneNotification(userId, before, after, change.after);
+
+        return null;
+    });
+
+exports.sendUsageReminders = functions
+    .region(DEFAULT_REGION)
+    .pubsub.schedule(USAGE_REMINDER_CRON)
+    .timeZone(CPH_TIMEZONE)
+    .onRun(async () => {
+        const now = getCopenhagenDate();
+        if (!isWithinReminderWindow(now)) {
+            console.log("[notifications] usage_reminder skipped outside time window");
+            return null;
+        }
+
+        const checkedInUsers = await db
+            .collection("users")
+            .where("checkInStatus", "==", true)
+            .get();
+
+        if (checkedInUsers.empty) {
+            console.log("[notifications] usage_reminder no checked-in users");
+            return null;
+        }
+
+        let notified = 0;
+        let skipped = 0;
+
+        for (const userDoc of checkedInUsers.docs) {
+            try {
+                const data = userDoc.data();
+                const channelId = data.activeChannelId || null;
+                if (isChannelExcluded(channelId)) {
+                    skipped += 1;
+                    continue;
+                }
+
+                const lastCheckIn = data.lastCheckIn?.toDate?.() ?? null;
+                const lastReminder = data.lastUsageReminderAt?.toDate?.() ?? null;
+                const anchor = lastReminder || lastCheckIn;
+
+                if (!anchor) {
+                    skipped += 1;
+                    continue;
+                }
+
+                if (now - anchor < USAGE_REMINDER_INTERVAL_MS) {
+                    skipped += 1;
+                    continue;
+                }
+
+                const userId = userDoc.id;
+                const payload = buildNotificationPayload("usage_reminder", {
+                    userId,
+                    channelId,
+                    data: {
+                        message: "Hop tilbage i Sladesh og log næste drink"
+                    }
+                });
+
+                await deliverNotificationToUserDoc(userDoc, payload, {
+                    channelId,
+                    type: "usage_reminder"
+                });
+
+                await userDoc.ref.update({
+                    lastUsageReminderAt: FieldValue.serverTimestamp()
+                });
+
+                notified += 1;
+            } catch (error) {
+                skipped += 1;
+                console.error("[notifications] usage_reminder failed for user", {
+                    userId: userDoc.id,
+                    error: error.message
+                });
+            }
+        }
+
+        console.log("[notifications] usage_reminder cycle completed", {
+            notified,
+            skipped,
+            checkedIn: checkedInUsers.size
         });
 
         return null;

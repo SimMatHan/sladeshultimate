@@ -29,6 +29,60 @@ const builders = {
         ...context.data
       }
     }
+  },
+  check_in: (context = {}) => {
+    const channelName = context.channelName || context.data?.channelName || 'din kanal'
+    const userName = context.userName || context.data?.userName || 'En ven'
+    const channelId = context.channelId || context.data?.channelId
+    return {
+      title: context.title || `${userName} er checket ind`,
+      body: context.body || `Kom forbi ${channelName}`,
+      tag: context.tag || (channelId ? `checkin_${channelId}` : 'check_in'),
+      data: {
+        type: 'check_in',
+        channelId,
+        channelName,
+        userId: context.userId || context.data?.userId,
+        userName,
+        url: context.data?.url || `/home?channel=${channelId || ''}`,
+        ...context.data
+      }
+    }
+  },
+  drink_milestone: (context = {}) => {
+    const milestone = context.milestone || context.data?.milestone || 0
+    const channelId = context.channelId || context.data?.channelId
+    const channelName = context.channelName || context.data?.channelName || 'din kanal'
+    const userName = context.userName || context.data?.userName || 'En ven'
+    return {
+      title: context.title || `${userName} ramte ${milestone} drinks`,
+      body: context.body || `Hold festen kørende i ${channelName}`,
+      tag: context.tag || `milestone_${milestone}_${channelId || 'solo'}`,
+      data: {
+        type: 'drink_milestone',
+        milestone,
+        channelId,
+        channelName,
+        userId: context.userId || context.data?.userId,
+        url: context.data?.url || `/home?channel=${channelId || ''}`,
+        ...context.data
+      }
+    }
+  },
+  usage_reminder: (context = {}) => {
+    const channelId = context.channelId || context.data?.channelId
+    return {
+      title: context.title || 'Tid til en Sladesh-update?',
+      body: context.body || 'Log næste drink eller check ind igen for holdet 🍹',
+      tag: context.tag || 'usage_reminder',
+      data: {
+        type: 'usage_reminder',
+        channelId,
+        userId: context.userId || context.data?.userId,
+        url: context.data?.url || `/home?channel=${channelId || ''}`,
+        ...context.data
+      }
+    }
   }
 }
 

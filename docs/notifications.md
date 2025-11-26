@@ -37,10 +37,28 @@ users/{uid}
     expirationTime: number|null
     metadata: { userAgent, platform, ... }
     createdAt / updatedAt / lastUsedAt (timestamps)
+  activeChannelId: string|null
+  currentRunDrinkCount: number
+  lastUsageReminderAt: timestamp|null   // updated by usage reminder scheduler
 ```
 
 - Documents are keyed by `SHA-256(endpoint)` so repeated refreshes overwrite the same device instead of duplicating entries.
 - Security rules (in `firestore.rules`) allow users to read/write only their own `pushSubscriptions`.
+
+Notifications shown inside the UI are mirrored under `notifications/{userId}/items` so Firestore listeners stay in sync:
+
+```
+notifications/{userId}/items/{notificationId}
+  type: string                     // e.g. "check_in"
+  title: string
+  body: string
+  data: { channelId, channelName, userId, milestone, ... }
+  channelId: string|null
+  read: boolean
+  timestamp: server timestamp      // cleaned up by deleteOldNotifications
+```
+
+- The Den Åbne Kanal (`RFYoEHhScYOkDaIbGSYA`) never receives backend generated notifications. Every trigger below short-circuits if the active channel matches this ID.
 
 ---
 
@@ -111,9 +129,30 @@ Reusable helpers for Functions:
   4. Delete dead subscriptions and log totals (`sent`, `failed`, `skipped`).
   5. Payload uses type `new_message` with channel/sender info and a link to `/home?channel=<id>`.
 
+#### `onUserActivityUpdated`
+- Trigger: `users/{userId}` on update (region `europe-west1`).
+- Responsibilities:
+  1. Detects a `checkInStatus` transition (`false → true`) and sends a `check_in` notification to every member of the user's active channel (except the user and Den Åbne Kanal). Payload contains `channelId`, `channelName`, `userId`, and `userName`.
+  2. Tracks `currentRunDrinkCount` and emits a `drink_milestone` notification whenever the count crosses 5/10/15/20/25/30. Only the highest milestone crossed per write is emitted, and the user's own notification is always delivered even if the active channel is Den Åbne Kanal.
+- Side effects:
+  - Persists each notification to `notifications/{userId}/items`.
+  - Uses the shared `notifySubscriptions` helper to fan out pushes defensively (bad subscriptions are pruned).
+
+#### `sendUsageReminders`
+- Trigger: Pub/Sub schedule `*/15 * * * *` (every 15 minutes, time zone Europe/Copenhagen).
+- Guards:
+  - Skips executions outside the 10:00–02:00 local window.
+  - Only considers users with `checkInStatus == true` and an active channel that is not Den Åbne Kanal.
+  - Requires at least 2 hours since `max(lastUsageReminderAt, lastCheckIn)`.
+- Actions:
+  - Sends a `usage_reminder` notification to the user.
+  - Updates `users/{userId}.lastUsageReminderAt` for throttling.
+  - Writes the reminder into `notifications/{userId}/items`.
+
 #### Scheduled & Manual maintenance
-- `resetCheckInStatus`, `deleteOldMessages`, and their manual equivalents live in `functions/index.js`.
+- `resetCheckInStatus`, `deleteOldMessages`, `deleteOldNotifications`, and their manual equivalents live in `functions/index.js`.
   - `deleteOldMessages` removes channel messages older than 24h (runs daily at 12:00 Europe/Copenhagen).
+  - `deleteOldNotifications` prunes `notifications/{userId}/items` entries with `timestamp < now - 24h` (also daily at 12:00 Europe/Copenhagen) so each user only keeps recent items. A manual HTTPS trigger is available for spot checks.
   - If you add new cleanup routines, follow the same pattern and document them here.
 
 ---
@@ -140,7 +179,84 @@ Reusable helpers for Functions:
 
 ---
 
-### 8. Debugging & Monitoring
+### 8. Production Notification Types
+
+##### `check_in`
+- **Trigger:** `onUserActivityUpdated` when a user's `checkInStatus` flips from `false` to `true`.
+- **Audience:** Every member of the user's active channel except the user themself. Channels with ID `RFYoEHhScYOkDaIbGSYA` (Den Åbne Kanal) are always skipped.
+- **Data:** `channelId`, `channelName`, `userId`, `userName`, deep link to `/home?channel=<id>`.
+- **Persistence:** Each recipient gets a document under `notifications/{recipientId}/items` with `type: "check_in"`.
+
+Example push payload:
+
+```json
+{
+  "title": "Mia er checket ind",
+  "body": "Kom og sig hej i Fredagsbaren",
+  "tag": "checkin_a1b2c3",
+  "data": {
+    "type": "check_in",
+    "channelId": "a1b2c3",
+    "channelName": "Fredagsbaren",
+    "userId": "uid123",
+    "userName": "Mia",
+    "url": "/home?channel=a1b2c3"
+  }
+}
+```
+
+##### `drink_milestone`
+- **Trigger:** `onUserActivityUpdated` whenever `currentRunDrinkCount` crosses 5, 10, 15, 20, 25 or 30. Only the highest milestone crossed in a single write is emitted, so overshooting (e.g. jumping from 4 → 12) sends a single `milestone=10`.
+- **Audience:** The user always receives the notification. Members of the active channel also receive it unless the channel is Den Åbne Kanal (or `activeChannelId` is missing).
+- **Data:** Includes `milestone`, `channelId`, `channelName`, `userId`, `userName`, plus a `summary` string so the UI can show a short preview.
+- **State:** Relies on `currentRunDrinkCount` resets at 10:00 and the user's `activeChannelId`.
+
+Channel-facing payload example:
+
+```json
+{
+  "title": "Jonas ramte 15 drinks",
+  "body": "Hold dampen oppe i Klubben",
+  "tag": "milestone_15_klubben",
+  "data": {
+    "type": "drink_milestone",
+    "milestone": 15,
+    "channelId": "klubben",
+    "channelName": "Klubben",
+    "userId": "uid456",
+    "userName": "Jonas",
+    "summary": "Jonas har nået 15 drinks",
+    "url": "/home?channel=klubben"
+  }
+}
+```
+
+##### `usage_reminder`
+- **Trigger:** `sendUsageReminders` scheduled function (every 15 minutes, Europe/Copenhagen). Runs only when the local time is between 10:00 and 02:00 and at least 2 hours have passed since the user's last reminder or check-in.
+- **Audience:** The checked-in user (active channel must not be Den Åbne Kanal).
+- **Data:** `userId`, `channelId`, a short encouragement message, and a deep link back into the active channel.
+- **State:** Updates `users/{uid}.lastUsageReminderAt` after each send to enforce the 2-hour cooldown.
+
+Example payload:
+
+```json
+{
+  "title": "Tid til en Sladesh-update?",
+  "body": "Log næste drink eller check ind igen for holdet 🍹",
+  "tag": "usage_reminder",
+  "data": {
+    "type": "usage_reminder",
+    "channelId": "fredagsbaren",
+    "userId": "uid789",
+    "message": "Hop tilbage i Sladesh og log næste drink",
+    "url": "/home?channel=fredagsbaren"
+  }
+}
+```
+
+---
+
+### 9. Debugging & Monitoring
 
 1. **Frontend**  
    - Use the notifications debug page for permission/subscription state.
@@ -158,11 +274,40 @@ Reusable helpers for Functions:
 
 ---
 
-### 9. Housekeeping
+### 10. Housekeeping
 
 - **Rotate VAPID keys** sparingly. If you must, update `.env*`, Vercel, Firebase config, redeploy all layers, then prompt users to refresh subscriptions.
 - **Message cleanup** is already scheduled (`deleteOldMessages`). If you add new heavy collections, reuse the same pattern (helper + scheduled + manual HTTP trigger) so the maintenance story stays consistent.
 - **Documentation** — Update this file whenever you add notification types or change env expectations so future contributors have a single source of truth.
+
+---
+
+### 11. Implementation Summary & Manual Testing
+
+**Functions & triggers**
+- `onUserActivityUpdated` (`users/{userId}` on update, region `europe-west1`)  
+  Reads `users`, `channels`, and `users/{uid}/pushSubscriptions`; writes to `notifications/{uid}/items` for every recipient.
+- `sendUsageReminders` (Pub/Sub `*/15 * * * *`, Europe/Copenhagen)  
+  Reads `users` (filtered by `checkInStatus`), writes `notifications/{uid}/items`, and updates `users/{uid}.lastUsageReminderAt`.
+
+**Firestore touch-points**
+- Reads: `users`, `channels`, `users/{uid}/pushSubscriptions`.
+- Writes: `notifications/{uid}/items`, `users/{uid}.lastUsageReminderAt`.
+
+**Manual testing checklist**
+- `check_in`  
+  1. Log in two test users that share a channel other than Den Åbne Kanal.  
+  2. Check in user A via the app (or update `checkInStatus` through the check-in UI).  
+  3. Confirm user B receives a push + new document under `notifications/{userB}/items` with `type: "check_in"`.
+- `drink_milestone`  
+  1. Reset user A's `currentRunDrinkCount` via the existing reset tooling if needed.  
+  2. Log drinks until the next milestone (5/10/15/20/25/30) is crossed in one increment.  
+  3. Verify user A and any non-Den channel members get exactly one `drink_milestone` notification, and that `notifications/{userId}/items` contains the matching entry.
+- `usage_reminder`  
+  1. Check in a user assigned to a non-Den channel.  
+  2. Ensure `lastUsageReminderAt` is older than 2 hours (clear it or set it manually).  
+  3. Run `sendUsageReminders` via `firebase functions:shell` or wait for the next cron window between 10:00–02:00.  
+  4. Confirm the user receives the reminder and `lastUsageReminderAt` updates.
 
 ---
 
