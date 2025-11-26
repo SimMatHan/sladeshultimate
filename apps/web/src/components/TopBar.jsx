@@ -796,7 +796,7 @@ export default function TopBar({
             onClose={() => setActiveOverlay(null)}
             channelId={selectedChannel?.id}
             userId={currentUser?.uid}
-            userName={userData?.displayName || userData?.fullName || "Bruger"}
+            userName={userData?.username || userData?.displayName || userData?.fullName || "Bruger"}
           />
         </div>
 

@@ -16,8 +16,10 @@ export const USER_SCHEMA = {
   email: 'string',
   fullName: 'string',         // Full name for searchability (e.g., "Sara Holm")
   displayName: 'string',      // Display name (can be same as fullName or nickname)
+  username: 'string',         // Unique handle shown across the app (e.g., "saraholm")
   initials: 'string',         // Derived from fullName (e.g., "SH")
   avatarGradient: 'string',   // e.g., "from-rose-400 to-orange-500"
+  onboardingCompleted: 'boolean', // Whether onboarding was completed (gates splash)
   
   // Activity Tracking
   totalDrinks: 'number',      // Lifetime aggregated count (never resets)

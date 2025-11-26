@@ -1,6 +1,9 @@
 import { useCallback, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../hooks/useAuth'
+import { updateUser } from '../services/userService'
+import { useUserData } from '../contexts/UserDataContext'
 
 // Slide transition variants (slide + fade)
 const slideVariants = {
@@ -56,8 +59,12 @@ const SLIDES = [
 
 export default function Onboarding() {
   const navigate = useNavigate()
+  const { currentUser } = useAuth()
+  const { refreshUserData } = useUserData()
   const [index, setIndex] = useState(0)
   const [direction, setDirection] = useState(0)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
 
   const totalSlides = SLIDES.length
   const activeSlide = SLIDES[index]
@@ -71,10 +78,24 @@ export default function Onboarding() {
     paddingRight: 'env(safe-area-inset-right, 0px)',
   }
 
-  const completeOnboarding = useCallback(() => {
-    localStorage.setItem('onboarded', '1')
-    navigate('/home', { replace: true })
-  }, [navigate])
+  const completeOnboarding = useCallback(async () => {
+    if (!currentUser?.uid) {
+      navigate('/auth?mode=signin', { replace: true })
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      await updateUser(currentUser.uid, { onboardingCompleted: true })
+      await refreshUserData()
+      navigate('/home', { replace: true })
+    } catch (err) {
+      console.error('Failed to complete onboarding', err)
+      setError('Kunne ikke gemme onboarding. Prøv igen.')
+    } finally {
+      setSaving(false)
+    }
+  }, [currentUser, navigate, refreshUserData])
 
   const goTo = useCallback(
     target => {
@@ -89,16 +110,16 @@ export default function Onboarding() {
     [totalSlides]
   )
 
-  const handleNext = useCallback(() => {
+  const handleNext = useCallback(async () => {
     if (isLastSlide) {
-      completeOnboarding()
+      await completeOnboarding()
       return
     }
     goTo(index + 1)
   }, [completeOnboarding, goTo, index, isLastSlide])
 
-  const handleSkip = useCallback(() => {
-    completeOnboarding()
+  const handleSkip = useCallback(async () => {
+    await completeOnboarding()
   }, [completeOnboarding])
 
   const handleDragEnd = useCallback(
@@ -128,6 +149,7 @@ export default function Onboarding() {
           <button
             type="button"
             onClick={handleSkip}
+            disabled={saving}
             className="text-sm font-medium text-[color:var(--text-muted)] transition-opacity hover:opacity-70 focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)] focus:ring-offset-2 focus:ring-offset-[color:var(--bg)]"
           >
             Spring over
@@ -198,10 +220,16 @@ export default function Onboarding() {
             type="button"
             whileTap={{ scale: 0.98 }}
             onClick={handleNext}
+            disabled={saving}
             className="w-full rounded-full bg-[color:var(--brand)] py-3 text-base font-semibold text-white shadow-[0_16px_40px_rgba(255,56,92,0.35)] transition-shadow hover:shadow-[0_20px_48px_rgba(255,56,92,0.45)] focus-visible:outline-none"
           >
-            {primaryLabel}
+            {saving ? 'Gemmer...' : primaryLabel}
           </motion.button>
+          {error && (
+            <p className="text-sm text-red-500 text-center">
+              {error}
+            </p>
+          )}
 
           <span className="sr-only" aria-live="polite">
             {progressText}

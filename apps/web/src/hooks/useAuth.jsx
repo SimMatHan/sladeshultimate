@@ -37,10 +37,11 @@ export function useAuth() {
    * @param {string} email - User email
    * @param {string} password - User password
    * @param {string} fullName - User's full name (required)
+   * @param {string} username - Unique username (required)
    * @param {string} [displayName] - Optional display name (defaults to fullName)
    * @returns {Promise<UserCredential>}
    */
-  const signUp = useCallback(async (email, password, fullName, displayName = null) => {
+  const signUp = useCallback(async (email, password, fullName, username, displayName = null) => {
     try {
       setError(null)
       
@@ -60,6 +61,7 @@ export function useAuth() {
         uid: user.uid,
         email: user.email,
         fullName,
+        username,
         displayName: displayName || fullName
       })
 

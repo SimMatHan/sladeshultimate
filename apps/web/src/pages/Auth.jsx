@@ -13,6 +13,7 @@ export default function Auth() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [username, setUsername] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -42,6 +43,7 @@ export default function Auth() {
     setEmail("");
     setPassword("");
     setFullName("");
+    setUsername("");
     const updated = new URLSearchParams(searchParams);
     updated.set("mode", nextMode);
     setSearchParams(updated, { replace: true });
@@ -54,12 +56,27 @@ export default function Auth() {
 
     try {
       if (mode === "signup") {
-        if (!fullName.trim()) {
+        const trimmedFullName = fullName.trim();
+        const normalizedUsername = username.trim().toLowerCase();
+        const usernamePattern = /^[a-z0-9._-]{3,20}$/;
+
+        if (!trimmedFullName) {
           setError("Fulde navn er påkrævet");
           setIsSubmitting(false);
           return;
         }
-        await signUp(email, password, fullName.trim());
+        if (!normalizedUsername) {
+          setError("Brugernavn er påkrævet");
+          setIsSubmitting(false);
+          return;
+        }
+        if (!usernamePattern.test(normalizedUsername)) {
+          setError("Brugernavn må kun indeholde a-z, 0-9, . _ - og være 3-20 tegn.");
+          setIsSubmitting(false);
+          return;
+        }
+
+        await signUp(email, password, trimmedFullName, normalizedUsername);
         // User will be automatically created in Firestore via useAuth hook
         // Navigate after successful signup
         navigate("/onboarding", { replace: true });
@@ -136,6 +153,18 @@ export default function Auth() {
               required
               disabled={isSubmitting}
               className="w-full px-4 py-3 rounded-md border border-line bg-surface text-ink placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+          )}
+
+          {mode === "signup" && (
+            <input
+              type="text"
+              placeholder="@brugernavn"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              disabled={isSubmitting}
+              className="w-full px-4 py-3 rounded-md border border-line bg-surface text-ink placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-50 disabled:cursor-not-allowed font-mono"
             />
           )}
 

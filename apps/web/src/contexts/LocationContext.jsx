@@ -231,7 +231,7 @@ export function LocationProvider({ children }) {
           ) {
             users.push({
               id: docSnap.id,
-              name: userData.fullName || userData.displayName || 'Ukendt',
+              name: userData.username || userData.fullName || userData.displayName || 'Ukendt',
               initials: userData.initials || '??',
               profileEmoji: userData.profileEmoji || null,
               avatarGradient: userData.avatarGradient || 'from-gray-400 to-gray-600',

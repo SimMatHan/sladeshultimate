@@ -250,6 +250,10 @@ async function refreshDrinkDayStatus(userRef, userData, now = new Date()) {
   return nextData
 }
 
+function normalizeUsername(username = '') {
+  return username.trim().toLowerCase()
+}
+
 /**
  * Create a new user document in Firestore
  * Called automatically when a user signs up
@@ -257,26 +261,30 @@ async function refreshDrinkDayStatus(userRef, userData, now = new Date()) {
  * @param {string} userData.uid - Firebase Auth UID
  * @param {string} userData.email - User email
  * @param {string} userData.fullName - User's full name (required)
+ * @param {string} userData.username - User's unique username (required)
  * @param {string} [userData.displayName] - Optional display name (defaults to fullName)
  * @returns {Promise<void>}
  */
-export async function createUser({ uid, email, fullName, displayName = null }) {
-  if (!uid || !email || !fullName) {
-    throw new Error('uid, email og fullName skal udfyldes for at oprette en bruger')
+export async function createUser({ uid, email, fullName, username, displayName = null }) {
+  if (!uid || !email || !fullName || !username) {
+    throw new Error('uid, email, fullName og username skal udfyldes for at oprette en bruger')
   }
 
   const userRef = doc(db, 'users', uid)
   const now = serverTimestamp()
   const initials = deriveInitials(fullName)
   const avatarGradient = generateAvatarGradient(uid)
+  const normalizedUsername = normalizeUsername(username)
 
   const userDoc = {
     uid,
     email,
     fullName,
+    username: normalizedUsername,
     displayName: displayName || fullName,
     initials,
     avatarGradient,
+    onboardingCompleted: false,
     totalDrinks: 0,
     drinkTypes: {},
     drinkVariations: {},
@@ -316,6 +324,9 @@ export async function updateUser(userId, updates) {
   // If fullName is being updated, also update initials
   if (updates.fullName) {
     updates.initials = deriveInitials(updates.fullName)
+  }
+  if (typeof updates.username === 'string') {
+    updates.username = normalizeUsername(updates.username)
   }
 
   await updateDoc(userRef, {

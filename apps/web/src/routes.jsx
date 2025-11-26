@@ -31,7 +31,7 @@ function useAuthGuard() {
 function SplashRouter() {
   const navigate = useNavigate()
   const { isSignedIn, loading } = useAuthGuard()
-  const { loading: userDataLoading } = useUserData()
+  const { userData, loading: userDataLoading } = useUserData()
   const [minDelayPassed, setMinDelayPassed] = useState(false)
   const [shouldExit, setShouldExit] = useState(false)
   
@@ -54,11 +54,10 @@ function SplashRouter() {
     
     // Wait for exit animation to complete (0.4s) before navigating
     const navigateTimer = setTimeout(() => {
-      // Check localStorage for onboarding status (can be updated later to use Firestore)
-      const isOnboarded = localStorage.getItem('onboarded') === '1'
-      
       if (!isSignedIn) return navigate('/auth?mode=signin', { replace: true })
-      if (!isOnboarded) return navigate('/onboarding', { replace: true })
+      if (!userData || !userData.onboardingCompleted) {
+        return navigate('/onboarding', { replace: true })
+      }
       return navigate('/home', { replace: true })
     }, 400) // Match exit animation duration
     
@@ -74,26 +73,24 @@ function SplashRouter() {
 
 function GuardOnboard({ children }) {
   const { isSignedIn, loading } = useAuthGuard()
+  const { userData, loading: userDataLoading } = useUserData()
   
-  if (loading) return <div>Indlæser...</div> // Or a loading component
+  if (loading || userDataLoading) return <div>Indlæser...</div> // Or a loading component
   if (!isSignedIn) return <Navigate to="/auth?mode=signin" replace />
   
-  // Check localStorage for onboarding status (can be updated later to use Firestore)
-  const isOnboarded = localStorage.getItem('onboarded') === '1'
-  if (isOnboarded) return <Navigate to="/home" replace />
+  if (userData?.onboardingCompleted) return <Navigate to="/home" replace />
   
   return children
 }
 
 function GuardApp({ children }) {
   const { isSignedIn, loading } = useAuthGuard()
+  const { userData, loading: userDataLoading } = useUserData()
   
-  if (loading) return <div>Indlæser...</div> // Or a loading component
+  if (loading || userDataLoading) return <div>Indlæser...</div> // Or a loading component
   if (!isSignedIn) return <Navigate to="/auth?mode=signin" replace />
   
-  // Check localStorage for onboarding status (can be updated later to use Firestore)
-  const isOnboarded = localStorage.getItem('onboarded') === '1'
-  if (!isOnboarded) return <Navigate to="/onboarding" replace />
+  if (!userData?.onboardingCompleted) return <Navigate to="/onboarding" replace />
   
   return children
 }

@@ -423,7 +423,7 @@ export async function getCheckedInChannelMembers(channelId) {
     const data = docSnap.data()
     return {
       id: docSnap.id,
-      name: data.fullName || data.displayName || 'Ukendt',
+      name: data.username || data.fullName || data.displayName || 'Ukendt',
       username: data.username || data.fullName || data.displayName || 'Ukendt',
       initials: data.initials || '',
       profileEmoji: data.profileEmoji || '🍹',
