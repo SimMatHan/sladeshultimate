@@ -81,6 +81,14 @@ notifications/{userId}/items/{notificationId}
    - Shows permission state, cached subscription summary, list of stored Firestore entries.
    - Buttons allow re-requesting permission, refreshing the subscription, sending a self-test (calls Vercel API), resetting the prompt flag, and reloading Firestore entries.
 
+5. **TopBar notifications overlay** (`components/TopBar.jsx`, `services/notificationService.js`):
+   - Displays all notifications for the logged-in user from `notifications/{userId}/items`, sorted by timestamp (newest first).
+   - Shows notifications across all channels (not filtered by active channel).
+   - Real-time updates via Firestore `onSnapshot` listener.
+   - Badge indicator shows unread count across all channels (red dot on bell icon).
+   - "Ryd alle" (Clear all) button deletes all notifications for the user from Firestore.
+   - When "Ryd alle" is clicked, all documents in `notifications/{userId}/items` are deleted in batches (Firestore batch limit is 500). The UI updates immediately via the subscription.
+
 ---
 
 ### 5. Vercel Push API
@@ -292,8 +300,13 @@ Example payload:
   Reads `users` (filtered by `checkInStatus`), writes `notifications/{uid}/items`, and updates `users/{uid}.lastUsageReminderAt`.
 
 **Firestore touch-points**
-- Reads: `users`, `channels`, `users/{uid}/pushSubscriptions`.
+- Reads: `users`, `channels`, `users/{uid}/pushSubscriptions`, `notifications/{uid}/items`.
 - Writes: `notifications/{uid}/items`, `users/{uid}.lastUsageReminderAt`.
+
+**Frontend UI components**
+- `TopBar.jsx` displays all notifications from `notifications/{userId}/items` (across all channels, sorted by time).
+- `notificationService.js` provides `subscribeToNotifications`, `getUnreadNotificationCount`, and `deleteAllNotifications`.
+- Badge shows unread count across all channels. "Ryd alle" button deletes all user notifications.
 
 **Manual testing checklist**
 - `check_in`  

@@ -12,6 +12,11 @@ import {
   markMessagesAsSeen,
   getUnreadMessageCount 
 } from "../services/messageService";
+import {
+  subscribeToNotifications,
+  getUnreadNotificationCount,
+  deleteAllNotifications
+} from "../services/notificationService";
 
 const DEFAULT_NOTIFICATIONS = [
   {
@@ -90,7 +95,7 @@ function ChatBubbleIcon(props) {
   );
 }
 
-function OverlayPanel({ open, onClose, title, description, items, variant = "notifications" }) {
+function OverlayPanel({ open, onClose, title, description, items, variant = "notifications", onClearAll }) {
   const getFallbackIcon = () => {
     if (variant === "messages") return <ChatBubbleIcon />;
     return <BellIcon />;
@@ -108,33 +113,50 @@ function OverlayPanel({ open, onClose, title, description, items, variant = "not
     >
       <div className="sheet-panel__body">
         {items.length > 0 ? (
-          <ul className="sheet-list flex flex-col gap-3">
-            {items.map((item) => {
-              const iconNode =
-                item.icon && typeof item.icon === "string" ? (
-                  <span>{item.icon}</span>
-                ) : (
-                  item.icon ?? getFallbackIcon()
+          <>
+            {onClearAll && (
+              <div className="px-6 pb-3">
+                <button
+                  type="button"
+                  onClick={onClearAll}
+                  className="text-xs font-medium px-3 py-1.5 rounded-lg transition-colors hover:opacity-80"
+                  style={{
+                    color: 'var(--muted)',
+                    backgroundColor: 'var(--line)'
+                  }}
+                >
+                  Ryd alle
+                </button>
+              </div>
+            )}
+            <ul className="sheet-list flex flex-col gap-3">
+              {items.map((item) => {
+                const iconNode =
+                  item.icon && typeof item.icon === "string" ? (
+                    <span>{item.icon}</span>
+                  ) : (
+                    item.icon ?? getFallbackIcon()
+                  );
+                return (
+                  <li key={item.id}>
+                    <div className="overlay-card">
+                      <div className="overlay-card__icon" aria-hidden="true">
+                        {iconNode}
+                      </div>
+                      <div className="overlay-card__body">
+                        <div className="overlay-card__title">{item.title}</div>
+                        <p className="overlay-card__text">{item.body}</p>
+                      </div>
+                      <div className="overlay-card__meta">
+                        {item.badge ? <span className="overlay-card__badge">{item.badge}</span> : null}
+                        {item.meta}
+                      </div>
+                    </div>
+                  </li>
                 );
-              return (
-                <li key={item.id}>
-                  <div className="overlay-card">
-                    <div className="overlay-card__icon" aria-hidden="true">
-                      {iconNode}
-                    </div>
-                    <div className="overlay-card__body">
-                      <div className="overlay-card__title">{item.title}</div>
-                      <p className="overlay-card__text">{item.body}</p>
-                    </div>
-                    <div className="overlay-card__meta">
-                      {item.badge ? <span className="overlay-card__badge">{item.badge}</span> : null}
-                      {item.meta}
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+              })}
+            </ul>
+          </>
         ) : (
           <div className="sheet-empty py-10 text-center text-xs">
             Intet her endnu. Kig snart igen!
@@ -480,11 +502,14 @@ export default function TopBar({
   const { userData } = useUserData();
   const { currentUser } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
+  const [notifications, setNotifications] = useState([]);
+  const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
+  const [isClearingNotifications, setIsClearingNotifications] = useState(false);
 
   // Use mock data in development, empty arrays in production (unless explicitly provided)
-  const notifications = USE_MOCK_DATA
+  const displayNotifications = USE_MOCK_DATA
     ? (propNotifications ?? DEFAULT_NOTIFICATIONS)
-    : (propNotifications ?? []);
+    : (propNotifications ?? notifications);
   const messages = USE_MOCK_DATA
     ? (propMessages ?? DEFAULT_MESSAGES)
     : (propMessages ?? []);
@@ -501,6 +526,55 @@ export default function TopBar({
       setDisplayChannelName(selectedChannel.name);
     }
   }, [channelsLoading, selectedChannel]);
+
+  // Load notifications from Firestore
+  useEffect(() => {
+    if (!currentUser || USE_MOCK_DATA) {
+      if (USE_MOCK_DATA) {
+        setNotifications(propNotifications ?? DEFAULT_NOTIFICATIONS);
+      } else {
+        setNotifications([]);
+      }
+      return;
+    }
+
+    const unsubscribe = subscribeToNotifications(currentUser.uid, (newNotifications) => {
+      setNotifications(newNotifications);
+    });
+
+    return unsubscribe;
+  }, [currentUser, propNotifications]);
+
+  // Track unread notification count (across all channels)
+  useEffect(() => {
+    if (!currentUser || USE_MOCK_DATA) {
+      setNotificationUnreadCount(0);
+      return;
+    }
+
+    let intervalId;
+    
+    const updateUnreadCount = async () => {
+      try {
+        const count = await getUnreadNotificationCount(currentUser.uid);
+        setNotificationUnreadCount(count);
+      } catch (error) {
+        console.error('Error getting unread notification count:', error);
+      }
+    };
+
+    // Update immediately
+    updateUnreadCount();
+    
+    // Update every 30 seconds
+    intervalId = setInterval(updateUnreadCount, 30000);
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [currentUser]);
 
   // Track unread message count
   useEffect(() => {
@@ -552,6 +626,23 @@ export default function TopBar({
       setUnreadCount(0);
     }
   };
+
+  // Handler for clearing all notifications
+  const handleClearAllNotifications = useCallback(async () => {
+    if (!currentUser || isClearingNotifications) return;
+    
+    setIsClearingNotifications(true);
+    try {
+      await deleteAllNotifications(currentUser.uid);
+      // Notifications will update automatically via the subscription
+      setNotificationUnreadCount(0);
+    } catch (error) {
+      console.error('Error clearing notifications:', error);
+      alert('Kunne ikke rydde notifikationer. Prøv igen.');
+    } finally {
+      setIsClearingNotifications(false);
+    }
+  }, [currentUser, isClearingNotifications]);
 
   const handleChannelButtonClick = async () => {
     if (activeOverlay === 'channels') {
@@ -699,7 +790,7 @@ export default function TopBar({
             aria-haspopup="dialog"
             aria-expanded={activeOverlay === 'notifications'}
             aria-label="Åbn notifikationer"
-            className="grid h-10 w-10 place-items-center rounded-full border transition-colors"
+            className="grid h-10 w-10 place-items-center rounded-full border transition-colors relative"
             style={{
               borderColor: activeOverlay === 'notifications' ? 'var(--brand, #FF385C)' : 'var(--line)',
               color: activeOverlay === 'notifications' ? 'var(--brand, #FF385C)' : 'var(--muted)'
@@ -732,14 +823,22 @@ export default function TopBar({
                 strokeLinecap="round"
               />
             </svg>
+            {notificationUnreadCount > 0 && (
+              <span 
+                className="absolute top-0 right-0 h-3 w-3 rounded-full bg-red-500 border-2"
+                style={{ borderColor: 'var(--surface)' }}
+                aria-label={`${notificationUnreadCount} nye notifikationer`}
+              />
+            )}
           </button>
           <OverlayPanel
             open={activeOverlay === 'notifications'}
             onClose={() => setActiveOverlay(null)}
             title="Notifikationer"
             description="Seneste opdateringer og beskeder"
-            items={notifications}
+            items={displayNotifications}
             variant="notifications"
+            onClearAll={displayNotifications.length > 0 && !USE_MOCK_DATA ? handleClearAllNotifications : undefined}
           />
         </div>
 
