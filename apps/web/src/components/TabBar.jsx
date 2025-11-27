@@ -9,6 +9,7 @@ const tabs = [
     additionalActivePaths: [
       (pathname) => pathname.startsWith('/drink/'),
       (pathname) => pathname === '/map' || pathname.startsWith('/map/'),
+      (pathname) => pathname === '/achievements',
     ],
   },
   { to: '/sladesh', label: 'Sladesh', Icon: SparkIcon },

@@ -12,6 +12,7 @@ import { getNextResetBoundary } from "../services/userService";
 import { CATEGORIES } from "../constants/drinks";
 import { useDrinkLog } from "../contexts/DrinkLogContext";
 import { MAP_TILE_LAYER_PROPS } from "../utils/mapTiles";
+import { ACHIEVEMENTS } from "../config/achievements";
 import "leaflet/dist/leaflet.css";
 
 const DEFAULT_MAP_CENTER = [55.6761, 12.5683];
@@ -97,6 +98,8 @@ export default function Home() {
 
   // Get values from context with fallbacks
   const userTotalDrinks = userData?.totalDrinks || 0;
+  const unlockedAchievements = Object.keys(userData?.achievements || {}).length;
+  const totalAchievements = ACHIEVEMENTS.length;
 
   const handleCheckInClick = useCallback(async () => {
     if (!currentUser) {
@@ -127,6 +130,10 @@ export default function Home() {
 
   const handleMapNavigate = () => {
     navigate("/map");
+  };
+
+  const handleAchievementsNavigate = () => {
+    navigate("/achievements");
   };
 
   const isCheckInDisabled = checkedIn || isCheckInBusy;
@@ -267,16 +274,35 @@ export default function Home() {
           </Card>
 
           <div className="grid grid-cols-2 gap-4">
-            <Card bare className="px-5 py-4">
+            <Card
+              bare
+              className="group px-5 py-4 cursor-pointer transition hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+              onClick={handleAchievementsNavigate}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  handleAchievementsNavigate();
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label="Åbn dine achievements"
+            >
               <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
                 Achievements
               </div>
               <div className="mt-2 text-lg font-semibold" style={{ color: 'var(--ink)' }}>
-                Coming soon... ✨
+                {unlockedAchievements}/{totalAchievements} låst op
               </div>
               <p className="mt-2 text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
-                Coming soon...
+                Se din progression og jagt de næste badges fra hjem-skærmen.
               </p>
+              <div className="mt-3 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--brand,#FF385C)]">
+                <span>Åbn achievements</span>
+                <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">
+                  →
+                </span>
+              </div>
             </Card>
 
             <Card

@@ -290,6 +290,8 @@ export async function createUser({ uid, email, fullName, username, displayName =
     drinkVariations: {},
     currentRunDrinkCount: 0,
     currentRunDrinkTypes: {},
+    achievements: {},
+    totalRunResets: 0,
     lastDrinkDayStart: null,
     lastDrinkAt: null,
     checkInStatus: false,
@@ -482,6 +484,31 @@ export async function removeDrink(userId, type, variation) {
   await updateDoc(userRef, updates)
 }
 
+export async function recordAchievementUnlock(userId, achievementId, hasUnlockedBefore = false) {
+  if (!userId || !achievementId) {
+    throw new Error('recordAchievementUnlock requires userId and achievementId')
+  }
+
+  const userRef = doc(db, 'users', userId)
+  const updates = {
+    updatedAt: serverTimestamp(),
+    lastActiveAt: serverTimestamp()
+  }
+
+  if (hasUnlockedBefore) {
+    updates[`achievements.${achievementId}.count`] = increment(1)
+    updates[`achievements.${achievementId}.lastUnlockedAt`] = serverTimestamp()
+  } else {
+    updates[`achievements.${achievementId}`] = {
+      count: 1,
+      firstUnlockedAt: serverTimestamp(),
+      lastUnlockedAt: serverTimestamp()
+    }
+  }
+
+  await updateDoc(userRef, updates)
+}
+
 /**
  * Add a check-in to user's checkIns subcollection
  * Updates user's check-in status and location
@@ -602,6 +629,7 @@ export async function resetCurrentRun(userId) {
     currentRunDrinkCount: 0,
     drinkVariations: {},
     currentLocation: null,
+    totalRunResets: increment(1),
     updatedAt: serverTimestamp(),
     lastActiveAt: serverTimestamp()
   })

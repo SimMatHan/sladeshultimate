@@ -82,6 +82,7 @@ export function DrinkLogProvider({ children }) {
         } else if (delta < 0) {
           await removeDrink(currentUser.uid, catId, variantName);
         }
+        await refreshUserData(true);
       } catch (error) {
         console.error("[drink-log] adjustVariantCount: Error updating drink in Firestore:", error);
         setVariantCounts((prev) => {
@@ -111,6 +112,7 @@ export function DrinkLogProvider({ children }) {
     try {
       setIsResetting(true);
       await resetCurrentRun(currentUser.uid);
+      await refreshUserData(true);
       return true;
     } catch (error) {
       console.error("[drink-log] resetRun: Error resetting run:", error);

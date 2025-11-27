@@ -1,0 +1,35 @@
+export const ACHIEVEMENTS = [
+  {
+    id: 'reset_confirmed',
+    type: 'total_resets',
+    threshold: 3,
+    title: 'Are you sure about that?',
+    description: 'Full run resets. Double-check before you smash that button next time.',
+    image: '/assets/achievements/areyousureaboutthat.gif',
+  },
+  {
+    id: 'obeerma',
+    type: 'total_drinks',
+    threshold: 15,
+    title: 'Obeerma',
+    description: 'Beers down the hatch. Change is brewing.',
+    image: '/assets/achievements/obeerma.png',
+  },
+  {
+    id: 'full_bender',
+    type: 'total_drinks',
+    threshold: 20,
+    title: 'Full Bender',
+    description: 'Twenty beers. Maybe switch to water for one round?',
+    image: '/assets/achievements/fullbender.gif',
+  },
+  {
+    id: 'like_fine_wine',
+    type: 'total_wine_drinks',
+    threshold: 5,
+    title: 'Like Fine Wine',
+    description: 'Five wines deep and still aging gracefully.',
+    image: '/assets/achievements/likefinewine.png',
+  },
+]
+

@@ -677,19 +677,21 @@ export default function TopBar({
 
   const isDrinkPage = location.pathname === '/drink' || location.pathname.startsWith('/drink/')
   const isMapPage = location.pathname.startsWith('/map')
+  const isAchievementsPage = location.pathname === '/achievements'
 
   const showBackButton =
     ['/admin', '/manage-channels', '/manage-profile'].includes(location.pathname) ||
+    isAchievementsPage ||
     isDrinkPage ||
     isMapPage
 
   const handleBackClick = useCallback(() => {
-    if (isDrinkPage || isMapPage) {
+    if (isDrinkPage || isMapPage || isAchievementsPage) {
       navigate('/home', { replace: true })
       return
     }
     navigate(-1)
-  }, [isDrinkPage, isMapPage, navigate])
+  }, [isDrinkPage, isMapPage, isAchievementsPage, navigate])
 
   return (
     <div className={`flex items-center gap-3 h-16 ${className}`}>

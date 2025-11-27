@@ -17,6 +17,8 @@ import {
   requestBrowserPermission
 } from '../push'
 import { DrinkLogProvider } from '../contexts/DrinkLogContext'
+import { AchievementProvider, useAchievements } from '../contexts/AchievementContext'
+import AchievementUnlockedOverlay from './AchievementUnlockedOverlay'
 import { CATEGORIES } from '../constants/drinks'
 
 const CHECK_IN_STORAGE_KEY = 'sladesh:checkedIn'
@@ -311,35 +313,35 @@ export default function AppShell() {
 
   return (
     <CheckInContext.Provider value={checkInContextValue}>
-      <div
-        className={`app-shell bg-[var(--bg)] text-[color:var(--text)] ${blockingOverlayVisible ? 'pointer-events-none select-none' : ''
-          }`}
-      >
-        <header className="topbar">
-          <div className="max-w-[480px] mx-auto px-4 h-full">
-            <TopBar
-              title={title}
-              subtitle={subtitle}
-            />
+      <DrinkLogProvider>
+        <AchievementProvider>
+          <div
+            className={`app-shell bg-[var(--bg)] text-[color:var(--text)] ${blockingOverlayVisible ? 'pointer-events-none select-none' : ''
+              }`}
+          >
+            <header className="topbar">
+              <div className="max-w-[480px] mx-auto px-4 h-full">
+                <TopBar
+                  title={title}
+                  subtitle={subtitle}
+                />
+              </div>
+            </header>
+
+            <main className="scroll-region">
+              <div className="mx-auto max-w-[480px] px-4 py-3">
+                <Outlet />
+              </div>
+            </main>
+
+            <nav className="bottombar">
+              <div className="max-w-[480px] mx-auto px-4 h-full">
+                <TabBar />
+              </div>
+            </nav>
           </div>
-        </header>
 
-        <main className="scroll-region">
-          <DrinkLogProvider>
-            <div className="mx-auto max-w-[480px] px-4 py-3">
-              <Outlet />
-            </div>
-          </DrinkLogProvider>
-        </main>
-
-        <nav className="bottombar">
-          <div className="max-w-[480px] mx-auto px-4 h-full">
-            <TabBar />
-          </div>
-        </nav>
-      </div>
-
-      {currentUser && !checkedIn && showCheckInGate && (
+          {currentUser && !checkedIn && showCheckInGate && (
         <div className="pointer-events-auto fixed inset-0 z-[1000] flex items-center justify-center bg-black/10 backdrop-blur-md px-6 text-center">
           <div className="w-full max-w-md rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-8 shadow-2xl">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[color:var(--brand,#FF385C)]/10 text-3xl">
@@ -362,9 +364,9 @@ export default function AppShell() {
             </button>
           </div>
         </div>
-      )}
+          )}
 
-      {showSuccessOverlay && (
+          {showSuccessOverlay && (
         <div className="pointer-events-auto fixed inset-0 z-[1100] flex items-center justify-center bg-black/20 backdrop-blur-md px-6 text-center">
           <div className="w-full max-w-sm rounded-3xl border border-emerald-200/60 bg-white/90 p-6 text-center shadow-2xl dark:border-emerald-400/40 dark:bg-slate-900/90">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-100 text-3xl text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300">
@@ -378,9 +380,9 @@ export default function AppShell() {
             </p>
           </div>
         </div>
-      )}
+          )}
 
-      {showChannelLoader && (
+          {showChannelLoader && (
         <div className="pointer-events-auto fixed inset-0 z-[1150] flex items-center justify-center bg-[color:var(--bg,#FFFFFF)]/85 backdrop-blur-sm px-6 text-center transition-opacity">
           <div className="flex flex-col items-center gap-4 rounded-3xl border border-[var(--line)] bg-[var(--surface)] px-8 py-6 shadow-2xl">
             <div
@@ -392,9 +394,9 @@ export default function AppShell() {
             </p>
           </div>
         </div>
-      )}
+          )}
 
-      {currentUser && showNotificationPrompt && (
+          {currentUser && showNotificationPrompt && (
         <div className="pointer-events-auto fixed inset-0 z-[1200] flex items-center justify-center bg-black/20 backdrop-blur-md px-6 text-center">
           <div className="w-full max-w-md rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-7 shadow-2xl">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[color:var(--brand,#FF385C)]/15 text-2xl">
@@ -432,7 +434,26 @@ export default function AppShell() {
             </div>
           </div>
         </div>
-      )}
+          )}
+
+          <AchievementOverlayPortal />
+        </AchievementProvider>
+      </DrinkLogProvider>
     </CheckInContext.Provider>
+  )
+}
+
+function AchievementOverlayPortal() {
+  const { currentUnlockedAchievement, isAchievementOverlayOpen, closeAchievementOverlay } = useAchievements()
+
+  if (!currentUnlockedAchievement || !isAchievementOverlayOpen) {
+    return null
+  }
+
+  return (
+    <AchievementUnlockedOverlay
+      achievement={currentUnlockedAchievement}
+      onClose={closeAchievementOverlay}
+    />
   )
 }

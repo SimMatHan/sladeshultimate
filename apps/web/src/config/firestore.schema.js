@@ -26,6 +26,8 @@ export const USER_SCHEMA = {
   drinkTypes: 'object',       // Lifetime cumulative { "beer": 10, "shot": 5, "cocktail": 3 } (never resets)
   drinkVariations: 'object',  // Per-run variations { "beer": { "Lager": 5, "IPA": 3 }, "cocktail": { "Mojito": 2 } } (resets at 10:00)
   currentRunDrinkCount: 'number', // Per-run counter (resets at 10:00)
+  achievements: 'map',        // { [achievementId]: { count: number, firstUnlockedAt: timestamp, lastUnlockedAt: timestamp } }
+  totalRunResets: 'number',   // Total times the user has hit the run reset button
   lastDrinkAt: 'timestamp | null', // Last drink timestamp for recent drinks ordering
   checkInStatus: 'boolean',   // Current check-in state
   lastCheckIn: 'timestamp',   // Last check-in timestamp
