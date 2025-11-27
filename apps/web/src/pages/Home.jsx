@@ -298,7 +298,7 @@ export default function Home() {
                 Se din progression og jagt de næste badges fra hjem-skærmen.
               </p>
               <div className="mt-3 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--brand,#FF385C)]">
-                <span>Åbn achievements</span>
+                <span>Achievements</span>
                 <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">
                   →
                 </span>
@@ -356,13 +356,32 @@ export default function Home() {
               </div>
             </Card>
 
-            <Card bare className="px-5 py-4">
-              <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-                Stats
+            <Card
+              bare
+              className="group relative px-5 py-4 cursor-pointer transition hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent overflow-hidden"
+              onClick={() => setShowResetConfirm(true)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setShowResetConfirm(true);
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label="Nulstil løb"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-red-400/5 via-red-600/15 to-red-800/10 opacity-100" />
+              <div className="relative z-10">
+                <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+                  Reset Run
+                </div>
+                <div className="mt-3 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-red-600 dark:text-red-500">
+                  <span>Nulstil nu</span>
+                  <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">
+                    →
+                  </span>
+                </div>
               </div>
-              <p className="mt-3 text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
-                Coming soon...
-              </p>
             </Card>
           </div>
         </div>
@@ -382,8 +401,15 @@ export default function Home() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
           >
+            <div className="mb-4 flex justify-center">
+              <img
+                src="/assets/achievements/areyousureaboutthat.gif"
+                alt="Are you sure about that?"
+                className="max-h-48 w-auto rounded-lg"
+              />
+            </div>
             <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-              Vil du nulstille dagens drikke?
+              Vil du nulstille dit nuværende løb?
             </h3>
             <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
               Dette nulstiller dit nuværende løb til 0. Handlingen kan ikke fortrydes.
