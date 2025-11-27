@@ -681,12 +681,20 @@ export default function TopBar({
     ['/admin', '/manage-channels', '/manage-profile'].includes(location.pathname) ||
     isDrinkPage
 
+  const handleBackClick = useCallback(() => {
+    if (isDrinkPage) {
+      navigate('/home', { replace: true })
+      return
+    }
+    navigate(-1)
+  }, [isDrinkPage, navigate])
+
   return (
     <div className={`flex items-center gap-3 h-16 ${className}`}>
       {showBackButton ? (
         <button
           type="button"
-          onClick={() => navigate(-1)}
+          onClick={handleBackClick}
           className="grid h-12 w-12 place-items-center rounded-2xl border text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
           style={{ borderColor: 'var(--line)', backgroundColor: 'var(--surface)', color: 'var(--muted)' }}
           aria-label="Gå tilbage"
