@@ -675,9 +675,15 @@ export default function TopBar({
 
   const shouldShowChannelButton = Boolean(selectedChannel || displayChannelName);
 
+  const isDrinkPage = location.pathname === '/drink' || location.pathname.startsWith('/drink/')
+
+  const showBackButton =
+    ['/admin', '/manage-channels', '/manage-profile'].includes(location.pathname) ||
+    isDrinkPage
+
   return (
     <div className={`flex items-center gap-3 h-16 ${className}`}>
-      {['/admin', '/manage-channels', '/manage-profile'].includes(location.pathname) ? (
+      {showBackButton ? (
         <button
           type="button"
           onClick={() => navigate(-1)}

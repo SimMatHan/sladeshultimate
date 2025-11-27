@@ -1,28 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import Card from "../components/Card";
 import { useLocation } from "../contexts/LocationContext";
 import { useCheckInGate } from "../contexts/CheckInContext";
 import { useUserData } from "../contexts/UserDataContext";
 import { useAuth } from "../hooks/useAuth";
-import { useDrinkVariants } from "../hooks/useDrinkVariants";
-import { addDrink, removeDrink, getNextResetBoundary, resetCurrentRun } from "../services/userService";
-import { incrementDrinkCount } from "../services/statsService";
+import { getNextResetBoundary } from "../services/userService";
 import { CATEGORIES, CATEGORY_THEMES, FALLBACK_THEME } from "../constants/drinks";
-
-const createZeroCounts = (variantsMap) =>
-  Object.fromEntries(
-    Object.entries(variantsMap).map(([catId, items]) => [
-      catId,
-      Object.fromEntries(items.map((item) => [item.name, 0])),
-    ])
-  );
-
-const buildCategoryCounts = (items, source = {}) =>
-  items.reduce((acc, item) => {
-    acc[item.name] = source[item.name] || 0;
-    return acc;
-  }, {});
+import { useDrinkLog } from "../contexts/DrinkLogContext";
 
 function Countdown({ target, onExpire }) {
   const [remaining, setRemaining] = useState(() =>
@@ -64,77 +50,24 @@ function Countdown({ target, onExpire }) {
 }
 
 export default function Home() {
+  const navigate = useNavigate();
   const { updateLocation, userLocation } = useLocation();
   const { currentUser } = useAuth();
   const { checkedIn, checkIn: globalCheckIn, checkOut: handleCheckOut } = useCheckInGate();
-  const { userData, refreshUserData } = useUserData();
-  const { variantsByCategory } = useDrinkVariants();
+  const { userData } = useUserData();
+  const { currentRunDrinkCount, resetRun, isResetting } = useDrinkLog();
   const [expiresAt, setExpiresAt] = useState(() => getNextResetBoundary(new Date()));
   const [selected, setSelected] = useState("beer");
-  const [sheetFor, setSheetFor] = useState(null);
-  const [isSheetVisible, setIsSheetVisible] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isCheckInBusy, setIsCheckInBusy] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // Get values from context with fallbacks
   const userTotalDrinks = userData?.totalDrinks || 0;
-  const drinkVariations = userData?.drinkVariations || {};
-
-  const [variantCounts, setVariantCounts] = useState(() =>
-    createZeroCounts(variantsByCategory)
-  );
-  
-  // Calculate currentRunDrinkCount from local variantCounts instead of waiting for context
-  // This prevents reload/buffering when logging drinks
-  const currentRunDrinkCount = useMemo(() => {
-    return Object.values(variantCounts).reduce((total, category) => {
-      return total + Object.values(category).reduce((sum, count) => sum + count, 0);
-    }, 0);
-  }, [variantCounts]);
-
-  // Update variantCounts when variantsByCategory changes or when userData is loaded/updated
-  useEffect(() => {
-    if (!variantsByCategory) return;
-
-    setVariantCounts((prev) => {
-      const next = {};
-      Object.entries(variantsByCategory).forEach(([catId, items]) => {
-        // Hydrate from userData.drinkVariations if available, otherwise keep previous or use zero counts
-        if (userData?.drinkVariations?.[catId]) {
-          const categoryVariations = userData.drinkVariations[catId] || {};
-          next[catId] = buildCategoryCounts(items, categoryVariations);
-        } else {
-          // Keep previous counts if no data available yet
-          const previousCategory = prev[catId] ?? {};
-          next[catId] = buildCategoryCounts(items, previousCategory);
-        }
-      });
-      return next;
-    });
-  }, [variantsByCategory, userData]);
-
-  const categoryTotals = useMemo(
-    () =>
-      Object.fromEntries(
-        CATEGORIES.map((cat) => {
-          const variants = variantCounts[cat.id] ?? {};
-          const sum = Object.values(variants).reduce((acc, value) => acc + value, 0);
-          return [cat.id, sum];
-        })
-      ),
-    [variantCounts]
-  );
-
-  const total = useMemo(
-    () => Object.values(categoryTotals).reduce((sum, value) => sum + value, 0),
-    [categoryTotals]
-  );
 
   // slider helpers
   const railRef = useRef(null);
   const cardRefs = useRef({});
   const scrollFrame = useRef(null);
-  const closeTimeout = useRef(null);
 
   const centerCard = (id) => {
     const rail = railRef.current;
@@ -194,160 +127,31 @@ export default function Home() {
       console.error("User not authenticated");
       return;
     }
-    if (checkedIn) return;
+    if (checkedIn || isCheckInBusy) return;
 
     try {
-      setIsSaving(true);
+      setIsCheckInBusy(true);
       const success = await globalCheckIn();
       if (success) {
         setExpiresAt(getNextResetBoundary(new Date()));
       }
     } finally {
-      setIsSaving(false);
+      setIsCheckInBusy(false);
     }
-  }, [checkedIn, currentUser, globalCheckIn]);
+  }, [checkedIn, currentUser, globalCheckIn, isCheckInBusy]);
 
-  const adjustVariantCount = async (catId, variantName, delta) => {
-    if (!currentUser) {
-      console.log("[drink-log] adjustVariantCount: No current user, aborting");
-      return;
-    }
-
-    console.log("[drink-log] adjustVariantCount: Starting", { catId, variantName, delta });
-
-    // Optimistically update local state
-    setVariantCounts((prev) => {
-      const category = prev[catId] ?? {};
-      const current = category[variantName] ?? 0;
-      const next = Math.max(0, current + delta);
-      if (next === current) {
-        console.log("[drink-log] adjustVariantCount: No change needed, skipping");
-        return prev;
-      }
-
-      console.log("[drink-log] adjustVariantCount: Optimistic update", { 
-        catId, 
-        variantName, 
-        from: current, 
-        to: next 
-      });
-
-      return {
-        ...prev,
-        [catId]: {
-          ...category,
-          [variantName]: next,
-        },
-      };
-    });
-
-    try {
-      setIsSaving(true);
-      console.log("[drink-log] adjustVariantCount: Saving to Firestore...");
-
-      // Call appropriate service function based on delta
-      // The service function handles Firestore increment
-      // We update local state optimistically, so no need to refresh context
-      if (delta > 0) {
-        await addDrink(currentUser.uid, catId, variantName);
-        console.log("[drink-log] adjustVariantCount: Drink added successfully");
-      } else if (delta < 0) {
-        await removeDrink(currentUser.uid, catId, variantName);
-        console.log("[drink-log] adjustVariantCount: Drink removed successfully");
-      }
-
-      // NOTE: We intentionally do NOT call refreshUserData() here
-      // This prevents the loading state from being set, which causes GuardApp
-      // to show a loading screen and remount the entire app
-      // The local state (variantCounts) is already updated optimistically,
-      // and currentRunDrinkCount is calculated from variantCounts
-      // Firestore sync happens in the background, and notifications are
-      // handled server-side by onUserActivityUpdated Firebase function
-
-    } catch (error) {
-      console.error("[drink-log] adjustVariantCount: Error updating drink in Firestore:", error);
-      // Revert the optimistic update if save failed
-      setVariantCounts((prev) => {
-        const category = prev[catId] ?? {};
-        const current = category[variantName] ?? 0;
-        console.log("[drink-log] adjustVariantCount: Reverting optimistic update", {
-          catId,
-          variantName,
-          from: current,
-          to: Math.max(0, current - delta)
-        });
-        return {
-          ...prev,
-          [catId]: {
-            ...category,
-            [variantName]: Math.max(0, current - delta),
-          },
-        };
-      });
-    } finally {
-      setIsSaving(false);
-      console.log("[drink-log] adjustVariantCount: Complete");
-    }
-  };
-
-  const handleResetRun = async () => {
-    if (!currentUser) {
-      console.log("[drink-log] handleResetRun: No current user, aborting");
-      return;
-    }
-    
-    console.log("[drink-log] handleResetRun: Starting reset");
-    
-    // Optimistically reset local state first
-    setVariantCounts(createZeroCounts(variantsByCategory));
-    
-    try {
-      setIsSaving(true);
-      await resetCurrentRun(currentUser.uid);
-      console.log("[drink-log] handleResetRun: Reset successful in Firestore");
-
-      // NOTE: We intentionally do NOT call refreshUserData() here
-      // This prevents the loading state from being set, which causes GuardApp
-      // to show a loading screen and remount the entire app
-      // The local state (variantCounts) is already reset optimistically,
-      // and currentRunDrinkCount is calculated from variantCounts
-
-      setShowResetConfirm(false);
-    } catch (error) {
-      console.error("[drink-log] handleResetRun: Error resetting run:", error);
-      // On error, refresh from context to get correct state
-      // This is acceptable since it's an error case
-      await refreshUserData();
-    } finally {
-      setIsSaving(false);
-      console.log("[drink-log] handleResetRun: Complete");
-    }
-  };
-
-  const closeSheet = () => {
-    setIsSheetVisible(false);
-    if (closeTimeout.current) clearTimeout(closeTimeout.current);
-    closeTimeout.current = setTimeout(() => {
-      setSheetFor(null);
-    }, 300);
-  };
-
-  const openSheet = (id) => {
+  const handleSliderItemClick = (id) => {
     if (id === "reset") {
       setShowResetConfirm(true);
       return;
     }
     setSelected(id);
-    setSheetFor(id);
-    requestAnimationFrame(() => setIsSheetVisible(true));
+    navigate(`/drink/${id}`);
   };
-
-  // ... (keep closeSheet, centerCard, etc.)
 
   const selIndex = sliderItems.findIndex((c) => c.id === selected);
   const selectedItem = sliderItems[selIndex] || sliderItems[0];
-  const sheetCat = sheetFor ? CATEGORIES.find((c) => c.id === sheetFor) : null;
-  const sheetItems = sheetFor ? variantsByCategory[sheetFor] ?? [] : [];
+  const isCheckInDisabled = checkedIn || isCheckInBusy;
 
   // Update expiresAt when it expires to show the next reset boundary
   useEffect(() => {
@@ -375,17 +179,17 @@ export default function Home() {
           <div className="grid grid-cols-2 gap-4">
             <Card
               bare
-              className={`px-5 py-4 transition-colors ${checkedIn ? "cursor-default" : "cursor-pointer"}`}
+              className={`px-5 py-4 transition-colors ${isCheckInDisabled ? "cursor-default" : "cursor-pointer"}`}
               style={checkedIn ? {
                 borderColor: 'rgba(16,185,129,0.6)',
                 backgroundColor: 'color-mix(in srgb, rgb(16,185,129) 12%, var(--surface) 88%)'
               } : {}}
               role="button"
-              tabIndex={checkedIn ? -1 : 0}
-              aria-disabled={checkedIn}
-              onClick={!checkedIn ? handleCheckInClick : undefined}
+              tabIndex={isCheckInDisabled ? -1 : 0}
+              aria-disabled={isCheckInDisabled}
+              onClick={!isCheckInDisabled ? handleCheckInClick : undefined}
               onKeyDown={(event) => {
-                if (checkedIn) return;
+                if (isCheckInDisabled) return;
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
                   event.currentTarget.click();
@@ -462,7 +266,7 @@ export default function Home() {
               <div
                 key={item.id}
                 ref={(n) => (cardRefs.current[item.id] = n)}
-                onClick={() => openSheet(item.id)}
+                onClick={() => handleSliderItemClick(item.id)}
                 role="button"
                 tabIndex={0}
                 className={`snap-center shrink-0 rounded-[28px] transition active:scale-[0.98] outline-none focus:outline-none ${item.id === selected ? "opacity-100" : "opacity-80"
@@ -510,105 +314,6 @@ export default function Home() {
         </div>
 
 
-        {sheetFor && (
-          <div className="fixed inset-0 z-40 flex items-end justify-center">
-            <div
-              className={`absolute inset-0 bg-black/40 transition-opacity duration-200 ${isSheetVisible ? "opacity-100" : "opacity-0"
-                }`}
-              onClick={closeSheet}
-            />
-            <div className="relative z-50 w-full">
-              <div
-                className={`drink-selector-overlay relative rounded-t-[32px] shadow-2xl transition-transform duration-300 ease-out ${isSheetVisible ? "translate-y-0" : "translate-y-full"
-                  }`}
-                style={{ height: "75vh" }}
-              >
-                <div className="h-full overflow-hidden pt-6">
-                  <div className="px-6">
-                    <div className="flex items-center gap-2 text-lg font-semibold" style={{ color: 'var(--ink)' }}>
-                      <span className="text-2xl leading-none">
-                        {sheetCat?.icon ?? "🍹"}
-                      </span>
-                      <span>{sheetCat?.name ?? "Drinks"}</span>
-                    </div>
-                    <div className="text-xs" style={{ color: 'var(--muted)' }}>
-                      Vælg din favoritvariation
-                    </div>
-                  </div>
-                  <div className="mt-5 h-[calc(100%-92px)] overflow-y-auto px-6 pb-[calc(env(safe-area-inset-bottom,0px)+40px)]">
-                    <div className="grid gap-3">
-                      {sheetItems.map((item) => {
-                        const count = variantCounts[sheetFor]?.[item.name] ?? 0;
-                        return (
-                          <div
-                            key={item.name}
-                            className="rounded-2xl border p-4 shadow-sm"
-                            style={{
-                              borderColor: 'var(--line)',
-                              backgroundColor: 'var(--surface)'
-                            }}
-                          >
-                            <div className="flex items-center justify-between gap-4">
-                              <div>
-                                <div className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
-                                  {item.name}
-                                </div>
-                                <div className="mt-1 text-xs" style={{ color: 'var(--muted)' }}>
-                                  {item.description}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => adjustVariantCount(sheetFor, item.name, -1)}
-                                  disabled={count === 0}
-                                  className="flex h-9 w-9 items-center justify-center rounded-full text-base font-semibold disabled:opacity-40"
-                                  style={{
-                                    backgroundColor: 'var(--line)',
-                                    color: 'var(--ink)'
-                                  }}
-                                  aria-label={`Fjern en ${item.name}`}
-                                >
-                                  &minus;
-                                </button>
-                                <span className="min-w-[28px] text-center text-base font-semibold" style={{ color: 'var(--ink)' }}>
-                                  {count}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => adjustVariantCount(sheetFor, item.name, 1)}
-                                  className="flex h-9 w-9 items-center justify-center rounded-full text-base font-semibold"
-                                  style={{
-                                    backgroundColor: 'var(--brand)',
-                                    color: 'var(--brand-ink)'
-                                  }}
-                                  aria-label={`Tilføj en ${item.name}`}
-                                >
-                                  +
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                      {sheetItems.length === 0 && (
-                        <div
-                          className="rounded-2xl border border-dashed p-4 text-center text-sm"
-                          style={{
-                            borderColor: 'var(--line)',
-                            color: 'var(--muted)'
-                          }}
-                        >
-                          Variationer på vej.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </motion.div>
 
       {/* Reset Confirmation Dialog */}
@@ -640,11 +345,16 @@ export default function Home() {
               </button>
               <button
                 type="button"
-                onClick={handleResetRun}
-                disabled={isSaving}
+                onClick={async () => {
+                  const success = await resetRun();
+                  if (success) {
+                    setShowResetConfirm(false);
+                  }
+                }}
+                disabled={isResetting}
                 className="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-50"
               >
-                {isSaving ? "Nulstiller..." : "Bekræft"}
+                {isResetting ? "Nulstiller..." : "Bekræft"}
               </button>
             </div>
           </motion.div>

@@ -16,6 +16,8 @@ import {
   markPermissionPromptShown,
   requestBrowserPermission
 } from '../push'
+import { DrinkLogProvider } from '../contexts/DrinkLogContext'
+import { CATEGORIES } from '../constants/drinks'
 
 const CHECK_IN_STORAGE_KEY = 'sladesh:checkedIn'
 const CHECK_IN_GATE_ACTIVATED_KEY = 'sladesh:checkInGateActivated'
@@ -57,6 +59,11 @@ export default function AppShell() {
   })
   const successOverlayTimeout = useRef(null)
   const checkInGateTimer = useRef(null)
+  const drinkMatch = location.pathname.match(/^\/drink\/([^/]+)/)
+  const activeCategoryId = drinkMatch ? drinkMatch[1] : null
+  const activeCategory = activeCategoryId
+    ? CATEGORIES.find((category) => category.id === activeCategoryId)
+    : null
   const pageInfo = PAGE_TITLES[location.pathname] || { title: 'Sladesh', subtitle: null }
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(false)
   const [isRequestingNotifications, setIsRequestingNotifications] = useState(false)
@@ -157,13 +164,25 @@ export default function AppShell() {
   }, [location.pathname, currentUser])
 
   // For home page, set title to "Home" and subtitle to username
-  const title = pageInfo.title === null && location.pathname === '/home'
-    ? 'Hjem'
-    : pageInfo.title
+  const title = (() => {
+    if (activeCategory) {
+      return activeCategory.name
+    }
+    if (pageInfo.title === null && location.pathname === '/home') {
+      return 'Hjem'
+    }
+    return pageInfo.title
+  })()
 
-  const subtitle = pageInfo.subtitle === null && location.pathname === '/home'
-    ? (username || 'Brugernavn')
-    : pageInfo.subtitle
+  const subtitle = (() => {
+    if (activeCategory) {
+      return 'Variationer'
+    }
+    if (pageInfo.subtitle === null && location.pathname === '/home') {
+      return username || 'Brugernavn'
+    }
+    return pageInfo.subtitle
+  })()
 
   const persistCheckedIn = useCallback((nextValue) => {
     setCheckedIn(nextValue)
@@ -306,9 +325,11 @@ export default function AppShell() {
         </header>
 
         <main className="scroll-region">
-          <div className="mx-auto max-w-[480px] px-4 py-3">
-            <Outlet />
-          </div>
+          <DrinkLogProvider>
+            <div className="mx-auto max-w-[480px] px-4 py-3">
+              <Outlet />
+            </div>
+          </DrinkLogProvider>
         </main>
 
         <nav className="bottombar">

@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom'
 
 const tabs = [
-  { to: '/home', label: 'Home', Icon: HomeIcon, end: true },
+  { to: '/home', label: 'Home', Icon: HomeIcon, end: true, additionalActivePaths: [(pathname) => pathname.startsWith('/drink/')] },
   { to: '/leaderboard', label: 'Score', Icon: TrophyIcon },
   { to: '/sladesh', label: 'Sladesh', Icon: SparkIcon },
   { to: '/map', label: 'Map', Icon: MapIcon },
@@ -17,7 +17,12 @@ function Item({ to, label, Icon, end, additionalActivePaths = [] }) {
       end={end}
       aria-label={label}
       className={({ isActive }) => {
-        const isAdditionalActive = additionalActivePaths.some(path => location.pathname === path)
+        const isAdditionalActive = additionalActivePaths.some((extra) => {
+          if (typeof extra === 'function') {
+            return extra(location.pathname)
+          }
+          return location.pathname === extra
+        })
         const shouldBeActive = isActive || isAdditionalActive
         return `flex flex-col items-center justify-center text-xs transition-colors ${
           shouldBeActive 

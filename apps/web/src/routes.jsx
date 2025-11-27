@@ -18,6 +18,7 @@ import ManageChannels from './pages/ManageChannels'
 import ManageProfile from './pages/ManageProfile'
 import AdminPortal from './pages/AdminPortal'
 import NotificationsDebug from './pages/NotificationsDebug'
+import DrinkVariations from './pages/DrinkVariations'
 import { isAdminUser } from './config/admin'
 import useDisplayMode from './hooks/useDisplayMode'
 import useStandaloneOverscrollBlock from './hooks/useStandaloneOverscrollBlock'
@@ -166,6 +167,7 @@ export default function RoutesView() {
         <Route path="sladesh" element={<Sladesh />} />
         <Route path="map" element={<Map />} />
         <Route path="more" element={<More />} />
+        <Route path="drink/:categoryId" element={<DrinkVariations />} />
         <Route path="manage-channels" element={<ManageChannels />} />
         <Route path="manage-profile" element={<ManageProfile />} />
         <Route
