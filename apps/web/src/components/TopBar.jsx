@@ -676,18 +676,20 @@ export default function TopBar({
   const shouldShowChannelButton = Boolean(selectedChannel || displayChannelName);
 
   const isDrinkPage = location.pathname === '/drink' || location.pathname.startsWith('/drink/')
+  const isMapPage = location.pathname.startsWith('/map')
 
   const showBackButton =
     ['/admin', '/manage-channels', '/manage-profile'].includes(location.pathname) ||
-    isDrinkPage
+    isDrinkPage ||
+    isMapPage
 
   const handleBackClick = useCallback(() => {
-    if (isDrinkPage) {
+    if (isDrinkPage || isMapPage) {
       navigate('/home', { replace: true })
       return
     }
     navigate(-1)
-  }, [isDrinkPage, navigate])
+  }, [isDrinkPage, isMapPage, navigate])
 
   return (
     <div className={`flex items-center gap-3 h-16 ${className}`}>

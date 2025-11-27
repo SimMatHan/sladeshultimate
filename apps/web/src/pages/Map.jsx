@@ -4,6 +4,7 @@ import { useLocation } from '../contexts/LocationContext'
 import { useChannel } from '../hooks/useChannel'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { MAP_TILE_LAYER_PROPS } from '../utils/mapTiles'
 
 // Fix for default marker icons in react-leaflet
 delete L.Icon.Default.prototype._getIconUrl
@@ -368,12 +369,7 @@ export default function MapPage() {
                 }}
               />
             ))}
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-              url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
-              subdomains="abcd"
-              maxZoom={19}
-            />
+            <TileLayer {...MAP_TILE_LAYER_PROPS} />
           </MapContainer>
       
       {userLocation && (
