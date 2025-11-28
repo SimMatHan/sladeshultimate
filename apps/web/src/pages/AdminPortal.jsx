@@ -17,6 +17,7 @@ import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { isAdminUser } from "../config/admin";
 import { CATEGORIES } from "../constants/drinks";
+import { resetAchievements } from "../services/userService";
 
 const DRINK_CATEGORIES = CATEGORIES.map(({ id, name }) => ({
   value: id,
@@ -83,6 +84,8 @@ export default function AdminPortal() {
   const [editingId, setEditingId] = useState(null);
   const [editingForm, setEditingForm] = useState(initialVariationState);
   const [isUpdatingVariation, setIsUpdatingVariation] = useState(false);
+  const [achievementFeedback, setAchievementFeedback] = useState(null);
+  const [isResettingAchievements, setIsResettingAchievements] = useState(false);
 
   const handleVariationChange = (field) => (event) => {
     setVariationForm((prev) => ({
@@ -495,9 +498,74 @@ export default function AdminPortal() {
     }
   };
 
+  const handleResetAchievements = async () => {
+    if (!currentUser || !isAdmin) {
+      setAchievementFeedback({
+        status: "error",
+        message: "Du skal være logget ind som admin.",
+      });
+      return;
+    }
+
+    if (!window.confirm("Er du sikker på, at du vil nulstille alle achievement-tællere? Dette kan ikke fortrydes.")) {
+      return;
+    }
+
+    setIsResettingAchievements(true);
+    setAchievementFeedback(null);
+    try {
+      await resetAchievements(currentUser.uid);
+      setAchievementFeedback({
+        status: "success",
+        message: "Alle achievement-tællere er nulstillet.",
+      });
+    } catch (error) {
+      console.error("[AdminPortal] Failed to reset achievements", error);
+      setAchievementFeedback({
+        status: "error",
+        message: error.message || "Kunne ikke nulstille achievements.",
+      });
+    } finally {
+      setIsResettingAchievements(false);
+    }
+  };
+
   return (
     <Page title="Adminportal">
       <div className="flex flex-col gap-6">
+        <section className="space-y-3">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
+              Dev Tools
+            </div>
+            <p className="text-sm text-[color:var(--muted)]">
+              Dev-only funktioner til test og rydning.
+            </p>
+          </div>
+          <Card className="space-y-4 px-5 py-6">
+            <FeedbackBanner
+              feedback={achievementFeedback}
+              onDismiss={() => setAchievementFeedback(null)}
+            />
+            <div className="space-y-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
+                Achievements
+              </div>
+              <p className="text-xs text-[color:var(--muted)]">
+                Nulstil alle achievement-tællere for din bruger. Dette fjerner alle achievements og starter forfra.
+              </p>
+              <button
+                type="button"
+                onClick={handleResetAchievements}
+                disabled={isResettingAchievements || !isAdmin}
+                className="rounded-2xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 shadow-sm transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isResettingAchievements ? "Nulstiller..." : "Nulstil Achievement-tællere"}
+              </button>
+            </div>
+          </Card>
+        </section>
+
         <section className="space-y-3">
           <div>
             <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">

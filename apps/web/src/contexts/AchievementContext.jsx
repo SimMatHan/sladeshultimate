@@ -3,7 +3,7 @@ import { ACHIEVEMENTS } from '../config/achievements'
 import { useDrinkLog } from './DrinkLogContext'
 import { useUserData } from './UserDataContext'
 import { useAuth } from '../hooks/useAuth'
-import { recordAchievementUnlock } from '../services/userService'
+import { recordAchievementUnlock, getLatestDrinkDayBoundary } from '../services/userService'
 
 const AchievementContext = createContext(null)
 
@@ -14,8 +14,9 @@ export function AchievementProvider({ children }) {
   const [overlayQueue, setOverlayQueue] = useState([])
   const [currentUnlockedAchievement, setCurrentUnlockedAchievement] = useState(null)
   const [isAchievementOverlayOpen, setIsAchievementOverlayOpen] = useState(false)
-  const processedThisRunRef = useRef(new Set())
-  const processedTotalsRef = useRef(new Set())
+  // Track last processed value for each achievement to detect threshold crossings
+  const lastProcessedValuesRef = useRef({})
+  const lastRunDrinkCountRef = useRef(0)
 
   const achievementsByType = useMemo(() => {
     return ACHIEVEMENTS.reduce((acc, achievement) => {
@@ -27,14 +28,47 @@ export function AchievementProvider({ children }) {
     }, {})
   }, [])
 
+  // Helper to normalize timestamp to Date
+  const normalizeToDate = useCallback((value) => {
+    if (!value) return null
+    if (value instanceof Date) return value
+    if (typeof value.toDate === 'function') {
+      return value.toDate()
+    }
+    if (typeof value.seconds === 'number') {
+      return new Date(value.seconds * 1000)
+    }
+    const parsed = new Date(value)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }, [])
+
+  // Check if achievement was unlocked today (using drink day boundary)
+  const wasUnlockedToday = useCallback((achievementId) => {
+    const achievementData = userData?.achievements?.[achievementId]
+    if (!achievementData?.lastUnlockedAt) {
+      return false
+    }
+
+    const lastUnlockedDate = normalizeToDate(achievementData.lastUnlockedAt)
+    if (!lastUnlockedDate) {
+      return false
+    }
+
+    const now = new Date()
+    const latestDrinkDayBoundary = getLatestDrinkDayBoundary(now)
+    
+    // Check if last unlock was after the current drink day boundary
+    return lastUnlockedDate.getTime() >= latestDrinkDayBoundary.getTime()
+  }, [userData?.achievements, normalizeToDate])
+
   useEffect(() => {
-    processedTotalsRef.current = new Set()
-    processedThisRunRef.current = new Set()
+    lastProcessedValuesRef.current = {}
+    lastRunDrinkCountRef.current = 0
   }, [currentUser?.uid])
 
   useEffect(() => {
-    if (currentRunDrinkCount === 0 && processedThisRunRef.current.size > 0) {
-      processedThisRunRef.current = new Set()
+    if (currentRunDrinkCount === 0) {
+      lastRunDrinkCountRef.current = 0
     }
   }, [currentRunDrinkCount])
 
@@ -58,11 +92,11 @@ export function AchievementProvider({ children }) {
   const unlockAchievement = useCallback(
     async (achievement) => {
       if (!currentUser) return
-      const hasUnlockedBefore = !!userData?.achievements?.[achievement.id]
+      const achievementData = userData?.achievements?.[achievement.id]
+      const hasUnlockedBefore = !!achievementData
 
-      if (!hasUnlockedBefore) {
-        queueOverlayAchievement(achievement)
-      }
+      // Always show overlay when achievement is unlocked
+      queueOverlayAchievement(achievement)
 
       try {
         await recordAchievementUnlock(currentUser.uid, achievement.id, hasUnlockedBefore)
@@ -79,13 +113,27 @@ export function AchievementProvider({ children }) {
 
     const runAchievements = achievementsByType.run_drinks || []
     runAchievements.forEach((achievement) => {
-      const alreadyProcessed = processedThisRunRef.current.has(achievement.id)
-      if (currentRunDrinkCount >= achievement.threshold && !alreadyProcessed) {
-        processedThisRunRef.current.add(achievement.id)
+      // Check if we've crossed the threshold
+      const previousCount = lastRunDrinkCountRef.current
+      const currentCount = currentRunDrinkCount
+      
+      // Check if achievement was already unlocked today (once per drink day limit)
+      if (wasUnlockedToday(achievement.id)) {
+        // Still update the tracked value but don't unlock
+        if (currentCount !== previousCount) {
+          lastRunDrinkCountRef.current = currentRunDrinkCount
+        }
+        return
+      }
+      
+      // Unlock if we've crossed the threshold from below
+      if (previousCount < achievement.threshold && currentCount >= achievement.threshold) {
         unlockAchievement(achievement)
       }
     })
-  }, [currentRunDrinkCount, currentUser, achievementsByType, unlockAchievement])
+    
+    lastRunDrinkCountRef.current = currentRunDrinkCount
+  }, [currentRunDrinkCount, currentUser, achievementsByType, unlockAchievement, wasUnlockedToday, userData])
 
   useEffect(() => {
     if (!currentUser || !userData) return
@@ -93,30 +141,64 @@ export function AchievementProvider({ children }) {
     const totalResets = userData.totalRunResets || 0
     const totalBeers = userData.drinkTypes?.beer || 0
     const totalWines = userData.drinkTypes?.wine || 0
+    const totalAllDrinks = userData.totalDrinks || 0
 
-    const checkAchievement = (achievement, hasMetThreshold) => {
-      if (!hasMetThreshold || processedTotalsRef.current.has(achievement.id)) {
+    const checkAchievement = (achievement, currentValue) => {
+      const key = `${achievement.type}_${achievement.id}`
+      let previousValue = lastProcessedValuesRef.current[key]
+      
+      // Initialize with current value if not set (prevents unlocking on first render)
+      if (previousValue === undefined) {
+        lastProcessedValuesRef.current[key] = currentValue
         return
       }
-      processedTotalsRef.current.add(achievement.id)
-      unlockAchievement(achievement)
+      
+      // Only check if value has increased
+      if (currentValue <= previousValue) {
+        lastProcessedValuesRef.current[key] = currentValue
+        return
+      }
+      
+      // Check if achievement was already unlocked today (once per drink day limit)
+      if (wasUnlockedToday(achievement.id)) {
+        // Still update the tracked value but don't unlock
+        lastProcessedValuesRef.current[key] = currentValue
+        return
+      }
+      
+      // Calculate threshold multiples for previous and current values
+      // For threshold 3: unlock at 3, 6, 9, 12, etc.
+      const previousMultiples = Math.floor(previousValue / achievement.threshold)
+      const currentMultiples = Math.floor(currentValue / achievement.threshold)
+      
+      // Unlock if we've crossed a new threshold multiple AND haven't unlocked today
+      if (currentMultiples > previousMultiples) {
+        unlockAchievement(achievement)
+      }
+      
+      lastProcessedValuesRef.current[key] = currentValue
     }
 
     const resetAchievements = achievementsByType.total_resets || []
     resetAchievements.forEach((achievement) => {
-      checkAchievement(achievement, totalResets >= achievement.threshold)
+      checkAchievement(achievement, totalResets)
     })
 
     const drinkAchievements = achievementsByType.total_drinks || []
     drinkAchievements.forEach((achievement) => {
-      checkAchievement(achievement, totalBeers >= achievement.threshold)
+      checkAchievement(achievement, totalBeers)
     })
 
     const wineAchievements = achievementsByType.total_wine_drinks || []
     wineAchievements.forEach((achievement) => {
-      checkAchievement(achievement, totalWines >= achievement.threshold)
+      checkAchievement(achievement, totalWines)
     })
-  }, [achievementsByType, currentUser, unlockAchievement, userData])
+
+    const allDrinksAchievements = achievementsByType.total_all_drinks || []
+    allDrinksAchievements.forEach((achievement) => {
+      checkAchievement(achievement, totalAllDrinks)
+    })
+  }, [achievementsByType, currentUser, unlockAchievement, userData, wasUnlockedToday])
 
   const value = {
     currentUnlockedAchievement,

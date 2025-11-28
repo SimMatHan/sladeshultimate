@@ -9,6 +9,7 @@ import { useLocation as useGeoLocation } from '../contexts/LocationContext'
 import CheckInContext from '../contexts/CheckInContext'
 import { useChannel } from '../hooks/useChannel'
 import {
+  areNotificationsEnabled,
   ensurePushSubscription,
   getNotificationPermission,
   hasShownPermissionPrompt,
@@ -118,6 +119,11 @@ export default function AppShell() {
       setShowNotificationPrompt(false)
       return
     }
+    // Don't show notification prompt if notifications are disabled
+    if (!areNotificationsEnabled()) {
+      setShowNotificationPrompt(false)
+      return
+    }
     const permission = getNotificationPermission()
     if (permission === 'default' && !hasShownPermissionPrompt()) {
       setShowNotificationPrompt(true)
@@ -130,6 +136,7 @@ export default function AppShell() {
   useEffect(() => {
     if (!currentUser?.uid || !isPushSupported()) return
     if (getNotificationPermission() !== 'granted') return
+    if (!areNotificationsEnabled()) return // Don't set up push subscription if notifications are disabled
     ensurePushSubscription({ currentUser }).catch((error) => {
       console.warn('[push] Unable to sync subscription', error)
     })
@@ -348,7 +355,7 @@ export default function AppShell() {
               📍
             </div>
             <h2 className="mt-6 text-xl font-semibold" style={{ color: 'var(--ink)' }}>
-              Check ind for at være med
+              Hov hov du, check lige ind!
             </h2>
             <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
               Du skal checke ind for at bruge Sladesh, dukke op på kortet og komme på toplisten.

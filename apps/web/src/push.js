@@ -108,6 +108,16 @@ export const setCachedSubscription = (subscription) =>
 
 export const clearCachedSubscription = () => setStoredJSON(STORAGE_KEYS.cachedSubscription, null)
 
+export const areNotificationsEnabled = () => {
+  if (!hasLocalStorage()) return true // Default to enabled if localStorage unavailable
+  try {
+    const stored = localStorage.getItem('notificationsEnabled')
+    return stored !== null ? stored === 'true' : true // Default to true if not set
+  } catch {
+    return true // Default to enabled on error
+  }
+}
+
 const ensureEnvConfigured = () => {
   if (!VAPID_PUBLIC_KEY) {
     throw new Error('VITE_VAPID_PUBLIC_KEY is missing. Add it to .env.local')

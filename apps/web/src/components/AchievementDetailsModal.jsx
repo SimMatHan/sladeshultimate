@@ -1,22 +1,20 @@
-import { useEffect } from 'react'
-
-const AUTO_CLOSE_MS = 5600
-
-export default function AchievementUnlockedOverlay({ achievement, onClose }) {
-  useEffect(() => {
-    if (!achievement) return undefined
-    const timeout = setTimeout(() => {
-      onClose?.()
-    }, AUTO_CLOSE_MS)
-    return () => clearTimeout(timeout)
-  }, [achievement, onClose])
-
+export default function AchievementDetailsModal({ achievement, count, onClose }) {
   if (!achievement) {
     return null
   }
 
+  const displayCount = count || 0
+
   return (
-    <div className="pointer-events-auto fixed inset-0 z-[1300] flex items-center justify-center bg-black/35 backdrop-blur-md px-6 text-center">
+    <div 
+      className="pointer-events-auto fixed inset-0 z-[1300] flex items-center justify-center bg-black/35 backdrop-blur-md px-6 text-center"
+      onClick={(e) => {
+        // Close when clicking backdrop
+        if (e.target === e.currentTarget) {
+          onClose?.()
+        }
+      }}
+    >
       <div className="relative w-full max-w-sm rounded-[32px] border border-[color:var(--line)] bg-[color:var(--surface,#fff)] px-6 pb-8 pt-10 text-left shadow-[0_30px_60px_rgba(15,23,42,0.35)]">
         <button
           type="button"
@@ -36,9 +34,9 @@ export default function AchievementUnlockedOverlay({ achievement, onClose }) {
               loading="lazy"
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2 w-full">
             <p className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: 'var(--muted)' }}>
-              Achievement unlocked
+              Achievement
             </p>
             <h3 className="text-2xl font-semibold leading-tight" style={{ color: 'var(--ink)' }}>
               {achievement.title}
@@ -46,6 +44,22 @@ export default function AchievementUnlockedOverlay({ achievement, onClose }) {
             <p className="text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
               {achievement.description}
             </p>
+            {displayCount > 0 && (
+              <div className="pt-2">
+                <div
+                  className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold"
+                  style={{
+                    backgroundColor: 'rgba(255,56,92,0.15)',
+                    color: 'var(--brand,#FF385C)',
+                    border: '1.5px solid rgba(255,56,92,0.3)',
+                  }}
+                >
+                  <span>Optjent</span>
+                  <span className="font-bold">×{displayCount}</span>
+                  <span>gange</span>
+                </div>
+              </div>
+            )}
           </div>
           <button
             type="button"
@@ -53,7 +67,7 @@ export default function AchievementUnlockedOverlay({ achievement, onClose }) {
             className="inline-flex w-full items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold shadow-soft transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2"
             style={{ backgroundColor: 'var(--brand)', color: 'var(--brand-ink)' }}
           >
-            Fortsæt
+            Luk
           </button>
         </div>
       </div>

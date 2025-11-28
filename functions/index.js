@@ -13,12 +13,9 @@ const DEFAULT_REGION = "europe-west1";
 const CPH_TIMEZONE = "Europe/Copenhagen";
 const DEN_AABNE_CHANNEL_ID = "RFYoEHhScYOkDaIbGSYA";
 const DRINK_MILESTONES = [5, 10, 15, 20, 25, 30];
-const USAGE_REMINDER_INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 hours
-const USAGE_REMINDER_CRON = "*/15 * * * *";
-const REMINDER_WINDOW = {
-    startMinutes: 10 * 60, // 10:00
-    endMinutes: 2 * 60 // 02:00 next day
-};
+// Fixed reminder times: 20:00, 23:00, and 02:00 local time
+const REMINDER_TIMES = [20, 23, 2];
+const USAGE_REMINDER_CRON = "0 20,23,2 * * *"; // Run at 20:00, 23:00, and 02:00
 
 /**
  * Resets the checkInStatus field for all users to false and clears currentLocation.
@@ -354,18 +351,42 @@ function getCopenhagenTime(date = new Date()) {
         timeZone: CPH_TIMEZONE,
         hour: "numeric",
         minute: "numeric",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
         hour12: false
     });
     const parts = formatter.formatToParts(date);
     const hour = parseInt(parts.find(p => p.type === "hour").value, 10);
     const minute = parseInt(parts.find(p => p.type === "minute").value, 10);
-    return { hour, minute };
+    const year = parseInt(parts.find(p => p.type === "year").value, 10);
+    const month = parseInt(parts.find(p => p.type === "month").value, 10);
+    const day = parseInt(parts.find(p => p.type === "day").value, 10);
+    return { hour, minute, year, month, day };
 }
 
-function isWithinReminderWindow(date = new Date()) {
+/**
+ * Gets the current reminder time slot identifier.
+ * Format: "YYYY-MM-DD_HH" (e.g., "2024-01-15_20" for 20:00 on Jan 15)
+ * For 02:00, it uses the current date (which is the next day from 23:00 perspective).
+ * Returns null if not at one of the fixed reminder times (20:00, 23:00, 02:00).
+ */
+function getCurrentReminderSlot(date = new Date()) {
+    const { hour, minute, year, month, day } = getCopenhagenTime(date);
+    // Only return a slot if we're exactly at one of the reminder times (minute must be 0)
+    if (!REMINDER_TIMES.includes(hour) || minute !== 0) {
+        return null;
+    }
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return `${dateStr}_${String(hour).padStart(2, '0')}`;
+}
+
+/**
+ * Checks if the current time matches one of the fixed reminder times (20:00, 23:00, 02:00).
+ */
+function isAtReminderTime(date = new Date()) {
     const { hour, minute } = getCopenhagenTime(date);
-    const minutes = hour * 60 + minute;
-    return minutes >= REMINDER_WINDOW.startMinutes || minutes <= REMINDER_WINDOW.endMinutes;
+    return REMINDER_TIMES.includes(hour) && minute === 0;
 }
 
 async function writeNotificationItem(userId, payload, extra = {}) {
@@ -541,9 +562,35 @@ async function maybeSendDrinkMilestoneNotification(userId, beforeData = {}, afte
     }
 
     const channelId = afterData.activeChannelId || null;
-    const channel = channelId ? await loadChannel(channelId) : null;
-    const channelName = channel?.name || "din kanal";
+    
+    // Only send notifications if user is in a valid channel (not excluded)
+    if (isChannelExcluded(channelId)) {
+        return;
+    }
+
+    const channel = await loadChannel(channelId);
+    if (!channel) {
+        console.warn("[notifications] drink_milestone skipped, channel missing", { userId, channelId });
+        return;
+    }
+
+    const channelName = channel.name || "din kanal";
     const userName = getDisplayName(afterData);
+
+    // Get all channel members except the user who triggered the milestone
+    // Also exclude members who are in "Den Åbne Kanal" (even if they're also in this channel)
+    const allRecipients = await loadRecipients(channelId, userId);
+    const recipients = allRecipients.filter((docSnap) => {
+        const userData = docSnap.data();
+        const joinedChannelIds = userData.joinedChannelIds || [];
+        // Exclude users who are members of "Den Åbne Kanal"
+        return !joinedChannelIds.includes(DEN_AABNE_CHANNEL_ID);
+    });
+    
+    if (!recipients.length) {
+        console.log("[notifications] drink_milestone no recipients", { channelId, userId });
+        return;
+    }
 
     const context = {
         userId,
@@ -556,40 +603,22 @@ async function maybeSendDrinkMilestoneNotification(userId, beforeData = {}, afte
         }
     };
 
-    const selfPayload = buildNotificationPayload("drink_milestone", {
-        ...context,
-        title: `Du ramte ${milestone} drinks`,
-        body: channelId ? `Del sejren i ${channelName}` : "God stil – hold loggen kørende!"
-    });
-
-    await deliverNotificationToUserDoc(userSnapshot, selfPayload, {
+    // Send notification to other channel members (not to the user who triggered it)
+    const fanOutPayload = buildNotificationPayload("drink_milestone", context);
+    await deliverNotificationToUserDocs(recipients, fanOutPayload, {
         channelId,
         milestone,
         actorId: userId,
-        type: "drink_milestone",
-        target: "self"
+        actorName: userName,
+        type: "drink_milestone"
     });
 
-    if (!isChannelExcluded(channelId)) {
-        const recipients = await loadRecipients(channelId, userId);
-        if (recipients.length) {
-            const fanOutPayload = buildNotificationPayload("drink_milestone", context);
-            await deliverNotificationToUserDocs(recipients, fanOutPayload, {
-                channelId,
-                milestone,
-                actorId: userId,
-                actorName: userName,
-                type: "drink_milestone"
-            });
-
-            console.log("[notifications] drink_milestone delivered to channel", {
-                userId,
-                channelId,
-                milestone,
-                recipients: recipients.length
-            });
-        }
-    }
+    console.log("[notifications] drink_milestone delivered to channel", {
+        userId,
+        channelId,
+        milestone,
+        recipients: recipients.length
+    });
 }
 
 exports.onUserActivityUpdated = functions
@@ -612,8 +641,10 @@ exports.sendUsageReminders = functions
     .timeZone(CPH_TIMEZONE)
     .onRun(async () => {
         const now = new Date();
-        if (!isWithinReminderWindow(now)) {
-            console.log("[notifications] usage_reminder skipped outside time window");
+        const currentSlot = getCurrentReminderSlot(now);
+        
+        if (!currentSlot) {
+            console.log("[notifications] usage_reminder skipped - not at a reminder time");
             return null;
         }
 
@@ -639,17 +670,16 @@ exports.sendUsageReminders = functions
                     continue;
                 }
 
+                // Check if user has checked in (eligibility requirement)
                 const lastCheckIn = data.lastCheckIn?.toDate?.() ?? null;
-                const lastReminder = data.lastUsageReminderAt?.toDate?.() ?? null;
-                const anchor = lastReminder || lastCheckIn;
-
-                if (!anchor) {
+                if (!lastCheckIn) {
                     skipped += 1;
                     continue;
                 }
 
-                const timeSinceAnchor = now.getTime() - anchor.getTime();
-                if (timeSinceAnchor < USAGE_REMINDER_INTERVAL_MS) {
+                // Check if reminder was already sent for this time slot
+                const lastReminderSlot = data.lastUsageReminderSlot || null;
+                if (lastReminderSlot === currentSlot) {
                     skipped += 1;
                     continue;
                 }
@@ -668,7 +698,9 @@ exports.sendUsageReminders = functions
                     type: "usage_reminder"
                 });
 
+                // Update both the slot identifier and timestamp for tracking
                 await userDoc.ref.update({
+                    lastUsageReminderSlot: currentSlot,
                     lastUsageReminderAt: FieldValue.serverTimestamp()
                 });
 
@@ -683,6 +715,7 @@ exports.sendUsageReminders = functions
         }
 
         console.log("[notifications] usage_reminder cycle completed", {
+            slot: currentSlot,
             notified,
             skipped,
             checkedIn: checkedInUsers.size

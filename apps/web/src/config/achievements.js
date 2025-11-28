@@ -17,10 +17,10 @@ export const ACHIEVEMENTS = [
   },
   {
     id: 'full_bender',
-    type: 'total_drinks',
+    type: 'total_all_drinks',
     threshold: 20,
     title: 'Full Bender',
-    description: 'Twenty beers. Maybe switch to water for one round?',
+    description: 'Twenty drinks. Maybe switch to water for one round?',
     image: '/assets/achievements/fullbender.gif',
   },
   {

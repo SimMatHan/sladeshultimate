@@ -6,6 +6,7 @@ import Sheet from "../components/Sheet";
 import { useTheme } from "../contexts/ThemeContext";
 import { useAuth } from "../hooks/useAuth";
 import { getUser, updateUser } from "../services/userService";
+import { ensurePushSubscription, getNotificationPermission, isPushSupported } from "../push";
 
 // Emoji options for profile pictures
 const EMOJI_OPTIONS = [
@@ -47,6 +48,14 @@ export default function ManageProfile() {
   const [tempProfile, setTempProfile] = useState({
     emoji: userData.profileEmoji,
     gradient: userData.profileGradient,
+  });
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
+    try {
+      const stored = localStorage.getItem('notificationsEnabled');
+      return stored !== null ? stored === 'true' : true; // Default to true if not set
+    } catch {
+      return true;
+    }
   });
   const isInitialLoad = useRef(true);
   const saveTimeoutRef = useRef(null);
@@ -197,6 +206,27 @@ export default function ManageProfile() {
     const newMode = !isDarkMode;
     toggleDarkMode();
     setFeedback(newMode ? "Skiftede til mørkt tema" : "Skiftede til lyst tema");
+  };
+
+  const handleNotificationsToggle = async () => {
+    const newValue = !notificationsEnabled;
+    setNotificationsEnabled(newValue);
+    try {
+      localStorage.setItem('notificationsEnabled', String(newValue));
+    } catch (error) {
+      console.error('Error saving notifications preference:', error);
+    }
+    
+    // If enabling notifications and user has permission, set up push subscription
+    if (newValue && currentUser && isPushSupported() && getNotificationPermission() === 'granted') {
+      try {
+        await ensurePushSubscription({ currentUser });
+      } catch (error) {
+        console.warn('[push] Unable to set up subscription when enabling notifications', error);
+      }
+    }
+    
+    setFeedback(newValue ? "Notifikationer aktiveret" : "Notifikationer deaktiveret");
   };
 
   if (loading) {
@@ -364,6 +394,58 @@ export default function ManageProfile() {
             >
               <span
                 className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${isDarkMode ? "translate-x-5" : "translate-x-1"
+                  }`}
+              />
+            </span>
+          </button>
+        </Card>
+
+        <Card className="px-5 py-6 space-y-4">
+          <div className="space-y-1">
+            <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+              Notifikationer
+            </div>
+            <h2 className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>
+              Notifikationer
+            </h2>
+            <p className="text-sm" style={{ color: 'var(--muted)' }}>
+              Slå push-notifikationer til eller fra.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            role="switch"
+            aria-checked={notificationsEnabled}
+            onClick={handleNotificationsToggle}
+            className="flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2"
+            style={{
+              borderColor: 'var(--line)',
+              backgroundColor: 'var(--surface)'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.borderColor = 'var(--line)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.borderColor = 'var(--line)';
+            }}
+          >
+            <span className="space-y-1">
+              <span className="block text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                Notifikationer
+              </span>
+              <span className="block text-xs" style={{ color: 'var(--muted)' }}>
+                {notificationsEnabled ? 'Aktiveret' : 'Deaktiveret'}
+              </span>
+            </span>
+            <span
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${notificationsEnabled
+                  ? "bg-[color:var(--brand,#FF385C)]/90"
+                  : "bg-neutral-200 text-neutral-400"
+                }`}
+            >
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${notificationsEnabled ? "translate-x-5" : "translate-x-1"
                   }`}
               />
             </span>

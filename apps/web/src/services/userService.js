@@ -634,3 +634,18 @@ export async function resetCurrentRun(userId) {
     lastActiveAt: serverTimestamp()
   })
 }
+
+/**
+ * DEV ONLY: Reset all achievement counts for a user
+ * Removes all achievement data from the user document
+ * @param {string} userId - User ID
+ * @returns {Promise<void>}
+ */
+export async function resetAchievements(userId) {
+  const userRef = doc(db, 'users', userId)
+  await updateDoc(userRef, {
+    achievements: {},
+    updatedAt: serverTimestamp(),
+    lastActiveAt: serverTimestamp()
+  })
+}
