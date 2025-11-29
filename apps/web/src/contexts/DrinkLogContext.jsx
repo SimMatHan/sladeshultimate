@@ -2,7 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useAuth } from "../hooks/useAuth";
 import { useUserData } from "./UserDataContext";
 import { useDrinkVariants } from "../hooks/useDrinkVariants";
-import { addDrink, removeDrink, resetCurrentRun } from "../services/userService";
+import { useLocation } from "./LocationContext";
+import { addDrink, removeDrink, resetCurrentRun, updateUserLocation } from "../services/userService";
+import { useChannel } from "../hooks/useChannel";
 
 const DrinkLogContext = createContext(null);
 
@@ -26,6 +28,8 @@ export function DrinkLogProvider({ children }) {
   const { currentUser } = useAuth();
   const { userData, refreshUserData } = useUserData();
   const { variantsByCategory } = useDrinkVariants();
+  const { userLocation, updateLocation } = useLocation();
+  const { selectedChannel } = useChannel();
   const [variantCounts, setVariantCounts] = useState(() => createZeroCounts(variantsByCategory));
   const [isResetting, setIsResetting] = useState(false);
   const prevVariantsRef = useRef(null);
@@ -79,6 +83,60 @@ export function DrinkLogProvider({ children }) {
       try {
         if (delta > 0) {
           await addDrink(currentUser.uid, catId, variantName);
+          
+          // Update location when logging a drink (so user appears on map)
+          // This runs asynchronously and doesn't block the drink log
+          (async () => {
+            try {
+              // Update location in context
+              updateLocation();
+              
+              // Get current location (either from state or fetch fresh)
+              let locationToSave = userLocation;
+              
+              // If no location in state, try to get it directly
+              if (!locationToSave && 'geolocation' in navigator) {
+                try {
+                  const position = await new Promise((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(resolve, reject, {
+                      enableHighAccuracy: true,
+                      timeout: 5000,
+                      maximumAge: 60000, // Accept location up to 1 minute old
+                    });
+                  });
+                  locationToSave = {
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude,
+                  };
+                } catch (geoError) {
+                  console.warn("[drink-log] Could not get fresh location:", geoError);
+                }
+              }
+              
+              // Use fallback location if still no location available
+              if (!locationToSave) {
+                locationToSave = {
+                  lat: 55.6761, // Default Copenhagen
+                  lng: 12.5683,
+                };
+              }
+              
+              const venue = 
+                userData?.lastCheckInVenue ||
+                userData?.currentLocation?.venue ||
+                selectedChannel?.name ||
+                'Ukendt sted';
+              
+              await updateUserLocation(currentUser.uid, {
+                lat: locationToSave.lat,
+                lng: locationToSave.lng,
+                venue,
+              });
+            } catch (locationError) {
+              console.error("[drink-log] Error saving location:", locationError);
+              // Don't fail the drink log if location save fails
+            }
+          })();
         } else if (delta < 0) {
           await removeDrink(currentUser.uid, catId, variantName);
         }
@@ -98,7 +156,7 @@ export function DrinkLogProvider({ children }) {
         });
       }
     },
-    [currentUser]
+    [currentUser, updateLocation, userLocation, userData, selectedChannel]
   );
 
   const resetRun = useCallback(async () => {

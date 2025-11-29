@@ -3,6 +3,7 @@ import { USE_MOCK_DATA } from '../config/env'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useChannel } from '../hooks/useChannel'
+import { useAuth } from '../hooks/useAuth'
 import { resolveMockChannelKey, isMemberOfMockChannel, MOCK_CHANNEL_KEYS } from '../utils/mockChannels'
 
 const LocationContext = createContext(null)
@@ -129,6 +130,7 @@ const generateMockUsers = () => {
 
 export function LocationProvider({ children }) {
   const { selectedChannel } = useChannel()
+  const { currentUser } = useAuth()
   const activeChannelId = selectedChannel?.id || null
   const mockUsersRef = useRef(USE_MOCK_DATA ? generateMockUsers() : null)
   const [userLocation, setUserLocation] = useState(null)
@@ -198,7 +200,8 @@ export function LocationProvider({ children }) {
     }
   }, [])
 
-  // Fetch other users' locations from Firestore (production mode only)
+  // Fetch other users' locations from Firestore based on recent actions (production mode only)
+  // Users only appear when they perform actions: check-ins, drinks, or sladesh
   useEffect(() => {
     if (USE_MOCK_DATA) return
 
@@ -212,37 +215,93 @@ export function LocationProvider({ children }) {
     const fetchOtherUsers = async () => {
       try {
         const usersRef = collection(db, 'users')
-        const q = query(
+        const now = Date.now()
+        
+        // Query users in the active channel
+        const channelQuery = query(
           usersRef,
-          where('checkInStatus', '==', true),
           where('joinedChannelIds', 'array-contains', activeChannelId)
         )
 
-        const querySnapshot = await getDocs(q)
-        const users = []
+        const querySnapshot = await getDocs(channelQuery)
+        const userMap = new Map()
 
         querySnapshot.forEach((docSnap) => {
           const userData = docSnap.data()
-          // Filter for users with valid currentLocation
+          
+          // Skip current user
+          if (currentUser && docSnap.id === currentUser.uid) {
+            return
+          }
+          
+          // Check if user has valid currentLocation
           if (
-            userData.currentLocation &&
-            userData.currentLocation.lat &&
-            userData.currentLocation.lng
+            !userData.currentLocation ||
+            !userData.currentLocation.lat ||
+            !userData.currentLocation.lng
           ) {
-            users.push({
+            return
+          }
+
+          // Determine which action caused this location update
+          let lastActionType = null
+          let lastActionTimestamp = null
+
+          // Check for recent check-in (within 12 hours)
+          const lastCheckIn = userData.lastCheckIn
+          if (lastCheckIn) {
+            const checkInTime = lastCheckIn.toMillis ? lastCheckIn.toMillis() : (lastCheckIn.seconds * 1000)
+            if (checkInTime >= now - 12 * 60 * 60 * 1000) {
+              lastActionType = 'checkin'
+              lastActionTimestamp = checkInTime
+            }
+          }
+
+          // Check for recent drink (within 12 hours)
+          const lastDrinkAt = userData.lastDrinkAt
+          if (lastDrinkAt) {
+            const drinkTime = lastDrinkAt.toMillis ? lastDrinkAt.toMillis() : (lastDrinkAt.seconds * 1000)
+            if (drinkTime >= now - 12 * 60 * 60 * 1000) {
+              if (!lastActionTimestamp || drinkTime > lastActionTimestamp) {
+                lastActionType = 'drink'
+                lastActionTimestamp = drinkTime
+              }
+            }
+          }
+
+          // Check for recent sladesh (within 12 hours)
+          const lastSladeshSentAt = userData.lastSladeshSentAt
+          if (lastSladeshSentAt) {
+            const sladeshTime = lastSladeshSentAt.toMillis ? lastSladeshSentAt.toMillis() : (lastSladeshSentAt.seconds * 1000)
+            if (sladeshTime >= now - 12 * 60 * 60 * 1000) {
+              if (!lastActionTimestamp || sladeshTime > lastActionTimestamp) {
+                lastActionType = 'sladesh'
+                lastActionTimestamp = sladeshTime
+              }
+            }
+          }
+
+          // Only include users with recent actions (within 12 hours)
+          if (lastActionType && lastActionTimestamp) {
+            const locationTimestamp = userData.currentLocation.timestamp?.toMillis 
+              ? userData.currentLocation.timestamp.toMillis() 
+              : (userData.currentLocation.timestamp?.seconds ? userData.currentLocation.timestamp.seconds * 1000 : Date.now())
+
+            userMap.set(docSnap.id, {
               id: docSnap.id,
               name: userData.username || userData.fullName || userData.displayName || 'Ukendt',
               initials: userData.initials || '??',
               profileEmoji: userData.profileEmoji || null,
               avatarGradient: userData.avatarGradient || 'from-gray-400 to-gray-600',
-              checkedIn: true,
+              checkedIn: userData.checkInStatus || false,
               location: {
                 lat: userData.currentLocation.lat,
                 lng: userData.currentLocation.lng,
-                timestamp: userData.currentLocation.timestamp?.toMillis() || Date.now(),
+                timestamp: locationTimestamp,
                 venue: userData.currentLocation.venue || userData.lastCheckInVenue || 'Ukendt',
               },
-              recentActivities: [],
+              lastActionType,
+              lastActionTimestamp,
               totalDrinks: userData.totalDrinks || 0,
               currentRunDrinkCount: userData.currentRunDrinkCount || 0,
             })
@@ -250,7 +309,9 @@ export function LocationProvider({ children }) {
         })
 
         if (isMounted) {
-          setOtherUsers(users)
+          // Convert map to array and filter out current user
+          const usersArray = Array.from(userMap.values())
+          setOtherUsers(usersArray)
         }
       } catch (error) {
         console.error('Error fetching other users:', error)
@@ -260,12 +321,13 @@ export function LocationProvider({ children }) {
     setOtherUsers([])
     fetchOtherUsers()
 
-    const interval = setInterval(fetchOtherUsers, 30000)
+    // Update every 2-3 minutes instead of 30 seconds (actions are less frequent)
+    const interval = setInterval(fetchOtherUsers, 150000) // 2.5 minutes
     return () => {
       isMounted = false
       clearInterval(interval)
     }
-  }, [activeChannelId])
+  }, [activeChannelId, currentUser])
 
   useEffect(() => {
     if (!USE_MOCK_DATA) return

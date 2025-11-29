@@ -24,7 +24,7 @@ import { useTheme } from "../contexts/ThemeContext";
 import { useChannel } from "../hooks/useChannel";
 import { useAuth } from "../hooks/useAuth";
 import { USE_MOCK_DATA } from "../config/env";
-import { getUser, getSladeshCooldownState, addSladesh } from "../services/userService";
+import { getUser, getSladeshCooldownState, addSladesh, updateUserLocation } from "../services/userService";
 import { getCheckedInChannelMembers } from "../services/channelService";
 import { incrementSladeshCount } from "../services/statsService";
 import { resolveMockChannelKey, isMemberOfMockChannel, MOCK_CHANNEL_KEYS } from "../utils/mockChannels";
@@ -391,6 +391,18 @@ export default function Sladesh() {
         },
         channelId: selectedChannel?.id || null,
       });
+
+      // Save location to Firestore so user appears on map
+      try {
+        await updateUserLocation(currentUser.uid, {
+          lat: resolvedLocation.lat ?? DEFAULT_LOCATION.lat,
+          lng: resolvedLocation.lng ?? DEFAULT_LOCATION.lng,
+          venue,
+        });
+      } catch (locationError) {
+        console.error("Error saving location after sladesh:", locationError);
+        // Don't fail sladesh send if location save fails
+      }
 
       await incrementSladeshCount();
       setUserProfile((prev) =>
