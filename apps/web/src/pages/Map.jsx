@@ -128,19 +128,6 @@ function UserPinOverlay({ user, onClose }) {
     return `${days} dag${days > 1 ? 'e' : ''} siden`
   }
 
-  const getActionLabel = (actionType) => {
-    switch (actionType) {
-      case 'checkin':
-        return 'Check-in'
-      case 'drink':
-        return 'Drank'
-      case 'sladesh':
-        return 'Sladesh'
-      default:
-        return 'Aktivitet'
-    }
-  }
-
   return (
     <div 
       className="fixed inset-0 z-40 flex items-center justify-center px-6 py-8 backdrop-blur-sm overlay-backdrop" 
@@ -157,7 +144,7 @@ function UserPinOverlay({ user, onClose }) {
             <div>
               <h3 className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>{user.name}</h3>
               <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                {user.location.venue} • {formatTimeAgo(user.lastActionTimestamp || user.location.timestamp)}
+                {user.location.venue} • {formatTimeAgo(user.location.timestamp)}
               </p>
             </div>
           </div>
@@ -166,14 +153,13 @@ function UserPinOverlay({ user, onClose }) {
         <div className="mt-5 space-y-4">
           <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--line)', backgroundColor: 'var(--subtle)' }}>
             <div className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>
-              Sidst set
+              Nuværende placering
             </div>
             <div className="text-sm font-medium" style={{ color: 'var(--ink)' }}>
               {user.location.venue}
             </div>
             <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-              {formatTimeAgo(user.lastActionTimestamp || user.location.timestamp)}
-              {user.lastActionType && ` • ${getActionLabel(user.lastActionType)}`}
+              {formatTimeAgo(user.location.timestamp)}
             </div>
           </div>
 
@@ -253,14 +239,14 @@ function UserAvatar({ user }) {
 
 export default function MapPage() {
   const { selectedChannel } = useChannel()
-  const { userLocation, otherUsers, locationError } = useLocation()
+  const { userLocation, otherUsers } = useLocation()
   const [selectedUser, setSelectedUser] = useState(null)
   const [skipAutoCenter, setSkipAutoCenter] = useState(false)
   const mapRef = useRef(null)
   const containerRef = useRef(null)
   const savedMapStateRef = useRef(null)
   const visibleUsers = useMemo(
-    () => otherUsers, // Show all users with recent actions (no longer filtering by checkIn only)
+    () => otherUsers.filter((user) => user.checkedIn !== false),
     [otherUsers]
   )
 
@@ -343,48 +329,12 @@ export default function MapPage() {
         height: 'calc(100dvh - var(--topbar-height) - var(--tabbar-height))'
       }}
     >
-      {/* Banner indicating only own location is real-time */}
-      <div className="absolute top-4 left-4 right-4 z-30 pointer-events-none">
-        <div 
-          className="mx-auto max-w-md rounded-2xl border px-4 py-2.5 backdrop-blur-sm"
-          style={{ 
-            borderColor: 'color-mix(in srgb, var(--line) 60%, transparent)',
-            backgroundColor: 'color-mix(in srgb, var(--surface) 90%, transparent)',
-          }}
-        >
-          <p className="text-xs font-medium text-center" style={{ color: 'var(--muted)' }}>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--brand,#FF385C)]" />
-              Kun din placering opdateres i realtid
-            </span>
-          </p>
-        </div>
-      </div>
-
-      {/* Show error message if geolocation failed */}
-      {locationError && (
-        <div className="absolute bottom-4 left-4 right-4 z-30 pointer-events-none">
-          <div 
-            className="mx-auto max-w-md rounded-2xl border px-4 py-2.5 backdrop-blur-sm"
-            style={{ 
-              borderColor: 'color-mix(in srgb, var(--brand,#FF385C) 40%, transparent)',
-              backgroundColor: 'color-mix(in srgb, var(--surface) 90%, transparent)',
-            }}
-          >
-            <p className="text-xs font-medium text-center" style={{ color: 'var(--brand,#FF385C)' }}>
-              Placering ikke tilgængelig. Kortet viser standard placering.
-            </p>
-          </div>
-        </div>
-      )}
-
       <div className="map-container relative w-full h-full">
           <MapContainer
             center={userLocation ? [userLocation.lat, userLocation.lng] : [55.6761, 12.5683]}
             zoom={13}
             style={{ width: '100%', height: '100%', zIndex: 0 }}
             scrollWheelZoom={true}
-            zoomControl={false}
             whenCreated={(map) => {
               mapRef.current = map
               // Ensure map resizes properly on initial load

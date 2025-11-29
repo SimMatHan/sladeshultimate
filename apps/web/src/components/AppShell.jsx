@@ -342,9 +342,7 @@ export default function AppShell() {
             </main>
 
             <nav className="bottombar">
-              <div className="max-w-[480px] mx-auto px-4 h-full">
-                <TabBar />
-              </div>
+              <TabBar />
             </nav>
           </div>
 

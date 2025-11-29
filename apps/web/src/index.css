@@ -100,7 +100,7 @@ body.standalone-scroll-guard .scroll-region {
 .scroll-region {
   position: absolute;
   top: var(--topbar-height);
-  bottom: var(--tabbar-height);
+  bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 16px);
   left: 0;
   right: 0;
   overflow-y: auto;
@@ -128,19 +128,20 @@ body.standalone-scroll-guard .scroll-region {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-/* Fixed bottom bar with glasmorphic styling */
+/* Fixed bottom bar - floating pill design */
 .bottombar {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
   z-index: 70;
-  height: var(--tabbar-height);
-  padding-bottom: var(--safe-bottom);
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  pointer-events: auto;
+  height: calc(64px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  pointer-events: none;
+  background: transparent;
 }
 
 /* Sheet / overlay styling */
@@ -318,9 +319,18 @@ body.standalone-scroll-guard .scroll-region {
   color: var(--brand-ink, #ffffff);
 }
 
-[data-theme="dark"] .bottombar {
-  background: rgba(11, 11, 11, 0.85);
-  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);
+/* TabBar floating pill styling */
+.bottombar nav {
+  margin-bottom: env(safe-area-inset-bottom, 0px);
+  margin-left: 16px;
+  margin-right: 16px;
+  pointer-events: auto;
+  max-width: 480px;
+  width: calc(100% - 32px);
+}
+
+[data-theme="dark"] .bottombar nav {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 /* Overlay backdrop for map user pin overlay */

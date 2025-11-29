@@ -50,7 +50,13 @@ function Item({ to, label, Icon, end, additionalActivePaths = [] }) {
 
 export default function TabBar() {
   return (
-    <nav className="h-16 grid grid-cols-4" aria-label="Primary navigation">
+    <nav 
+      className="h-16 grid grid-cols-4 rounded-2xl bg-[var(--surface)] border border-[var(--line)] backdrop-blur-xl"
+      style={{
+        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1), 0 2px 8px rgba(0, 0, 0, 0.08)',
+      }}
+      aria-label="Primary navigation"
+    >
       {tabs.map((tab) => (
         <Item key={tab.to} {...tab} />
       ))}
