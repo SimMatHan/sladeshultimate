@@ -21,9 +21,11 @@ import { DrinkLogProvider } from '../contexts/DrinkLogContext'
 import { AchievementProvider, useAchievements } from '../contexts/AchievementContext'
 import AchievementUnlockedOverlay from './AchievementUnlockedOverlay'
 import { CATEGORIES } from '../constants/drinks'
+import { APP_VERSION } from '../appVersion'
 
 const CHECK_IN_STORAGE_KEY = 'sladesh:checkedIn'
 const CHECK_IN_GATE_ACTIVATED_KEY = 'sladesh:checkInGateActivated'
+const LAST_SEEN_APP_VERSION_KEY = 'sladesh:lastSeenAppVersion'
 
 const PAGE_TITLES = {
   '/home': { title: null, subtitle: null }, // title and subtitle will be set dynamically
@@ -71,8 +73,9 @@ export default function AppShell() {
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(false)
   const [isRequestingNotifications, setIsRequestingNotifications] = useState(false)
   const [notificationError, setNotificationError] = useState(null)
+  const [showVersionPopup, setShowVersionPopup] = useState(false)
   const blockingOverlayVisible =
-    (!checkedIn && showCheckInGate) || showSuccessOverlay || showNotificationPrompt
+    (!checkedIn && showCheckInGate) || showSuccessOverlay || showNotificationPrompt || showVersionPopup
   const showChannelLoader = isChannelSwitching || (!selectedChannel && channelsLoading)
 
   // FIXED: Lock scroll region when blocking overlays are visible to prevent background scrolling
@@ -131,6 +134,18 @@ export default function AppShell() {
       }
     }
   }, [currentUser, checkedIn])
+
+  // Check for new app version on mount
+  useEffect(() => {
+    try {
+      const lastSeenVersion = localStorage.getItem(LAST_SEEN_APP_VERSION_KEY)
+      if (lastSeenVersion !== APP_VERSION) {
+        setShowVersionPopup(true)
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, [])
 
   useEffect(() => {
     if (!currentUser || !isPushSupported()) {
@@ -336,6 +351,15 @@ export default function AppShell() {
     setShowNotificationPrompt(false)
   }, [])
 
+  const handleCloseVersionPopup = useCallback(() => {
+    setShowVersionPopup(false)
+    try {
+      localStorage.setItem(LAST_SEEN_APP_VERSION_KEY, APP_VERSION)
+    } catch {
+      // ignore storage errors
+    }
+  }, [])
+
   return (
     <CheckInContext.Provider value={checkInContextValue}>
       <DrinkLogProvider>
@@ -430,7 +454,7 @@ export default function AppShell() {
             </h2>
             <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
               Vi giver kun lyd når der sker noget i dine kanaler. Du kan altid ændre det senere under
-              “Mere” → “Notifikationer”.
+              "Mere" → "Notifikationer".
             </p>
             {notificationError && (
               <p className="mt-3 rounded-2xl bg-red-50 px-4 py-2 text-xs font-medium text-red-600">
@@ -455,6 +479,30 @@ export default function AppShell() {
                 Ikke nu
               </button>
             </div>
+          </div>
+        </div>
+          )}
+
+          {showVersionPopup && (
+        <div className="pointer-events-auto fixed inset-0 z-[1250] flex items-center justify-center bg-black/20 backdrop-blur-md px-6 text-center">
+          <div className="w-full max-w-md rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-7 shadow-2xl">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[color:var(--brand,#FF385C)]/15 text-2xl">
+              🎉
+            </div>
+            <h2 className="mt-5 text-xl font-semibold" style={{ color: 'var(--ink)' }}>
+              Ny version af Sladesh 🎉
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
+              Vi har lige opdateret appen. Hvis bundmenuen (tabbaren) ser lidt mærkelig ud, kan du prøve at trække siden en enkelt gang ned, eller lukke og åbne appen igen – så falder den på plads.
+            </p>
+            <button
+              type="button"
+              onClick={handleCloseVersionPopup}
+              className="mt-6 inline-flex w-full items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold shadow-soft transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2"
+              style={{ backgroundColor: 'var(--brand)', color: 'var(--brand-ink)' }}
+            >
+              Forstået
+            </button>
           </div>
         </div>
           )}
