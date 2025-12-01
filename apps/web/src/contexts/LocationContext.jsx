@@ -129,6 +129,9 @@ const generateMockUsers = () => {
 }
 
 export function LocationProvider({ children }) {
+  // CHANNEL FILTERING: otherUsers are filtered by the active channel.
+  // The activeChannelId comes from useChannel() hook, which provides selectedChannel?.id.
+  // Only users who are members of the active channel (via joinedChannelIds array) appear in otherUsers.
   const { selectedChannel } = useChannel()
   const { currentUser } = useAuth()
   const activeChannelId = selectedChannel?.id || null
@@ -200,8 +203,10 @@ export function LocationProvider({ children }) {
     }
   }, [])
 
-  // Fetch other users' locations from Firestore based on recent actions (production mode only)
-  // Users only appear when they perform actions: check-ins, drinks, or sladesh
+  // CHANNEL FILTERING: Fetch other users' locations from Firestore, filtered by activeChannelId.
+  // Users only appear when they perform actions: check-ins, drinks, or sladesh.
+  // The Firestore query filters by channel membership: where('joinedChannelIds', 'array-contains', activeChannelId).
+  // This ensures only users from the active channel are included in otherUsers.
   useEffect(() => {
     if (USE_MOCK_DATA) return
 
@@ -217,7 +222,8 @@ export function LocationProvider({ children }) {
         const usersRef = collection(db, 'users')
         const now = Date.now()
         
-        // Query users in the active channel
+        // CHANNEL FILTERING: Query filters users by activeChannelId using array-contains.
+        // Only users who have activeChannelId in their joinedChannelIds array are returned.
         const channelQuery = query(
           usersRef,
           where('joinedChannelIds', 'array-contains', activeChannelId)
@@ -329,6 +335,8 @@ export function LocationProvider({ children }) {
     }
   }, [activeChannelId, currentUser])
 
+  // CHANNEL FILTERING: In mock mode, filter users by the active channel.
+  // Mock users are filtered based on their mockChannels array matching the selected channel.
   useEffect(() => {
     if (!USE_MOCK_DATA) return
     const channelKey = resolveMockChannelKey(selectedChannel)

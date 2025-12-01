@@ -117,6 +117,9 @@ const TIME_FORMATTER = new Intl.DateTimeFormat("da-DK", {
 const MOCK_SLADESH_STORAGE_KEY = "sladesh:mockLastSladeshAt";
 
 export default function Sladesh() {
+  // CHANNEL FILTERING: All members shown in the Sladesh orbit are filtered by the active channel.
+  // The activeChannelId comes from useChannel() hook, which provides selectedChannel?.id.
+  // Only checked-in members of the active channel can receive Sladesh.
   const { currentUser } = useAuth();
   const { selectedChannel } = useChannel();
   const { updateLocation, userLocation } = useLocation();
@@ -214,6 +217,9 @@ export default function Sladesh() {
     setMembersError(null);
     setMembers([]);
 
+    // CHANNEL FILTERING: getCheckedInChannelMembers filters members by activeChannelId.
+    // This function queries Firestore for users who are checked in and members of the active channel.
+    // Only these filtered members can be selected as Sladesh targets.
     getCheckedInChannelMembers(activeChannelId)
       .then((list) => {
         if (cancelled) return;
@@ -381,6 +387,8 @@ export default function Sladesh() {
         selectedChannel?.name ||
         "Ukendt sted";
 
+      // CHANNEL FILTERING: The sladesh includes channelId to associate it with the active channel.
+      // This ensures the sladesh is linked to the channel context in which it was sent.
       await addSladesh(currentUser.uid, {
         type: "sent",
         recipientId: pendingTarget.id,

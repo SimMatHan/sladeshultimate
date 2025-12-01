@@ -238,6 +238,9 @@ const sortComparators = {
 };
 
 export default function Leaderboard() {
+  // CHANNEL FILTERING: All data on this page is filtered by the active channel.
+  // The activeChannelId comes from useChannel() hook, which provides selectedChannel?.id.
+  // Only users who are members of the active channel (via joinedChannelIds array) are shown.
   const { selectedChannel } = useChannel();
   const { currentUser } = useAuth();
   const activeChannelId = selectedChannel?.id || null;
@@ -252,9 +255,11 @@ export default function Leaderboard() {
   // FIXED: Removed scroll locking logic. The .scroll-region is now the single scroll container.
   // This eliminates double-scroll conflicts and scroll lock issues on iOS.
 
-  // Subscribe to real-time leaderboard updates from Firestore
-  // This fixes the "stuck at 0" bug by ensuring currentRunDrinkCount updates immediately
-  // when drinks are logged, rather than waiting for cache expiration or manual refresh
+  // CHANNEL FILTERING: Real-time subscription to leaderboard updates, scoped to activeChannelId.
+  // The subscribeToLeaderboardProfiles function filters users by channel membership using
+  // Firestore query: where('joinedChannelIds', 'array-contains', activeChannelId).
+  // This ensures currentRunDrinkCount updates immediately when drinks are logged,
+  // and only shows users from the currently selected channel.
   useEffect(() => {
     if (USE_MOCK_DATA) {
       const channelKey = resolveMockChannelKey(selectedChannel);
@@ -286,11 +291,15 @@ export default function Leaderboard() {
     setError(null);
     setProfiles([]);
 
+    // CHANNEL FILTERING: subscribeToLeaderboardProfiles filters by activeChannelId.
+    // The subscription uses Firestore query with where('joinedChannelIds', 'array-contains', activeChannelId)
+    // to ensure only users from the active channel are included in the leaderboard.
     unsubscribe = subscribeToLeaderboardProfiles(
       activeChannelId,
       currentUserId,
       (updatedProfiles) => {
         // Callback called whenever user documents change (e.g., when drinks are logged)
+        // All profiles in updatedProfiles are already filtered to the active channel
         if (isMounted) {
           setProfiles(updatedProfiles);
           setLoading(false);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { MapContainer, Marker, TileLayer } from "react-leaflet";
@@ -81,16 +81,51 @@ function Countdown({ target, onExpire }) {
   );
 }
 
+function formatTimestamp(date) {
+  if (!date) return "I dag";
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  
+  if (diffMins < 1) {
+    return "Lige nu";
+  } else if (diffMins < 60) {
+    return `${diffMins} min siden`;
+  } else if (diffHours < 24) {
+    return diffDays === 0 ? `I dag • ${date.toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" })}` : `I går • ${date.toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" })}`;
+  } else if (diffDays === 1) {
+    return `I går • ${date.toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" })}`;
+  } else {
+    return date.toLocaleDateString("da-DK", { day: "numeric", month: "short" });
+  }
+}
+
+function normalizeToDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value.toDate === "function") {
+    return value.toDate();
+  }
+  if (typeof value.seconds === "number") {
+    return new Date(value.seconds * 1000);
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 export default function Home() {
   const navigate = useNavigate();
   const { updateLocation, userLocation } = useLocation();
   const { currentUser } = useAuth();
   const { checkedIn, checkIn: globalCheckIn, checkOut: handleCheckOut } = useCheckInGate();
   const { userData } = useUserData();
-  const { currentRunDrinkCount, resetRun, isResetting } = useDrinkLog();
+  const { currentRunDrinkCount, resetRun, isResetting, variantCounts } = useDrinkLog();
   const [expiresAt, setExpiresAt] = useState(() => getNextResetBoundary(new Date()));
   const [isCheckInBusy, setIsCheckInBusy] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showCurrentRunModal, setShowCurrentRunModal] = useState(false);
   const mapPreviewCenter = userLocation
     ? [userLocation.lat, userLocation.lng]
     : DEFAULT_MAP_CENTER;
@@ -100,6 +135,35 @@ export default function Home() {
   const userTotalDrinks = userData?.totalDrinks || 0;
   const unlockedAchievements = Object.keys(userData?.achievements || {}).length;
   const totalAchievements = ACHIEVEMENTS.length;
+
+  // Extract and expand drinks from variantCounts
+  const currentRunDrinks = useMemo(() => {
+    if (!variantCounts) return [];
+    
+    const drinks = [];
+    const lastDrinkAt = normalizeToDate(userData?.lastDrinkAt);
+    
+    Object.entries(variantCounts).forEach(([catId, variants]) => {
+      const category = CATEGORIES.find(cat => cat.id === catId);
+      const categoryName = category?.name || catId;
+      
+      Object.entries(variants || {}).forEach(([variantName, count]) => {
+        // Expand count into individual entries
+        for (let i = 0; i < count; i++) {
+          drinks.push({
+            id: `${catId}-${variantName}-${i}`,
+            categoryId: catId,
+            categoryName,
+            variantName,
+            timestamp: lastDrinkAt || new Date(), // Use lastDrinkAt as fallback
+          });
+        }
+      });
+    });
+    
+    // Sort by timestamp (newest first)
+    return drinks.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+  }, [variantCounts, userData?.lastDrinkAt]);
 
   const handleCheckInClick = useCallback(async () => {
     if (!currentUser) {
@@ -153,6 +217,22 @@ export default function Home() {
 
     return () => clearInterval(interval);
   }, [checkedIn]);
+
+  // Lock scroll when modal is open
+  useEffect(() => {
+    const scrollRegion = document.querySelector(".scroll-region");
+    const originalScrollRegionOverflow = scrollRegion ? scrollRegion.style.overflow : null;
+    
+    if (showCurrentRunModal && scrollRegion) {
+      scrollRegion.style.overflow = "hidden";
+    }
+    
+    return () => {
+      if (scrollRegion) {
+        scrollRegion.style.overflow = originalScrollRegionOverflow || "";
+      }
+    };
+  }, [showCurrentRunModal]);
 
   return (
     <>
@@ -213,7 +293,20 @@ export default function Home() {
               )}
             </Card>
 
-            <Card bare className="px-5 py-4">
+            <Card 
+              bare 
+              className="px-5 py-4 cursor-pointer transition hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+              onClick={() => setShowCurrentRunModal(true)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setShowCurrentRunModal(true);
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label="Se dit nuværende run"
+            >
               <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
                 Loggede drinks
               </div>
@@ -435,6 +528,102 @@ export default function Home() {
               >
                 {isResetting ? "Nulstiller..." : "Bekræft"}
               </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Current Run Drinks Modal */}
+      {showCurrentRunModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setShowCurrentRunModal(false)}
+          />
+          <motion.div
+            className="relative w-full max-w-sm max-h-[85vh] overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-zinc-900 flex flex-col"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            style={{ backgroundColor: "var(--surface)" }}
+          >
+            {/* Header */}
+            <div 
+              className="flex items-center justify-between p-6 pb-4 border-b"
+              style={{ borderColor: "var(--line)" }}
+            >
+              <h3 
+                className="text-lg font-semibold text-zinc-900 dark:text-zinc-100"
+                style={{ color: "var(--ink)" }}
+              >
+                Dit nuværende run
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowCurrentRunModal(false)}
+                className="rounded-lg p-1.5 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2"
+                aria-label="Luk"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  style={{ color: "var(--muted)" }}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6 -webkit-overflow-scrolling-touch">
+              {currentRunDrinkCount === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <p 
+                    className="text-lg font-medium text-zinc-900 dark:text-zinc-100"
+                    style={{ color: "var(--ink)" }}
+                  >
+                    Hvaaaa, kom dog i gang
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-0">
+                  {currentRunDrinks.map((drink, index) => (
+                    <div
+                      key={drink.id}
+                      className="flex items-center justify-between py-3 border-b last:border-0"
+                      style={{ borderColor: "var(--line)" }}
+                    >
+                      <div className="flex-1 min-w-0 pr-3">
+                        <div 
+                          className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate"
+                          style={{ color: "var(--ink)" }}
+                        >
+                          {drink.variantName}
+                        </div>
+                        <div 
+                          className="text-xs mt-0.5 text-zinc-500 dark:text-zinc-400"
+                          style={{ color: "var(--muted)" }}
+                        >
+                          {drink.categoryName}
+                        </div>
+                      </div>
+                      <div 
+                        className="text-xs text-zinc-500 dark:text-zinc-400 shrink-0"
+                        style={{ color: "var(--muted)" }}
+                      >
+                        {formatTimestamp(drink.timestamp)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </motion.div>
         </div>

@@ -238,6 +238,11 @@ function UserAvatar({ user }) {
 }
 
 export default function MapPage() {
+  // CHANNEL FILTERING: All users shown on the map are filtered by the active channel.
+  // The activeChannelId comes from useChannel() hook via LocationContext.
+  // LocationContext filters otherUsers by channel membership using Firestore query:
+  // where('joinedChannelIds', 'array-contains', activeChannelId).
+  // Only users from the active channel appear as markers on the map.
   const { selectedChannel } = useChannel()
   const { userLocation, otherUsers } = useLocation()
   const [selectedUser, setSelectedUser] = useState(null)
@@ -249,9 +254,6 @@ export default function MapPage() {
     () => otherUsers.filter((user) => user.checkedIn !== false),
     [otherUsers]
   )
-
-  // Channel filtering is handled in LocationContext, which filters otherUsers based on selectedChannel
-  // Map displays only users from the active channel (or all users if default channel is selected)
 
   // Ensure map resizes when container size changes
   useEffect(() => {
