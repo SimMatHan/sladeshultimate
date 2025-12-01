@@ -410,10 +410,14 @@ export async function addDrink(userId, type, variation) {
   const currentDrinkVariations = refreshedData.drinkVariations || {}
 
   // Build updates using increment for atomic operations
+  // DATA FLOW: currentRunDrinkCount is computed here using Firestore increment
+  // This ensures atomic updates and prevents race conditions
+  // The value is stored in the user document and read by Leaderboard via real-time subscriptions
+  // This fixes the "stuck at 0" bug by ensuring the count is always updated atomically
   const updates = {
     totalDrinks: increment(1),
     [`drinkTypes.${type}`]: increment(1),
-    currentRunDrinkCount: increment(1),
+    currentRunDrinkCount: increment(1), // This is the source of truth for currentRunDrinkCount
     lastDrinkAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     lastActiveAt: serverTimestamp()

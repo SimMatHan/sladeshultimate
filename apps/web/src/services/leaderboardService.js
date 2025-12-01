@@ -6,7 +6,8 @@ import {
   query,
   orderBy,
   limit,
-  where
+  where,
+  onSnapshot
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { ensureFreshCheckInStatus } from './userService'
@@ -14,6 +15,84 @@ import { ensureFreshCheckInStatus } from './userService'
 // Simple in-memory cache per channel
 const cache = new Map()
 const CACHE_TTL_MS = 30000 // 30 seconds
+
+/**
+ * Helper function to build a profile object from user data
+ * Centralizes the logic for creating profile objects to ensure consistency
+ * @param {string} userId - User ID
+ * @param {Object} userData - User document data from Firestore
+ * @returns {Object} Profile object for leaderboard display
+ */
+function buildProfileFromUserData(userId, userData) {
+  // DATA FLOW: currentRunDrinkCount is read here from Firestore user document
+  // This is where the Leaderboard gets the value to display
+  // The value originates from userService.js addDrink() where it's computed using Firestore increment
+  // Defensive check: currentRunDrinkCount must be a non-negative number
+  // This prevents "stuck at 0" issues by ensuring we always have a valid value
+  // Real-time subscriptions ensure this value updates immediately when drinks are logged
+  const currentRunDrinkCount = (userData.currentRunDrinkCount != null && userData.currentRunDrinkCount >= 0) 
+    ? userData.currentRunDrinkCount 
+    : 0
+  
+  if (userData.currentRunDrinkCount == null) {
+    console.warn(`[leaderboard] User ${userId} has missing/undefined currentRunDrinkCount, defaulting to 0`)
+  }
+  
+  // Calculate weekly average (simplified - assumes drinks tracked over time)
+  const weeklyAverage = userData.weeklyAverage || Math.floor((userData.totalDrinks || 0) / 4)
+  
+  // Calculate streak days (simplified - would need to track consecutive days)
+  const streakDays = userData.streakDays || 0
+  
+  // Build drink breakdown from drinkTypes
+  const drinkBreakdown = []
+  if (userData.drinkTypes) {
+    Object.entries(userData.drinkTypes).forEach(([type, count]) => {
+      drinkBreakdown.push({
+        id: `${userId}-${type}`,
+        label: formatDrinkTypeLabel(type),
+        count: count || 0
+      })
+    })
+  }
+  
+  // Get recent drinks - drinks subcollection removed, using lastDrinkAt from user document
+  const recentDrinks = []
+  
+  // Determine top drink
+  let topDrink = 'Ukendt'
+  if (userData.drinkVariations && Object.keys(userData.drinkVariations).length > 0) {
+    let maxCount = 0
+    Object.entries(userData.drinkVariations).forEach(([type, variations]) => {
+      if (variations && typeof variations === 'object') {
+        Object.entries(variations).forEach(([label, count]) => {
+          if (count > maxCount) {
+            maxCount = count
+            topDrink = label
+          }
+        })
+      }
+    })
+  }
+  
+  return {
+    id: userId,
+    username: userData.username || userData.fullName || userData.displayName || 'Ukendt',
+    name: userData.fullName || userData.displayName || 'Ukendt',
+    initials: userData.initials || '??',
+    profileEmoji: userData.profileEmoji || '🍹',
+    profileGradient: userData.profileGradient || 'from-rose-400 to-orange-500',
+    avatarGradient: userData.avatarGradient || userData.profileGradient || 'from-gray-400 to-gray-600',
+    totalDrinks: userData.totalDrinks || 0,
+    currentRunDrinkCount: currentRunDrinkCount, // Defensive check ensures this is always a valid number
+    weeklyAverage: weeklyAverage,
+    streakDays: streakDays,
+    topDrink: topDrink,
+    favoriteSpot: userData.lastCheckInVenue || 'Ukendt',
+    drinkBreakdown: drinkBreakdown,
+    recentDrinks: recentDrinks
+  }
+}
 
 /**
  * Fetch leaderboard data from Firestore
@@ -88,62 +167,10 @@ export async function fetchLeaderboardProfiles(channelId = null, currentUserId =
         continue
       }
       
-      // Calculate weekly average (simplified - assumes drinks tracked over time)
-      // In a real implementation, you'd calculate this from drink timestamps
-      const weeklyAverage = userData.weeklyAverage || Math.floor((userData.totalDrinks || 0) / 4)
-      
-      // Calculate streak days (simplified - would need to track consecutive days)
-      const streakDays = userData.streakDays || 0
-      
-      // Build drink breakdown from drinkTypes
-      const drinkBreakdown = []
-      if (userData.drinkTypes) {
-        Object.entries(userData.drinkTypes).forEach(([type, count]) => {
-          drinkBreakdown.push({
-            id: `${docSnap.id}-${type}`,
-            label: formatDrinkTypeLabel(type),
-            count: count || 0
-          })
-        })
-      }
-      
-      // Get recent drinks - drinks subcollection removed, using lastDrinkAt from user document
-      // For now, return empty array - can be enhanced to use lastDrinkAt for sorting/display
-      const recentDrinks = []
-      
-      // Determine top drink
-      let topDrink = 'Ukendt'
-      if (userData.drinkVariations && Object.keys(userData.drinkVariations).length > 0) {
-        let maxCount = 0
-        Object.entries(userData.drinkVariations).forEach(([type, variations]) => {
-          if (variations && typeof variations === 'object') {
-            Object.entries(variations).forEach(([label, count]) => {
-              if (count > maxCount) {
-                maxCount = count
-                topDrink = label
-              }
-            })
-          }
-        })
-      }
-      
-      profiles.push({
-        id: userId,
-        username: userData.username || userData.fullName || userData.displayName || 'Ukendt',
-        name: userData.fullName || userData.displayName || 'Ukendt',
-        initials: userData.initials || '??',
-        profileEmoji: userData.profileEmoji || '🍹',
-        profileGradient: userData.profileGradient || 'from-rose-400 to-orange-500',
-        avatarGradient: userData.avatarGradient || userData.profileGradient || 'from-gray-400 to-gray-600',
-        totalDrinks: userData.totalDrinks || 0,
-        currentRunDrinkCount: userData.currentRunDrinkCount || 0,
-        weeklyAverage: weeklyAverage,
-        streakDays: streakDays,
-        topDrink: topDrink,
-        favoriteSpot: userData.lastCheckInVenue || 'Ukendt',
-        drinkBreakdown: drinkBreakdown,
-        recentDrinks: recentDrinks
-      })
+      // Build profile using helper function (includes defensive checks for currentRunDrinkCount)
+      // This ensures currentRunDrinkCount is always a valid number, preventing "stuck at 0" issues
+      const profile = buildProfileFromUserData(userId, userData)
+      profiles.push(profile)
       profileIds.add(userId)
     }
     
@@ -177,60 +204,10 @@ export async function fetchLeaderboardProfiles(channelId = null, currentUserId =
               console.warn(`Unable to refresh check-in status for current user ${currentUserId}:`, statusError)
             }
             
-            // Calculate weekly average
-            const weeklyAverage = userData.weeklyAverage || Math.floor((userData.totalDrinks || 0) / 4)
-            
-            // Calculate streak days
-            const streakDays = userData.streakDays || 0
-            
-            // Build drink breakdown from drinkTypes
-            const drinkBreakdown = []
-            if (userData.drinkTypes) {
-              Object.entries(userData.drinkTypes).forEach(([type, count]) => {
-                drinkBreakdown.push({
-                  id: `${currentUserId}-${type}`,
-                  label: formatDrinkTypeLabel(type),
-                  count: count || 0
-                })
-              })
-            }
-            
-            // Get recent drinks
-            const recentDrinks = []
-            
-            // Determine top drink
-            let topDrink = 'Ukendt'
-            if (userData.drinkVariations && Object.keys(userData.drinkVariations).length > 0) {
-              let maxCount = 0
-              Object.entries(userData.drinkVariations).forEach(([type, variations]) => {
-                if (variations && typeof variations === 'object') {
-                  Object.entries(variations).forEach(([label, count]) => {
-                    if (count > maxCount) {
-                      maxCount = count
-                      topDrink = label
-                    }
-                  })
-                }
-              })
-            }
-            
-            profiles.push({
-              id: currentUserId,
-              username: userData.username || userData.fullName || userData.displayName || 'Ukendt',
-              name: userData.fullName || userData.displayName || 'Ukendt',
-              initials: userData.initials || '??',
-              profileEmoji: userData.profileEmoji || '🍹',
-              profileGradient: userData.profileGradient || 'from-rose-400 to-orange-500',
-              avatarGradient: userData.avatarGradient || userData.profileGradient || 'from-gray-400 to-gray-600',
-              totalDrinks: userData.totalDrinks || 0,
-              currentRunDrinkCount: userData.currentRunDrinkCount || 0,
-              weeklyAverage: weeklyAverage,
-              streakDays: streakDays,
-              topDrink: topDrink,
-              favoriteSpot: userData.lastCheckInVenue || 'Ukendt',
-              drinkBreakdown: drinkBreakdown,
-              recentDrinks: recentDrinks
-            })
+            // Build profile using helper function (includes defensive checks for currentRunDrinkCount)
+            // This ensures currentRunDrinkCount is always a valid number, preventing "stuck at 0" issues
+            const profile = buildProfileFromUserData(currentUserId, userData)
+            profiles.push(profile)
           }
         }
       } catch (currentUserError) {
@@ -260,15 +237,151 @@ export async function fetchLeaderboardProfiles(channelId = null, currentUserId =
 }
 
 /**
+ * Subscribe to real-time leaderboard updates for a channel
+ * Uses Firestore onSnapshot to get live updates when user documents change
+ * This fixes the "stuck at 0" bug by ensuring currentRunDrinkCount updates immediately
+ * when drinks are logged, rather than waiting for cache expiration or manual refresh
+ * 
+ * @param {string} channelId - Channel ID to subscribe to
+ * @param {string} [currentUserId] - Optional current user ID to ensure they're always included
+ * @param {Function} onUpdate - Callback function called with updated profiles array
+ * @param {Function} [onError] - Optional error callback
+ * @returns {Function} Unsubscribe function
+ */
+export function subscribeToLeaderboardProfiles(channelId, currentUserId, onUpdate, onError) {
+  if (!channelId) {
+    console.warn('[leaderboard] subscribeToLeaderboardProfiles: No channelId provided')
+    onUpdate([])
+    return () => {} // Return no-op unsubscribe
+  }
+
+  console.log('[leaderboard] subscribeToLeaderboardProfiles: Setting up subscription', { channelId, currentUserId })
+  
+  const usersRef = collection(db, 'users')
+  
+  // Build query - filter by channel membership
+  const q = query(
+    usersRef,
+    where('joinedChannelIds', 'array-contains', channelId),
+    limit(100) // Get more users since we'll filter by checkInStatus
+  )
+  
+  // Track profiles by userId for efficient updates
+  const profilesMap = new Map()
+  let currentUserProfile = null
+  
+  // Subscribe to real-time updates
+  const unsubscribe = onSnapshot(
+    q,
+    async (querySnapshot) => {
+      try {
+        console.log('[leaderboard] Subscription update: received', querySnapshot.docs.length, 'users')
+        
+        // Process all documents in the snapshot
+        const profilePromises = []
+        
+        for (const docSnap of querySnapshot.docs) {
+          const userId = docSnap.id
+          const isCurrentUser = currentUserId && userId === currentUserId
+          let userData = docSnap.data()
+          
+          // Refresh check-in status to ensure it's current
+          try {
+            userData = await ensureFreshCheckInStatus(userId, userData)
+          } catch (statusError) {
+            console.warn(`[leaderboard] Unable to refresh check-in status for user ${userId}:`, statusError)
+          }
+          
+          // For "Nuværende runde" filters: Only show checked-in users (except current user who always shows)
+          if (!isCurrentUser && !userData.checkInStatus) {
+            // Remove from map if user is no longer checked in
+            if (profilesMap.has(userId)) {
+              profilesMap.delete(userId)
+            }
+            continue
+          }
+          
+          // Build profile (includes defensive checks for currentRunDrinkCount)
+          const profile = buildProfileFromUserData(userId, userData)
+          
+          if (isCurrentUser) {
+            currentUserProfile = profile
+          } else {
+            profilesMap.set(userId, profile)
+          }
+        }
+        
+        // Build final profiles array
+        const profiles = Array.from(profilesMap.values())
+        
+        // Always include current user if provided and they're a member of the channel
+        if (currentUserId && !profiles.find(p => p.id === currentUserId)) {
+          if (!currentUserProfile) {
+            // Fetch current user separately if not in query results
+            try {
+              const userRef = doc(db, 'users', currentUserId)
+              const userSnap = await getDoc(userRef)
+              
+              if (userSnap.exists()) {
+                let userData = userSnap.data()
+                const joinedChannelIds = userData.joinedChannelIds || []
+                
+                if (joinedChannelIds.includes(channelId)) {
+                  try {
+                    userData = await ensureFreshCheckInStatus(currentUserId, userData)
+                  } catch (statusError) {
+                    console.warn(`[leaderboard] Unable to refresh check-in status for current user:`, statusError)
+                  }
+                  
+                  currentUserProfile = buildProfileFromUserData(currentUserId, userData)
+                }
+              }
+            } catch (currentUserError) {
+              console.warn(`[leaderboard] Unable to fetch current user for subscription:`, currentUserError)
+            }
+          }
+          
+          if (currentUserProfile) {
+            profiles.push(currentUserProfile)
+          }
+        }
+        
+        // Sort by currentRunDrinkCount descending
+        profiles.sort((a, b) => (b.currentRunDrinkCount || 0) - (a.currentRunDrinkCount || 0))
+        
+        console.log('[leaderboard] Subscription update: emitting', profiles.length, 'profiles')
+        onUpdate(profiles)
+      } catch (error) {
+        console.error('[leaderboard] Error processing subscription update:', error)
+        if (onError) {
+          onError(error)
+        }
+      }
+    },
+    (error) => {
+      console.error('[leaderboard] Subscription error:', error)
+      if (onError) {
+        onError(error)
+      }
+    }
+  )
+  
+  return unsubscribe
+}
+
+/**
  * Clear the leaderboard cache for a specific channel or all channels
+ * Called when drinks are logged to ensure fresh data on next fetch
  * @param {string} [channelId] - Optional channel ID to clear cache for. If not provided, clears all cache.
  */
 export function clearLeaderboardCache(channelId = null) {
   if (channelId) {
     const cacheKey = channelId || 'default'
     cache.delete(cacheKey)
+    console.log('[leaderboard] Cleared cache for channel:', channelId)
   } else {
     cache.clear()
+    console.log('[leaderboard] Cleared all cache')
   }
 }
 

@@ -5,6 +5,7 @@ import { useDrinkVariants } from "../hooks/useDrinkVariants";
 import { useLocation } from "./LocationContext";
 import { addDrink, removeDrink, resetCurrentRun, updateUserLocation } from "../services/userService";
 import { useChannel } from "../hooks/useChannel";
+import { clearLeaderboardCache } from "../services/leaderboardService";
 
 const DrinkLogContext = createContext(null);
 
@@ -84,6 +85,13 @@ export function DrinkLogProvider({ children }) {
         if (delta > 0) {
           await addDrink(currentUser.uid, catId, variantName);
           
+          // Invalidate leaderboard cache so it shows fresh currentRunDrinkCount
+          // This ensures Leaderboard updates immediately when drinks are logged
+          // Note: With real-time subscriptions, this is a backup - subscriptions handle most updates
+          if (selectedChannel?.id) {
+            clearLeaderboardCache(selectedChannel.id);
+          }
+          
           // Update location when logging a drink (so user appears on map)
           // This runs asynchronously and doesn't block the drink log
           (async () => {
@@ -139,6 +147,11 @@ export function DrinkLogProvider({ children }) {
           })();
         } else if (delta < 0) {
           await removeDrink(currentUser.uid, catId, variantName);
+          
+          // Invalidate leaderboard cache when removing drinks too
+          if (selectedChannel?.id) {
+            clearLeaderboardCache(selectedChannel.id);
+          }
         }
         await refreshUserData(true);
       } catch (error) {

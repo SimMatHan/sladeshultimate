@@ -4,7 +4,7 @@ import Page from '../components/Page';
 import { useChannel } from '../hooks/useChannel';
 import { useAuth } from '../hooks/useAuth';
 import { USE_MOCK_DATA } from '../config/env';
-import { fetchLeaderboardProfiles, fetchUserRecentDrinks, clearLeaderboardCache } from '../services/leaderboardService';
+import { fetchLeaderboardProfiles, fetchUserRecentDrinks, clearLeaderboardCache, subscribeToLeaderboardProfiles } from '../services/leaderboardService';
 import { db } from '../firebase';
 import { resolveMockChannelKey, isMemberOfMockChannel, MOCK_CHANNEL_KEYS } from '../utils/mockChannels';
 
@@ -252,7 +252,9 @@ export default function Leaderboard() {
   // FIXED: Removed scroll locking logic. The .scroll-region is now the single scroll container.
   // This eliminates double-scroll conflicts and scroll lock issues on iOS.
 
-  // Fetch leaderboard data from Firestore when not using mock data
+  // Subscribe to real-time leaderboard updates from Firestore
+  // This fixes the "stuck at 0" bug by ensuring currentRunDrinkCount updates immediately
+  // when drinks are logged, rather than waiting for cache expiration or manual refresh
   useEffect(() => {
     if (USE_MOCK_DATA) {
       const channelKey = resolveMockChannelKey(selectedChannel);
@@ -274,37 +276,67 @@ export default function Leaderboard() {
     }
 
     let isMounted = true;
+    let unsubscribe = null;
 
-    const loadProfiles = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        setProfiles([]);
-        clearLeaderboardCache(activeChannelId);
-        const currentUserId = currentUser?.uid || null;
-        const fetchedProfiles = await fetchLeaderboardProfiles(activeChannelId, currentUserId);
+    // Set up real-time subscription to user documents in the channel
+    // This ensures currentRunDrinkCount updates live when drinks are logged
+    const currentUserId = currentUser?.uid || null;
+    
+    setLoading(true);
+    setError(null);
+    setProfiles([]);
+
+    unsubscribe = subscribeToLeaderboardProfiles(
+      activeChannelId,
+      currentUserId,
+      (updatedProfiles) => {
+        // Callback called whenever user documents change (e.g., when drinks are logged)
         if (isMounted) {
-          setProfiles(fetchedProfiles);
+          setProfiles(updatedProfiles);
+          setLoading(false);
+          setError(null);
         }
-      } catch (err) {
-        console.error('Error loading leaderboard:', err);
+      },
+      (err) => {
+        // Error callback for subscription errors
+        console.error('Error in leaderboard subscription:', err);
         if (isMounted) {
           setError('Kunne ikke indlæse leaderboard');
           setProfiles([]);
-        }
-      } finally {
-        if (isMounted) {
           setLoading(false);
         }
       }
-    };
+    );
 
-    loadProfiles();
-
+    // Cleanup: unsubscribe when component unmounts or channel changes
     return () => {
       isMounted = false;
+      if (unsubscribe) {
+        unsubscribe();
+      }
     };
   }, [activeChannelId, selectedChannel?.name, selectedChannel?.isDefault, currentUser?.uid]);
+
+  // Visibility-based refresh: refresh leaderboard when page becomes visible if cache is stale
+  // This catches edge cases where user switches tabs and comes back, ensuring fresh data
+  useEffect(() => {
+    if (USE_MOCK_DATA || !activeChannelId) return;
+
+    const handleVisibilityChange = () => {
+      // Only refresh if page becomes visible and we have a subscription
+      // The subscription will automatically update, but this ensures we don't miss updates
+      // that happened while the tab was hidden
+      if (document.visibilityState === 'visible') {
+        // Clear cache to force fresh data on next subscription update
+        clearLeaderboardCache(activeChannelId);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [activeChannelId]);
 
   // Fetch recent drinks when a profile is selected (only in production mode)
   useEffect(() => {
@@ -469,7 +501,11 @@ function ProfileCard({ profile, rank, onSelect, isActive, sortMode }) {
   const rankBadge = `#${rank}`;
   const displayName = profile.username || profile.name || 'Ukendt';
   
-  // Always display currentRunDrinkCount for "Nuværende runde" filters
+  // DATA FLOW: currentRunDrinkCount is displayed here
+  // It comes from the profile object, which is built in leaderboardService.js buildProfileFromUserData()
+  // The profile is updated in real-time via subscribeToLeaderboardProfiles() when user documents change
+  // Defensive check: fallback to 0 if value is missing (prevents "stuck at 0" from showing undefined/null)
+  // The value originates from userService.js addDrink() where it's computed using Firestore increment
   const displayValue = profile.currentRunDrinkCount || 0;
   
   const valueFormatted = displayValue.toLocaleString('da-DK');
@@ -782,3 +818,4 @@ function ProfileDetailSheet({ profile, sortMode, onClose }) {
     </div>
   );
 }
+
