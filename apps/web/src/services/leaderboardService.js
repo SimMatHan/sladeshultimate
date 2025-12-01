@@ -90,7 +90,8 @@ function buildProfileFromUserData(userId, userData) {
     topDrink: topDrink,
     favoriteSpot: userData.lastCheckInVenue || 'Ukendt',
     drinkBreakdown: drinkBreakdown,
-    recentDrinks: recentDrinks
+    recentDrinks: recentDrinks,
+    achievements: userData.achievements || {}
   }
 }
 

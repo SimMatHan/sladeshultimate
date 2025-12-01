@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getDoc, doc } from 'firebase/firestore';
+import { ACHIEVEMENTS } from '../config/achievements';
 import Page from '../components/Page';
 import { useChannel } from '../hooks/useChannel';
 import { useAuth } from '../hooks/useAuth';
@@ -286,7 +287,7 @@ export default function Leaderboard() {
     // Set up real-time subscription to user documents in the channel
     // This ensures currentRunDrinkCount updates live when drinks are logged
     const currentUserId = currentUser?.uid || null;
-    
+
     setLoading(true);
     setError(null);
     setProfiles([]);
@@ -392,13 +393,13 @@ export default function Leaderboard() {
 
     const scrollRegion = document.querySelector('.scroll-region');
     const originalScrollRegionOverflow = scrollRegion ? scrollRegion.style.overflow : null;
-    
+
     // FIXED: Only lock the main scroll region when modal is open.
     // The list container no longer has its own scroll, so we don't need to lock it.
     if (scrollRegion) {
       scrollRegion.style.overflow = 'hidden';
     }
-    
+
     return () => {
       if (scrollRegion) {
         scrollRegion.style.overflow = originalScrollRegionOverflow || '';
@@ -420,7 +421,7 @@ export default function Leaderboard() {
 
         {/* FIXED: Removed nested overflow-y-auto container. Content now flows naturally in .scroll-region.
             This eliminates double-scroll conflicts and scroll lock issues on iOS. */}
-        <div 
+        <div
           ref={listContainerRef}
           className="-mr-3 pr-3 pb-6"
         >
@@ -456,10 +457,10 @@ export default function Leaderboard() {
       </div>
 
       {selectedProfile ? (
-        <ProfileDetailSheet 
-          profile={selectedProfile} 
+        <ProfileDetailSheet
+          profile={selectedProfile}
           sortMode={sortMode}
-          onClose={() => setSelectedProfile(null)} 
+          onClose={() => setSelectedProfile(null)}
         />
       ) : null}
     </Page>
@@ -477,9 +478,8 @@ function SortToggle({ options, active, onChange }) {
               key={option.id}
               type="button"
               onClick={() => onChange(option.id)}
-              className={`rounded-2xl px-3 py-2 text-sm font-medium transition ${
-                isActive ? 'shadow-sm' : ''
-              }`}
+              className={`rounded-2xl px-3 py-2 text-sm font-medium transition ${isActive ? 'shadow-sm' : ''
+                }`}
               style={isActive ? {
                 backgroundColor: 'var(--surface)',
                 color: 'var(--brand)'
@@ -509,14 +509,14 @@ function SortToggle({ options, active, onChange }) {
 function ProfileCard({ profile, rank, onSelect, isActive, sortMode }) {
   const rankBadge = `#${rank}`;
   const displayName = profile.username || profile.name || 'Ukendt';
-  
+
   // DATA FLOW: currentRunDrinkCount is displayed here
   // It comes from the profile object, which is built in leaderboardService.js buildProfileFromUserData()
   // The profile is updated in real-time via subscribeToLeaderboardProfiles() when user documents change
   // Defensive check: fallback to 0 if value is missing (prevents "stuck at 0" from showing undefined/null)
   // The value originates from userService.js addDrink() where it's computed using Firestore increment
   const displayValue = profile.currentRunDrinkCount || 0;
-  
+
   const valueFormatted = displayValue.toLocaleString('da-DK');
 
   return (
@@ -526,16 +526,15 @@ function ProfileCard({ profile, rank, onSelect, isActive, sortMode }) {
       className={`w-full text-left transition ${isActive ? '-translate-y-0.5' : 'hover:-translate-y-0.5'}`}
     >
       <div
-        className={`relative grid grid-cols-[auto_auto_1fr_auto] items-center gap-4 rounded-3xl border border-[var(--line)] p-4 shadow-sm transition ${
-          isActive ? 'ring-2 ring-[var(--brand)] ring-offset-2' : 'hover:shadow-md'
-        }`}
+        className={`relative grid grid-cols-[auto_auto_1fr_auto] items-center gap-4 rounded-3xl border border-[var(--line)] p-4 shadow-sm transition ${isActive ? 'ring-2 ring-[var(--brand)] ring-offset-2' : 'hover:shadow-md'
+          }`}
         style={{
           backgroundColor: 'var(--surface)',
         }}
       >
-        <span 
+        <span
           className="flex h-10 w-10 items-center justify-center rounded-full border bg-[var(--subtle)] text-[13px] font-semibold"
-          style={{ 
+          style={{
             borderColor: 'var(--line)',
             color: 'var(--ink)'
           }}
@@ -543,8 +542,8 @@ function ProfileCard({ profile, rank, onSelect, isActive, sortMode }) {
           {rankBadge}
         </span>
 
-        <Avatar 
-          emoji={profile.profileEmoji} 
+        <Avatar
+          emoji={profile.profileEmoji}
           gradient={profile.profileGradient || profile.avatarGradient}
           initials={profile.initials}
         />
@@ -560,22 +559,22 @@ function ProfileCard({ profile, rank, onSelect, isActive, sortMode }) {
   );
 }
 
-function Avatar({ emoji, gradient, initials }) {
+function Avatar({ emoji, gradient, initials, className = 'h-12 w-12 text-xl' }) {
   // Use emoji if available, otherwise fall back to initials
   if (emoji && gradient) {
     return (
       <div
-        className={`flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br ${gradient} text-xl shadow-sm`}
+        className={`flex items-center justify-center rounded-full bg-gradient-to-br ${gradient} shadow-sm ${className}`}
       >
         {emoji}
       </div>
     );
   }
-  
+
   // Fallback to initials if emoji/gradient not available
   return (
     <div
-      className={`flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br ${gradient || 'from-gray-400 to-gray-600'} text-sm font-semibold uppercase text-white shadow-sm`}
+      className={`flex items-center justify-center rounded-full bg-gradient-to-br ${gradient || 'from-gray-400 to-gray-600'} font-semibold uppercase text-white shadow-sm ${className}`}
     >
       {initials || '??'}
     </div>
@@ -583,16 +582,10 @@ function Avatar({ emoji, gradient, initials }) {
 }
 
 function ProfileDetailSheet({ profile, sortMode, onClose }) {
-  const [isVisible, setIsVisible] = useState(false);
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
   const overlayFullName = profile.name || profile.username || 'Ukendt';
   const overlayUsername = profile.username;
-
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => setIsVisible(true));
-    return () => cancelAnimationFrame(frame);
-  }, []);
 
   // Lock body scroll when overlay is open
   useEffect(() => {
@@ -610,7 +603,7 @@ function ProfileDetailSheet({ profile, sortMode, onClose }) {
       setUserData({
         totalDrinks: profile.totalDrinks || 0,
         currentRunDrinkCount: profile.currentRunDrinkCount || 0,
-        drinkTypes: profile.drinkBreakdown ? 
+        drinkTypes: profile.drinkBreakdown ?
           profile.drinkBreakdown.reduce((acc, item) => {
             // Convert drinkBreakdown to drinkTypes format
             const type = item.label.toLowerCase().replace(/\s+/g, '');
@@ -618,7 +611,8 @@ function ProfileDetailSheet({ profile, sortMode, onClose }) {
             return acc;
           }, {}) : {},
         drinkVariations: {},
-        createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // 30 days ago for mock
+        createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days ago for mock
+        achievements: {} // Mock achievements could be added here if needed
       });
       setLoading(false);
       return;
@@ -629,7 +623,7 @@ function ProfileDetailSheet({ profile, sortMode, onClose }) {
         setLoading(true);
         const userRef = doc(db, 'users', profile.id);
         const userSnap = await getDoc(userRef);
-        
+
         if (userSnap.exists()) {
           const data = userSnap.data();
           setUserData({
@@ -637,7 +631,8 @@ function ProfileDetailSheet({ profile, sortMode, onClose }) {
             currentRunDrinkCount: data.currentRunDrinkCount || 0,
             drinkTypes: data.drinkTypes || {},
             drinkVariations: data.drinkVariations || {},
-            createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt || new Date())
+            createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt || new Date()),
+            achievements: data.achievements || {}
           });
         } else {
           // Fallback to profile data if user not found
@@ -646,7 +641,8 @@ function ProfileDetailSheet({ profile, sortMode, onClose }) {
             currentRunDrinkCount: profile.currentRunDrinkCount || 0,
             drinkTypes: {},
             drinkVariations: {},
-            createdAt: new Date()
+            createdAt: new Date(),
+            achievements: {}
           });
         }
       } catch (error) {
@@ -657,7 +653,8 @@ function ProfileDetailSheet({ profile, sortMode, onClose }) {
           currentRunDrinkCount: profile.currentRunDrinkCount || 0,
           drinkTypes: {},
           drinkVariations: {},
-          createdAt: new Date()
+          createdAt: new Date(),
+          achievements: {}
         });
       } finally {
         setLoading(false);
@@ -667,20 +664,6 @@ function ProfileDetailSheet({ profile, sortMode, onClose }) {
     fetchUserData();
   }, [profile.id]);
 
-  // Calculate weekly average for all-time view
-  const calculateWeeklyAverage = (totalDrinks, createdAt) => {
-    if (!totalDrinks || totalDrinks === 0 || !createdAt) return 0;
-    
-    const now = new Date();
-    const created = createdAt instanceof Date ? createdAt : new Date(createdAt);
-    const diffMs = now - created;
-    const diffWeeks = diffMs / (7 * 24 * 60 * 60 * 1000);
-    
-    if (diffWeeks < 1) return totalDrinks; // Less than 1 week, return total
-    
-    return Math.round((totalDrinks / diffWeeks) * 10) / 10; // Round to 1 decimal
-  };
-
   // Build drink breakdown - always use drinkVariations for current run
   const buildDrinkBreakdown = () => {
     if (!userData) return [];
@@ -688,7 +671,7 @@ function ProfileDetailSheet({ profile, sortMode, onClose }) {
     // Always use drinkVariations for current run
     const breakdown = [];
     const variations = userData.drinkVariations || {};
-    
+
     Object.entries(variations).forEach(([type, typeVariations]) => {
       if (typeVariations && typeof typeVariations === 'object') {
         Object.entries(typeVariations).forEach(([variation, count]) => {
@@ -702,126 +685,124 @@ function ProfileDetailSheet({ profile, sortMode, onClose }) {
         });
       }
     });
-    
+
     return breakdown.sort((a, b) => b.count - a.count);
   };
 
   const drinkBreakdown = userData ? buildDrinkBreakdown() : [];
   const breakdownTotal = drinkBreakdown.reduce((sum, item) => sum + item.count, 0);
-  
-  // Show totalDrinks in header instead of currentRunDrinkCount
-  const isCurrentRun = sortMode === 'current-run-most' || sortMode === 'current-run-least';
+
   const mainNumber = userData ? (userData.totalDrinks || 0) : 0;
-  const weeklyAverage = null; // Not shown for current run filters
+
+  // Get unlocked achievements
+  const unlockedAchievements = useMemo(() => {
+    if (!userData || !userData.achievements) return [];
+    return ACHIEVEMENTS.filter(achievement => {
+      const userAchievement = userData.achievements[achievement.id];
+      // Check if unlocked (assuming existence in the map means unlocked or check a property)
+      return !!userAchievement;
+    }).map(achievement => ({
+      ...achievement,
+      userData: userData.achievements[achievement.id]
+    }));
+  }, [userData]);
 
   if (loading) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-start justify-center" onClick={onClose}>
-        <div
-          className={`absolute inset-0 bg-black/45 transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
-        />
-        <div className="relative z-10 flex w-full max-w-full justify-center">
-          <div
-            className={`relative flex h-full w-full flex-col overflow-hidden rounded-b-[32px] shadow-2xl transition-transform duration-300 ease-out ${
-              isVisible ? 'translate-y-0' : '-translate-y-full'
-            }`}
-            style={{ 
-              height: 'min(88vh, 640px)',
-              backgroundColor: 'var(--surface)'
-            }}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-center h-full">
-              <p className="text-sm" style={{ color: 'var(--muted)' }}>Indlæser...</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return null; // Or a spinner matching the modal style
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center" onClick={onClose}>
-      <div
-        className={`absolute inset-0 bg-black/45 transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
-      />
-
-      <div className="relative z-10 flex w-full max-w-full justify-center">
-        <div
-          className={`relative flex h-full w-full flex-col overflow-hidden rounded-b-[32px] shadow-2xl transition-transform duration-300 ease-out ${
-            isVisible ? 'translate-y-0' : '-translate-y-full'
-          }`}
-          style={{ 
-            height: 'min(88vh, 640px)',
-            backgroundColor: 'var(--surface)'
-          }}
-          onClick={(event) => event.stopPropagation()}
+    <div
+      className="pointer-events-auto fixed inset-0 z-[1300] flex items-center justify-center bg-black/35 backdrop-blur-md px-6 text-center"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="relative w-full max-w-sm rounded-[32px] border border-[color:var(--line)] bg-[color:var(--surface,#fff)] px-6 pb-8 pt-10 text-left shadow-[0_30px_60px_rgba(15,23,42,0.35)] max-h-[85vh] overflow-y-auto no-scrollbar">
+        <button
+          type="button"
+          aria-label="Luk"
+          onClick={onClose}
+          className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-[color:var(--line)] text-xl font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--bg,#f7f8fb)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2"
         >
-          <header 
-            className="flex items-start justify-between gap-3 border-b border-[var(--line)] px-6 pb-4"
-            style={{ 
-              backgroundColor: 'var(--surface)',
-              paddingTop: 'calc(70px + env(safe-area-inset-top, 0px))'
-            }}
-          >
+          ×
+        </button>
+
+        <div className="flex flex-col items-center gap-6 text-center">
+          {/* Header Info */}
+          <div className="flex flex-col items-center gap-3">
+            <Avatar
+              emoji={profile.profileEmoji}
+              gradient={profile.profileGradient || profile.avatarGradient}
+              initials={profile.initials}
+              className="h-20 w-20 text-4xl shadow-md"
+            />
             <div>
-              <h2 className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>
-                {overlayFullName}
-                {profile.name && overlayUsername ? (
-                  <span className="ml-2 text-sm font-medium" style={{ color: 'var(--muted)' }}>
-                    ({overlayUsername})
-                  </span>
-                ) : null}
-              </h2>
-              <p className="text-sm" style={{ color: 'var(--muted)' }}>
-                {mainNumber.toLocaleString('da-DK')} All-time counter
-              </p>
+              <h3 className="text-2xl font-semibold leading-tight" style={{ color: 'var(--ink)' }}>{overlayFullName}</h3>
+              {overlayUsername && <p className="text-sm font-medium" style={{ color: 'var(--muted)' }}>@{overlayUsername}</p>}
             </div>
-          </header>
-
-          <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
-            {drinkBreakdown.length > 0 && breakdownTotal > 0 ? (
-              <section className="space-y-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-                  Fordeling af nuværende drinks
-                </h3>
-                <ul className="space-y-3">
-                  {drinkBreakdown.map((item) => {
-                    const percentage = breakdownTotal ? Math.round((item.count / breakdownTotal) * 100) : 0;
-                    return (
-                      <li key={item.id} className="rounded-2xl border border-[var(--line)] bg-[var(--subtle)] p-3">
-                        <div className="flex items-center justify-between text-sm font-medium" style={{ color: 'var(--ink)' }}>
-                          <span>{item.label}</span>
-                          <span>{item.count}</span>
-                        </div>
-                        <div className="mt-2 h-2 w-full overflow-hidden rounded-full" style={{ backgroundColor: 'var(--line)' }}>
-                          <div className="h-full rounded-full bg-[var(--brand)]" style={{ width: `${percentage}%` }} />
-                        </div>
-                        <p className="mt-1 text-xs" style={{ color: 'var(--muted)' }}>{percentage}% af trackede drinks</p>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            ) : null}
           </div>
 
-          <div 
-            className="border-t border-[var(--line)] px-6 py-5"
-            style={{ backgroundColor: 'var(--surface)' }}
-          >
-            <button
-              type="button"
-              onClick={onClose}
-              className="inline-flex w-full justify-center rounded-2xl px-4 py-3 text-sm font-semibold shadow-sm transition hover:opacity-90"
-              style={{ 
-                backgroundColor: 'var(--brand)',
-                color: 'var(--brand-ink)'
-              }}
-            >
-              Luk
-            </button>
+          {/* Stats Grid */}
+          <div className="grid grid-cols-2 gap-3 w-full">
+            <div className="rounded-2xl border border-[var(--line)] bg-[var(--subtle)] p-4 flex flex-col items-center justify-center gap-1">
+              <span className="text-2xl font-bold tabular-nums" style={{ color: 'var(--ink)' }}>{mainNumber.toLocaleString('da-DK')}</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>Total i Sladesh-tid</span>
+            </div>
+            <div className="rounded-2xl border border-[var(--line)] bg-[var(--subtle)] p-4 flex flex-col items-center justify-center gap-1">
+              <span className="text-2xl font-bold tabular-nums" style={{ color: 'var(--ink)' }}>{(userData?.currentRunDrinkCount || 0).toLocaleString('da-DK')}</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>Loggede drinks i dag</span>
+            </div>
           </div>
+
+          {/* Achievements Section */}
+          <div className="w-full space-y-3 pt-2">
+            <h4 className="text-xs font-bold uppercase tracking-widest text-left pl-1" style={{ color: 'var(--muted)' }}>Achievements</h4>
+            {unlockedAchievements.length > 0 ? (
+              <div className="flex flex-wrap gap-3 justify-center bg-[var(--subtle)] rounded-2xl p-4 border border-[var(--line)]">
+                {unlockedAchievements.map(ach => (
+                  <div key={ach.id} className="relative group" title={ach.title}>
+                    <img
+                      src={ach.image}
+                      alt={ach.title}
+                      className="w-12 h-12 object-contain drop-shadow-sm transition-transform hover:scale-110"
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center rounded-2xl border border-dashed border-[var(--line)] p-6">
+                <p className="text-sm font-medium" style={{ color: 'var(--muted)' }}>Ingen achievements endnu</p>
+              </div>
+            )}
+          </div>
+
+          {/* Drink Breakdown */}
+          {drinkBreakdown.length > 0 && (
+            <div className="w-full space-y-3 pt-2">
+              <h4 className="text-xs font-bold uppercase tracking-widest text-left pl-1" style={{ color: 'var(--muted)' }}>Top Drinks</h4>
+              <div className="space-y-2">
+                {drinkBreakdown.slice(0, 5).map(item => {
+                  const percentage = breakdownTotal ? Math.round((item.count / breakdownTotal) * 100) : 0;
+                  return (
+                    <div key={item.id} className="rounded-2xl border border-[var(--line)] bg-[var(--subtle)] p-3 relative overflow-hidden">
+                      <div className="relative z-10 flex items-center justify-between text-sm font-medium" style={{ color: 'var(--ink)' }}>
+                        <span>{item.label}</span>
+                        <span className="tabular-nums">{item.count}</span>
+                      </div>
+                      <div className="relative z-10 mt-1">
+                        <span className="text-xs" style={{ color: 'var(--muted)' }}>{percentage}% af trackede drinks</span>
+                      </div>
+                      <div
+                        className="absolute bottom-0 left-0 h-1 bg-[var(--brand)]/20"
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
