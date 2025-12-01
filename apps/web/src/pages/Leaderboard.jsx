@@ -718,17 +718,18 @@ function ProfileDetailSheet({ profile, sortMode, onClose }) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="relative w-full max-w-sm rounded-[32px] border border-[color:var(--line)] bg-[color:var(--surface,#fff)] px-6 pb-8 pt-10 text-left shadow-[0_30px_60px_rgba(15,23,42,0.35)] max-h-[85vh] overflow-y-auto no-scrollbar">
+      <div className="relative w-full max-w-sm rounded-[32px] border border-[color:var(--line)] bg-[color:var(--surface,#fff)] text-left shadow-[0_30px_60px_rgba(15,23,42,0.35)] max-h-[85vh] flex flex-col overflow-hidden">
         <button
           type="button"
           aria-label="Luk"
           onClick={onClose}
-          className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-[color:var(--line)] text-xl font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--bg,#f7f8fb)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2"
+          className="absolute right-4 top-4 z-10 inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-[color:var(--line)] text-xl font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--bg,#f7f8fb)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2"
         >
           ×
         </button>
 
-        <div className="flex flex-col items-center gap-6 text-center">
+        {/* Fixed Header Section */}
+        <div className="shrink-0 px-6 pt-10 pb-4 flex flex-col items-center gap-6 text-center border-b border-[var(--line)] bg-[var(--surface)]">
           {/* Header Info */}
           <div className="flex flex-col items-center gap-3">
             <Avatar
@@ -776,31 +777,39 @@ function ProfileDetailSheet({ profile, sortMode, onClose }) {
               </div>
             )}
           </div>
+        </div>
 
-          {/* Drink Breakdown */}
-          {drinkBreakdown.length > 0 && (
-            <div className="w-full space-y-3 pt-2">
+        {/* Scrollable Drink Breakdown */}
+        <div className="flex-1 overflow-y-auto px-6 py-6 min-h-0 overscroll-contain">
+          {drinkBreakdown.length > 0 ? (
+            <div className="space-y-3">
               <h4 className="text-xs font-bold uppercase tracking-widest text-left pl-1" style={{ color: 'var(--muted)' }}>Top Drinks</h4>
-              <div className="space-y-2">
-                {drinkBreakdown.slice(0, 5).map(item => {
+              <div className="space-y-4">
+                {drinkBreakdown.map(item => {
                   const percentage = breakdownTotal ? Math.round((item.count / breakdownTotal) * 100) : 0;
                   return (
-                    <div key={item.id} className="rounded-2xl border border-[var(--line)] bg-[var(--subtle)] p-3 relative overflow-hidden">
-                      <div className="relative z-10 flex items-center justify-between text-sm font-medium" style={{ color: 'var(--ink)' }}>
-                        <span>{item.label}</span>
-                        <span className="tabular-nums">{item.count}</span>
+                    <div key={item.id} className="flex flex-col gap-1">
+                      <div className="flex items-end justify-between text-sm">
+                        <span className="font-medium text-[var(--ink)]">{item.label}</span>
+                        <div className="flex items-center gap-1.5 tabular-nums">
+                          <span className="text-xs font-medium text-[var(--muted)]">{percentage}%</span>
+                          <span className="font-bold text-[var(--ink)]">{item.count}</span>
+                        </div>
                       </div>
-                      <div className="relative z-10 mt-1">
-                        <span className="text-xs" style={{ color: 'var(--muted)' }}>{percentage}% af trackede drinks</span>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--subtle)]">
+                        <div
+                          className="h-full rounded-full bg-[var(--brand)] transition-all duration-500 ease-out"
+                          style={{ width: `${percentage}%` }}
+                        />
                       </div>
-                      <div
-                        className="absolute bottom-0 left-0 h-1 bg-[var(--brand)]/20"
-                        style={{ width: `${percentage}%` }}
-                      />
                     </div>
                   );
                 })}
               </div>
+            </div>
+          ) : (
+            <div className="flex h-32 items-center justify-center rounded-2xl border border-dashed border-[var(--line)]">
+              <p className="text-sm" style={{ color: 'var(--muted)' }}>Ingen drinks data endnu</p>
             </div>
           )}
         </div>
