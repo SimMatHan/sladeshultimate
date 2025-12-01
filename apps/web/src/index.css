@@ -106,9 +106,8 @@ body.standalone-scroll-guard .scroll-region {
   position: absolute;
   top: var(--topbar-height);
   /* Use --tabbar-height variable for consistency (includes safe-area).
-   * This ensures content doesn't get hidden behind the TabBar.
-   * The +16px is intentional padding between content and TabBar. */
-  bottom: calc(var(--tabbar-height, 64px) + 16px);
+   * This ensures content doesn't get hidden behind the TabBar. */
+  bottom: var(--tabbar-height, 64px);
   left: 0;
   right: 0;
   overflow-y: auto;
@@ -136,20 +135,7 @@ body.standalone-scroll-guard .scroll-region {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-/* Fixed bottom bar - floating pill design */
-/* 
- * FIXED: Previously had triple safe-area application causing extra white space:
- * 1. height included safe-area
- * 2. padding-bottom included safe-area  
- * 3. nav margin-bottom included safe-area
- * 
- * Now: Safe-area is applied ONLY via padding-bottom here.
- * Structure:
- * - .bottombar is fixed to bottom: 0 with padding-bottom for safe-area
- * - TabBar (64px) is positioned at flex-end (above the padding)
- * - Total visual height: 64px TabBar + safe-area padding (no extra space)
- * - Scroll-region uses --tabbar-height (64px + safe-area) to prevent content overlap
- */
+/* Fixed bottom bar - static navigation */
 .bottombar {
   position: fixed;
   bottom: 0;
@@ -158,11 +144,8 @@ body.standalone-scroll-guard .scroll-region {
   width: 100%;
   z-index: 70;
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  pointer-events: none;
-  background: transparent;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
 }
 
 /* Sheet / overlay styling */
@@ -340,18 +323,11 @@ body.standalone-scroll-guard .scroll-region {
   color: var(--brand-ink, #ffffff);
 }
 
-/* TabBar floating pill styling */
-/* Safe-area is handled by parent .bottombar padding-bottom, so no margin-bottom needed here */
+/* TabBar static navigation styling */
 .bottombar nav {
-  margin-left: 16px;
-  margin-right: 16px;
+  width: 100%;
   pointer-events: auto;
-  max-width: 480px;
-  width: calc(100% - 32px);
-}
-
-[data-theme="dark"] .bottombar nav {
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.3);
+  height: var(--bar-height, 64px);
 }
 
 /* Overlay backdrop for map user pin overlay */
@@ -551,7 +527,7 @@ button {
 /* Center on Me button styling */
 .center-on-me-button {
   position: absolute;
-  bottom: calc(var(--tabbar-height, 64px) + 16px);
+  bottom: calc(var(--tabbar-height, 64px) + 12px);
   right: 16px;
   z-index: 40;
   width: 48px;

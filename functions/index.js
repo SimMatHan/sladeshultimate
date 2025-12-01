@@ -126,7 +126,7 @@ async function deleteOldMessages() {
  */
 exports.deleteOldMessages = functions
     .region("europe-west1")
-    .pubsub.schedule("0 12 * * *") // Every day at 12:00
+    .pubsub.schedule("0 10 * * *") // Every day at 10:00
     .timeZone("Europe/Copenhagen")
     .onRun(async (context) => {
         console.log("Running scheduled deletion of old messages...");
@@ -173,69 +173,105 @@ async function deleteOldNotifications() {
         new Date(Date.now() - NOTIFICATION_RETENTION_HOURS * 60 * 60 * 1000)
     );
 
-    console.log(`[notifications] Deleting items older than ${cutoffTime.toDate().toISOString()}`);
+    console.log(`[notifications] Starting deletion of items older than ${cutoffTime.toDate().toISOString()}`);
 
     const notificationsRef = db.collection("notifications");
     const usersSnapshot = await notificationsRef.get();
 
     if (usersSnapshot.empty) {
         console.log("[notifications] No notification documents found.");
-        return { deletedCount: 0 };
+        return { deletedCount: 0, usersProcessed: 0 };
     }
 
-    const bulkWriter = db.bulkWriter();
+    console.log(`[notifications] Found ${usersSnapshot.size} users with notification documents.`);
+
     let totalDeleted = 0;
+    let usersProcessed = 0;
+    let usersWithErrors = 0;
 
     for (const userDoc of usersSnapshot.docs) {
         const userId = userDoc.id;
         const itemsRef = userDoc.ref.collection("items");
         let deletedForUser = 0;
+        let batchCount = 0;
+
+        // Create a new bulkWriter for each user to ensure proper isolation
+        const bulkWriter = db.bulkWriter();
+
+        // Add error handling for bulkWriter operations
+        bulkWriter.onWriteError((error) => {
+            console.error(`[notifications] BulkWriter error for user ${userId}:`, error);
+        });
 
         try {
+            // Continue deleting until no more old items are found
             while (true) {
+                batchCount++;
                 const itemsSnapshot = await itemsRef
                     .where("timestamp", "<", cutoffTime)
                     .limit(MAX_BATCH_DELETE)
                     .get();
 
                 if (itemsSnapshot.empty) {
+                    console.log(`[notifications] User ${userId}: No more old items found after ${batchCount - 1} batches.`);
                     break;
                 }
 
+                console.log(`[notifications] User ${userId}: Batch ${batchCount} - Found ${itemsSnapshot.size} old items to delete.`);
+
+                // Queue all deletions in this batch
                 itemsSnapshot.docs.forEach((itemDoc) => {
                     bulkWriter.delete(itemDoc.ref);
                     deletedForUser += 1;
                     totalDeleted += 1;
                 });
 
+                // Flush this batch to ensure deletions are committed
+                await bulkWriter.flush();
+                console.log(`[notifications] User ${userId}: Batch ${batchCount} - Flushed ${itemsSnapshot.size} deletions.`);
+
+                // If we got fewer items than the limit, we've reached the end
                 if (itemsSnapshot.size < MAX_BATCH_DELETE) {
+                    console.log(`[notifications] User ${userId}: Reached end of old items (got ${itemsSnapshot.size} < ${MAX_BATCH_DELETE}).`);
                     break;
                 }
             }
 
+            // Close the bulkWriter for this user
+            await bulkWriter.close();
+
             if (deletedForUser > 0) {
-                console.log(`[notifications] Deleted ${deletedForUser} old items for user ${userId}.`);
+                console.log(`[notifications] User ${userId}: Successfully deleted ${deletedForUser} old items across ${batchCount} batches.`);
+                usersProcessed++;
+            } else {
+                console.log(`[notifications] User ${userId}: No old items found to delete.`);
             }
         } catch (error) {
-            console.error(`[notifications] Failed to delete items for user ${userId}`, error);
+            usersWithErrors++;
+            console.error(`[notifications] Failed to delete items for user ${userId}:`, error);
+            // Try to close bulkWriter even on error
+            try {
+                await bulkWriter.close();
+            } catch (closeError) {
+                console.error(`[notifications] Error closing bulkWriter for user ${userId}:`, closeError);
+            }
         }
     }
 
-    await bulkWriter.close();
-    console.log(`[notifications] Successfully deleted ${totalDeleted} old notification items.`);
+    console.log(`[notifications] Cleanup completed. Total deleted: ${totalDeleted} items across ${usersProcessed} users. Errors: ${usersWithErrors}.`);
 
-    return { deletedCount: totalDeleted };
+    return { deletedCount: totalDeleted, usersProcessed, usersWithErrors };
 }
 
 exports.deleteOldNotifications = functions
     .region("europe-west1")
-    .pubsub.schedule("0 12 * * *")
+    .pubsub.schedule("0 10 * * *") // Every day at 10:00
     .timeZone("Europe/Copenhagen")
     .onRun(async () => {
         console.log("[notifications] Running scheduled deletion of old notification items...");
         try {
             const result = await deleteOldNotifications();
-            console.log(`[notifications] Scheduled notification cleanup completed. Deleted ${result.deletedCount} items.`);
+            console.log(`[notifications] Scheduled notification cleanup completed. Deleted ${result.deletedCount} items across ${result.usersProcessed} users. Errors: ${result.usersWithErrors || 0}.`);
             return null;
         } catch (error) {
             console.error("[notifications] Error deleting old notification items", error);
@@ -252,7 +288,9 @@ exports.manualDeleteOldNotifications = functions
             res.status(200).json({
                 success: true,
                 deletedCount: result.deletedCount,
-                message: `Successfully deleted ${result.deletedCount} old notification items.`
+                usersProcessed: result.usersProcessed || 0,
+                usersWithErrors: result.usersWithErrors || 0,
+                message: `Successfully deleted ${result.deletedCount} old notification items across ${result.usersProcessed || 0} users.`
             });
         } catch (error) {
             console.error("[notifications] Manual deletion error", error);
