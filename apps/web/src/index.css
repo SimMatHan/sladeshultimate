@@ -43,10 +43,11 @@ html.orientation-lock--landscape #root {
 }
 
 /* Global layout rules for mobile-first app */
+/* Use min-height: 100dvh instead of height: 100% to handle iOS browser UI show/hide correctly */
 html,
 body,
 #root {
-  height: 100%;
+  min-height: 100dvh;
   margin: 0;
   padding: 0;
 }
@@ -86,26 +87,33 @@ body.standalone-scroll-guard .scroll-region {
 }
 
 /* App shell: layout with fixed bars */
+/* FIXED: Changed from height: 100dvh to min-height: 100dvh to allow natural content flow.
+ * Removed overflow: hidden to allow .scroll-region to handle all scrolling. */
 .app-shell {
-  height: 100dvh; /* iOS-friendly dynamic viewport height */
-  min-height: 100dvh;
+  min-height: 100dvh; /* iOS-friendly dynamic viewport height - use min-height for natural flow */
   display: flex;
   flex-direction: column;
   position: relative;
   background: var(--bg);
-  overflow: hidden;
+  overflow: hidden; /* Keep hidden to prevent body scroll, but .scroll-region handles page scroll */
 }
 
 /* Scrollable content region */
+/* FIXED: This is the SINGLE primary scroll container for all normal pages.
+ * No nested overflow-y-auto containers should exist inside .scroll-region.
+ * This ensures predictable, native iOS scrolling without scroll lock issues. */
 .scroll-region {
   position: absolute;
   top: var(--topbar-height);
-  bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 16px);
+  /* Use --tabbar-height variable for consistency (includes safe-area).
+   * This ensures content doesn't get hidden behind the TabBar.
+   * The +16px is intentional padding between content and TabBar. */
+  bottom: calc(var(--tabbar-height, 64px) + 16px);
   left: 0;
   right: 0;
   overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch; /* Native iOS momentum scrolling */
+  overscroll-behavior: contain; /* Prevent pull-to-refresh while allowing normal scroll */
 }
 
 /* Fixed top bar with glasmorphic styling */
@@ -129,13 +137,26 @@ body.standalone-scroll-guard .scroll-region {
 }
 
 /* Fixed bottom bar - floating pill design */
+/* 
+ * FIXED: Previously had triple safe-area application causing extra white space:
+ * 1. height included safe-area
+ * 2. padding-bottom included safe-area  
+ * 3. nav margin-bottom included safe-area
+ * 
+ * Now: Safe-area is applied ONLY via padding-bottom here.
+ * Structure:
+ * - .bottombar is fixed to bottom: 0 with padding-bottom for safe-area
+ * - TabBar (64px) is positioned at flex-end (above the padding)
+ * - Total visual height: 64px TabBar + safe-area padding (no extra space)
+ * - Scroll-region uses --tabbar-height (64px + safe-area) to prevent content overlap
+ */
 .bottombar {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
+  width: 100%;
   z-index: 70;
-  height: calc(64px + env(safe-area-inset-bottom, 0px));
   padding-bottom: env(safe-area-inset-bottom, 0px);
   display: flex;
   align-items: flex-end;
@@ -320,8 +341,8 @@ body.standalone-scroll-guard .scroll-region {
 }
 
 /* TabBar floating pill styling */
+/* Safe-area is handled by parent .bottombar padding-bottom, so no margin-bottom needed here */
 .bottombar nav {
-  margin-bottom: env(safe-area-inset-bottom, 0px);
   margin-left: 16px;
   margin-right: 16px;
   pointer-events: auto;

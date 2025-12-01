@@ -75,6 +75,24 @@ export default function AppShell() {
     (!checkedIn && showCheckInGate) || showSuccessOverlay || showNotificationPrompt
   const showChannelLoader = isChannelSwitching || (!selectedChannel && channelsLoading)
 
+  // FIXED: Lock scroll region when blocking overlays are visible to prevent background scrolling
+  useEffect(() => {
+    if (!blockingOverlayVisible && !showChannelLoader) return undefined
+    
+    const scrollRegion = document.querySelector('.scroll-region')
+    const originalOverflow = scrollRegion ? scrollRegion.style.overflow : null
+    
+    if (scrollRegion) {
+      scrollRegion.style.overflow = 'hidden'
+    }
+    
+    return () => {
+      if (scrollRegion) {
+        scrollRegion.style.overflow = originalOverflow || ''
+      }
+    }
+  }, [blockingOverlayVisible, showChannelLoader])
+
   // Lurker mode: Show check-in gate after 20 seconds if not checked in
   useEffect(() => {
     if (currentUser && !checkedIn) {

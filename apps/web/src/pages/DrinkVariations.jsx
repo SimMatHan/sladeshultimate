@@ -82,6 +82,10 @@ export default function DrinkVariations() {
         data.direction = absX > absY ? "horizontal" : "vertical";
       }
     }
+    
+    // FIXED: Never prevent default or interfere with vertical scrolling.
+    // Only handle horizontal swipes for category navigation.
+    // Vertical scrolling is handled by the native .scroll-region container.
   }, []);
 
   const handleTouchEnd = useCallback(() => {
@@ -132,7 +136,7 @@ export default function DrinkVariations() {
       initial={{ opacity: 0, translateY: 24 }}
       animate={{ opacity: 1, translateY: 0 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
-      className="flex h-full min-h-0 flex-col -mt-3"
+      className="flex flex-col -mt-3"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -205,7 +209,9 @@ export default function DrinkVariations() {
         </div>
       </div>
 
-      <div className="mt-4 flex-1 overflow-y-auto pb-8 pr-1">
+      {/* FIXED: Removed nested overflow-y-auto container. Content now flows naturally in .scroll-region.
+          This eliminates double-scroll conflicts and scroll lock issues on iOS. */}
+      <div className="mt-4 pb-8 pr-1">
         <div className="grid gap-3">
           {items.map((item) => {
             const count = variantCounts[categoryId]?.[item.name] ?? 0;

@@ -248,23 +248,9 @@ export default function Leaderboard() {
   const [error, setError] = useState(null);
   const topSectionRef = useRef(null);
   const listContainerRef = useRef(null);
-  const [listMaxHeight, setListMaxHeight] = useState(null);
 
-  // Lock the page scroll so only the member list can scroll
-  useEffect(() => {
-    const scrollRegion = document.querySelector('.scroll-region');
-    if (!scrollRegion) return undefined;
-
-    const previousOverflow = scrollRegion.style.overflow;
-    const previousOverscroll = scrollRegion.style.overscrollBehavior;
-    scrollRegion.style.overflow = 'hidden';
-    scrollRegion.style.overscrollBehavior = 'contain';
-
-    return () => {
-      scrollRegion.style.overflow = previousOverflow || '';
-      scrollRegion.style.overscrollBehavior = previousOverscroll || '';
-    };
-  }, []);
+  // FIXED: Removed scroll locking logic. The .scroll-region is now the single scroll container.
+  // This eliminates double-scroll conflicts and scroll lock issues on iOS.
 
   // Fetch leaderboard data from Firestore when not using mock data
   useEffect(() => {
@@ -344,51 +330,8 @@ export default function Leaderboard() {
     return [...profiles].sort(comparator);
   }, [profiles, sortMode]);
 
-  // Calculate available height for the scrollable list
-  useEffect(() => {
-    const updateListHeight = () => {
-      if (!topSectionRef.current) return;
-
-      const topSectionRect = topSectionRef.current.getBoundingClientRect();
-      // Get CSS variables for bar heights
-      const rootStyles = getComputedStyle(document.documentElement);
-      const topbarHeight = parseFloat(rootStyles.getPropertyValue('--topbar-height')) || 64;
-      const tabbarHeight = parseFloat(rootStyles.getPropertyValue('--tabbar-height')) || 64;
-      
-      // Calculate: viewport height - topbar - tabbar - top section bottom position - padding
-      // The top section bottom is relative to viewport, so we subtract it from viewport height
-      // Then subtract the tabbar height and padding
-      const scrollRegionPadding = 24; // py-3 = 12px top + 12px bottom
-      const listBottomPadding = 24; // pb-6 = 24px
-      const gap = 16; // gap-4 = 16px between top section and list
-      
-      const availableHeight = window.innerHeight 
-        - topSectionRect.bottom 
-        - (tabbarHeight - scrollRegionPadding) 
-        - listBottomPadding 
-        - gap;
-      
-      setListMaxHeight(Math.max(200, availableHeight));
-    };
-
-    // Use requestAnimationFrame to ensure DOM is ready
-    const frame = requestAnimationFrame(() => {
-      updateListHeight();
-    });
-
-    window.addEventListener('resize', updateListHeight);
-    window.addEventListener('orientationchange', updateListHeight);
-
-    // Also update when sort mode changes (in case it affects top section height)
-    const timeout = setTimeout(updateListHeight, 150);
-
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener('resize', updateListHeight);
-      window.removeEventListener('orientationchange', updateListHeight);
-      clearTimeout(timeout);
-    };
-  }, [sortMode]);
+  // FIXED: Removed listMaxHeight calculation. Content now flows naturally in .scroll-region.
+  // No need for height calculations or nested scroll containers.
 
   useEffect(() => {
     if (!selectedProfile) return undefined;
@@ -402,28 +345,20 @@ export default function Leaderboard() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedProfile]);
 
-  // Disable scrolling on the list container and main scroll region when overlay is open
+  // Lock body scroll when modal overlay is open (ProfileDetailSheet is a modal)
   useEffect(() => {
     if (!selectedProfile) return undefined;
 
     const scrollRegion = document.querySelector('.scroll-region');
     const originalScrollRegionOverflow = scrollRegion ? scrollRegion.style.overflow : null;
     
-    const container = listContainerRef.current;
-    const originalContainerOverflow = container ? container.style.overflow : null;
-    
-    if (container) {
-      container.style.overflow = 'hidden';
-    }
-    
+    // FIXED: Only lock the main scroll region when modal is open.
+    // The list container no longer has its own scroll, so we don't need to lock it.
     if (scrollRegion) {
       scrollRegion.style.overflow = 'hidden';
     }
     
     return () => {
-      if (container) {
-        container.style.overflow = originalContainerOverflow || '';
-      }
       if (scrollRegion) {
         scrollRegion.style.overflow = originalScrollRegionOverflow || '';
       }
@@ -442,13 +377,11 @@ export default function Leaderboard() {
           <SortToggle options={sortOptions} active={sortMode} onChange={setSortMode} />
         </div>
 
+        {/* FIXED: Removed nested overflow-y-auto container. Content now flows naturally in .scroll-region.
+            This eliminates double-scroll conflicts and scroll lock issues on iOS. */}
         <div 
           ref={listContainerRef}
-          className="overflow-y-auto -mr-3 pr-3 pb-6"
-          style={{
-            maxHeight: listMaxHeight ? `${listMaxHeight}px` : 'none',
-            scrollBehavior: 'smooth'
-          }}
+          className="-mr-3 pr-3 pb-6"
         >
           <div className="space-y-3">
             {loading ? (

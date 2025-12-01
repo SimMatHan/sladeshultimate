@@ -1,4 +1,24 @@
+import { useEffect } from 'react'
+
 export default function AchievementDetailsModal({ achievement, count, onClose }) {
+  // FIXED: Lock scroll region when modal is open to prevent background scrolling
+  useEffect(() => {
+    if (!achievement) return undefined
+    
+    const scrollRegion = document.querySelector('.scroll-region')
+    const originalOverflow = scrollRegion ? scrollRegion.style.overflow : null
+    
+    if (scrollRegion) {
+      scrollRegion.style.overflow = 'hidden'
+    }
+    
+    return () => {
+      if (scrollRegion) {
+        scrollRegion.style.overflow = originalOverflow || ''
+      }
+    }
+  }, [achievement])
+
   if (!achievement) {
     return null
   }

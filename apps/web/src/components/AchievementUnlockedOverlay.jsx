@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 const AUTO_CLOSE_MS = 5600
 
 export default function AchievementUnlockedOverlay({ achievement, onClose }) {
+  // Auto-close timer
   useEffect(() => {
     if (!achievement) return undefined
     const timeout = setTimeout(() => {
@@ -10,6 +11,24 @@ export default function AchievementUnlockedOverlay({ achievement, onClose }) {
     }, AUTO_CLOSE_MS)
     return () => clearTimeout(timeout)
   }, [achievement, onClose])
+
+  // FIXED: Lock scroll region when overlay is open to prevent background scrolling
+  useEffect(() => {
+    if (!achievement) return undefined
+    
+    const scrollRegion = document.querySelector('.scroll-region')
+    const originalOverflow = scrollRegion ? scrollRegion.style.overflow : null
+    
+    if (scrollRegion) {
+      scrollRegion.style.overflow = 'hidden'
+    }
+    
+    return () => {
+      if (scrollRegion) {
+        scrollRegion.style.overflow = originalOverflow || ''
+      }
+    }
+  }, [achievement])
 
   if (!achievement) {
     return null
