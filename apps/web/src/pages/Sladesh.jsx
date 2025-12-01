@@ -767,6 +767,7 @@ function OverlayAvatar({ participant }) {
 }
 
 function OrbitCenterButton({ disabled, onPress }) {
+  const { isDarkMode } = useTheme();
   const [pulseDelay, setPulseDelay] = useState(() => Math.random() * 2);
   const [pulseDuration, setPulseDuration] = useState(() => 2 + Math.random() * 1.5);
 
@@ -779,6 +780,17 @@ function OrbitCenterButton({ disabled, onPress }) {
 
     return () => clearInterval(interval);
   }, []);
+
+  // Theme-aware styling for circle visibility
+  const circleStyle = isDarkMode
+    ? {
+        borderColor: "color-mix(in srgb, var(--line) 60%, transparent)",
+        backgroundColor: "color-mix(in srgb, var(--surface) 45%, transparent)",
+      }
+    : {
+        borderColor: "var(--line)",
+        backgroundColor: "color-mix(in srgb, var(--line) 30%, transparent)",
+      };
 
   return (
     <>
@@ -805,10 +817,7 @@ function OrbitCenterButton({ disabled, onPress }) {
       >
         <div
           className="grid h-28 w-28 place-items-center rounded-full border pulse-shadow-animation"
-          style={{
-            borderColor: "color-mix(in srgb, var(--surface) 55%, transparent)",
-            backgroundColor: "color-mix(in srgb, var(--surface) 45%, transparent)",
-          }}
+          style={circleStyle}
         >
           <span className="text-4xl leading-none" aria-hidden="true">
             🤙
