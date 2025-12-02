@@ -380,9 +380,8 @@ export default function AppShell() {
 
             <main className="scroll-region">
               <div className="mx-auto max-w-[480px] px-4 py-3">
-                <AnimatePresence mode="popLayout" initial={false}>
-                  <Outlet key={location.pathname} />
-                </AnimatePresence>
+                {/* Avoid rendering two full pages at once (popLayout kept both mounted) */}
+                <Outlet key={location.pathname} />
               </div>
             </main>
 
