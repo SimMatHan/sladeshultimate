@@ -5,6 +5,7 @@ import { db } from '../firebase'
 import { useChannel } from '../hooks/useChannel'
 import { useAuth } from '../hooks/useAuth'
 import { resolveMockChannelKey, isMemberOfMockChannel, MOCK_CHANNEL_KEYS } from '../utils/mockChannels'
+import { getLatestResetBoundary } from '../services/userService'
 
 const LocationContext = createContext(null)
 
@@ -221,6 +222,7 @@ export function LocationProvider({ children }) {
       try {
         const usersRef = collection(db, 'users')
         const now = Date.now()
+        const boundaryStart = getLatestResetBoundary(new Date()).getTime()
         
         // CHANNEL FILTERING: Query filters users by activeChannelId using array-contains.
         // Only users who have activeChannelId in their joinedChannelIds array are returned.
@@ -253,11 +255,11 @@ export function LocationProvider({ children }) {
           let lastActionType = null
           let lastActionTimestamp = null
 
-          // Check for recent check-in (within 12 hours)
+          // Check for recent check-in (within the current noon-to-noon window)
           const lastCheckIn = userData.lastCheckIn
           if (lastCheckIn) {
             const checkInTime = lastCheckIn.toMillis ? lastCheckIn.toMillis() : (lastCheckIn.seconds * 1000)
-            if (checkInTime >= now - 12 * 60 * 60 * 1000) {
+            if (checkInTime >= boundaryStart) {
               lastActionType = 'checkin'
               lastActionTimestamp = checkInTime
             }
@@ -287,7 +289,7 @@ export function LocationProvider({ children }) {
             }
           }
 
-          // Only include users with recent actions (within 12 hours)
+          // Only include users with recent actions (check-ins within the current window, other actions within 12 hours)
           if (lastActionType && lastActionTimestamp) {
             const locationTimestamp = userData.currentLocation.timestamp?.toMillis 
               ? userData.currentLocation.timestamp.toMillis() 

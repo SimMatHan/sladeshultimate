@@ -65,12 +65,13 @@ export default function ProfileDetails() {
   }, [userId]);
 
   // Build drink breakdown
+  const currentRun = profile.currentRunDrinkCount || 0;
+
   const drinkBreakdown = useMemo(() => {
     if (!profile) return [];
-    if (profile.drinkBreakdown) return profile.drinkBreakdown;
 
+    const variations = profile.currentRunDrinkVariations || profile.drinkVariations || {};
     const breakdown = [];
-    const variations = profile.drinkVariations || {};
 
     Object.entries(variations).forEach(([type, typeVariations]) => {
       if (typeVariations && typeof typeVariations === 'object') {
@@ -79,6 +80,7 @@ export default function ProfileDetails() {
             breakdown.push({
               id: `${type}-${variation}`,
               label: variation,
+              type,
               count,
             });
           }
@@ -86,10 +88,43 @@ export default function ProfileDetails() {
       }
     });
 
-    return breakdown.sort((a, b) => b.count - a.count);
+    if (breakdown.length > 0) {
+      return breakdown.sort((a, b) => b.count - a.count);
+    }
+
+    // Fallback to any precomputed breakdown if available
+    if (profile.drinkBreakdown) return profile.drinkBreakdown;
+
+    return [];
   }, [profile]);
 
-  const breakdownTotal = drinkBreakdown.reduce((sum, item) => sum + item.count, 0);
+  const percentageBase = currentRun || drinkBreakdown.reduce((sum, item) => sum + item.count, 0);
+
+  const favoriteType = useMemo(() => {
+    const variations = profile?.currentRunDrinkVariations || profile?.drinkVariations || {};
+    let topType = null;
+    let topCount = 0;
+
+    Object.entries(variations).forEach(([type, typeVariations]) => {
+      if (typeVariations && typeof typeVariations === 'object') {
+        const typeTotal = Object.values(typeVariations).reduce((sum, value) => sum + (value || 0), 0);
+        if (typeTotal > topCount) {
+          topType = type;
+          topCount = typeTotal;
+        }
+      }
+    });
+
+    return topType
+      ? {
+          type: topType,
+          count: topCount,
+          percentage: percentageBase ? Math.round((topCount / percentageBase) * 100) : 0,
+        }
+      : null;
+  }, [percentageBase, profile]);
+
+  const favoriteVariation = drinkBreakdown[0] || null;
 
   // Get unlocked achievements
   const unlockedAchievements = useMemo(() => {
@@ -135,7 +170,6 @@ export default function ProfileDetails() {
   const displayName = profile.name || profile.username || 'Ukendt';
   const displayUsername = profile.username;
   const totalDrinks = profile.totalDrinks || 0;
-  const currentRun = profile.currentRunDrinkCount || 0;
 
   return (
     <motion.div
@@ -221,13 +255,20 @@ export default function ProfileDetails() {
 
       {/* Drink Breakdown */}
       <div className="space-y-3 pt-4">
-        <h2 className="text-xs font-bold uppercase tracking-widest text-left pl-1" style={{ color: 'var(--muted)' }}>
-          Top Drinks
-        </h2>
+        <div className="space-y-1 pl-1">
+          <h2 className="text-xs font-bold uppercase tracking-widest text-left" style={{ color: 'var(--muted)' }}>
+            Favorit i nuv&#230;rende run
+          </h2>
+          <p className="text-[11px] text-left" style={{ color: 'var(--muted)' }}>
+            {favoriteVariation
+              ? `${favoriteVariation.label} (${favoriteType?.type || 'mix'}) er mest logget i dette run${favoriteType?.percentage != null ? ` \u2014 ${favoriteType.percentage}% af dine nuv\u00e6rende drinks` : ''}.`
+              : 'Ingen favorit endnu \u2014 log en drink i dette run for at se din favorit.'}
+          </p>
+        </div>
         {drinkBreakdown.length > 0 ? (
           <div className="space-y-4">
             {drinkBreakdown.map((item) => {
-              const percentage = breakdownTotal ? Math.round((item.count / breakdownTotal) * 100) : 0;
+              const percentage = percentageBase ? Math.round((item.count / percentageBase) * 100) : 0;
               return (
                 <div key={item.id} className="flex flex-col gap-1">
                   <div className="flex items-end justify-between text-sm">
@@ -248,16 +289,16 @@ export default function ProfileDetails() {
                     />
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="flex items-center justify-center rounded-2xl border border-dashed border-[var(--line)] p-8">
-            <p className="text-sm font-medium" style={{ color: 'var(--muted)' }}>
-              Ingen drinks registreret endnu
-            </p>
-          </div>
-        )}
+            );
+          })}
+        </div>
+      ) : (
+        <div className="flex items-center justify-center rounded-2xl border border-dashed border-[var(--line)] p-8">
+          <p className="text-sm font-medium" style={{ color: 'var(--muted)' }}>
+            Ingen drinks registreret i dette run endnu
+          </p>
+        </div>
+      )}
       </div>
 
       {activeAchievement && (

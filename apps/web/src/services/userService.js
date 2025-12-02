@@ -18,7 +18,7 @@ import { db } from '../firebase'
 import { deriveInitials, generateAvatarGradient } from '../config/firestore.schema'
 import { normalizePromilleInput } from '../utils/promille'
 
-const RESET_BOUNDARY_HOURS = [0, 12]
+const RESET_BOUNDARY_HOUR = 12 // Check-in/message window resets at local 12:00
 const RESET_TIMEZONE = 'Europe/Copenhagen'
 const DRINK_DAY_START_HOUR = 10
 const TIMEZONE_FORMATTER = new Intl.DateTimeFormat('en-US', {
@@ -73,10 +73,10 @@ export function getLatestResetBoundary(now = new Date()) {
   const zoned = shiftDateByOffset(now, offsetMs)
   const boundary = new Date(zoned)
   const zonedHour = boundary.getUTCHours()
-  const targetHour = zonedHour >= RESET_BOUNDARY_HOURS[1]
-    ? RESET_BOUNDARY_HOURS[1]
-    : RESET_BOUNDARY_HOURS[0]
-  boundary.setUTCHours(targetHour, 0, 0, 0)
+  boundary.setUTCHours(RESET_BOUNDARY_HOUR, 0, 0, 0)
+  if (zonedHour < RESET_BOUNDARY_HOUR) {
+    boundary.setUTCDate(boundary.getUTCDate() - 1)
+  }
   return shiftDateByOffset(boundary, -offsetMs)
 }
 
@@ -85,10 +85,10 @@ export function getNextResetBoundary(now = new Date()) {
   const zoned = shiftDateByOffset(now, offsetMs)
   const boundary = new Date(zoned)
   const zonedHour = boundary.getUTCHours()
-  const targetHour = zonedHour < RESET_BOUNDARY_HOURS[1]
-    ? RESET_BOUNDARY_HOURS[1]
-    : 24
-  boundary.setUTCHours(targetHour, 0, 0, 0)
+  boundary.setUTCHours(RESET_BOUNDARY_HOUR, 0, 0, 0)
+  if (zonedHour >= RESET_BOUNDARY_HOUR) {
+    boundary.setUTCDate(boundary.getUTCDate() + 1)
+  }
   return shiftDateByOffset(boundary, -offsetMs)
 }
 
@@ -166,7 +166,7 @@ async function refreshCheckInStatus(userRef, userData, now = new Date()) {
 
   if (expired) {
     updates.checkInStatus = false
-    // Clear location when check-in expires (at 00:00 and 12:00)
+    // Clear location when check-in expires (aligned to the noon reset boundary)
     updates.currentLocation = null
   }
 

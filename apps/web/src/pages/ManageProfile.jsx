@@ -29,6 +29,24 @@ const GRADIENT_OPTIONS = [
   { id: "brand", name: "Brand", gradient: "from-[color:var(--brand,#FF385C)]/90 to-[color:var(--brand,#FF385C)]/70" },
 ];
 
+function ToggleSwitch({ checked, onChange, ariaLabel }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={ariaLabel}
+      onClick={onChange}
+      className="relative inline-flex h-7 w-12 items-center rounded-full transition"
+      style={{ backgroundColor: checked ? 'var(--brand)' : 'var(--line)' }}
+    >
+      <span
+        className={`inline-block h-6 w-6 transform rounded-full bg-white shadow transition ${checked ? "translate-x-5" : "translate-x-1"}`}
+      />
+    </button>
+  );
+}
+
 export default function ManageProfile() {
   const navigate = useNavigate();
   const { isDarkMode, toggleDarkMode } = useTheme();
@@ -421,18 +439,11 @@ export default function ManageProfile() {
                   Sl&#229; til for at gemme h&#248;jde, v&#230;gt og k&#248;n.
                 </span>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={userData.promilleEnabled}
-                onClick={handlePromilleToggle}
-                className="relative inline-flex h-7 w-12 items-center rounded-full transition"
-                style={{ backgroundColor: userData.promilleEnabled ? 'var(--brand)' : 'var(--line)' }}
-              >
-                <span
-                  className={`inline-block h-6 w-6 transform rounded-full bg-white shadow transition ${userData.promilleEnabled ? "translate-x-5" : "translate-x-1"}`}
-                />
-              </button>
+              <ToggleSwitch
+                checked={userData.promilleEnabled}
+                onChange={handlePromilleToggle}
+                ariaLabel="Aktiver promille counter"
+              />
             </div>
 
             {userData.promilleEnabled && (
@@ -550,43 +561,23 @@ export default function ManageProfile() {
             </p>
           </div>
 
-          <button
-            type="button"
-            role="switch"
-            aria-checked={notificationsEnabled}
-            onClick={handleNotificationsToggle}
-            className="flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2"
-            style={{
-              borderColor: 'var(--line)',
-              backgroundColor: 'var(--surface)'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.borderColor = 'var(--line)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.borderColor = 'var(--line)';
-            }}
-          >
-            <span className="space-y-1">
-              <span className="block text-sm font-semibold" style={{ color: 'var(--ink)' }}>
-                Notifikationer
+          <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--line)', backgroundColor: 'var(--surface)' }}>
+            <div className="flex items-center justify-between gap-3">
+              <span className="space-y-1">
+                <span className="block text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                  Notifikationer
+                </span>
+                <span className="block text-xs" style={{ color: 'var(--muted)' }}>
+                  {notificationsEnabled ? 'Aktiveret' : 'Deaktiveret'}
+                </span>
               </span>
-              <span className="block text-xs" style={{ color: 'var(--muted)' }}>
-                {notificationsEnabled ? 'Aktiveret' : 'Deaktiveret'}
-              </span>
-            </span>
-            <span
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${notificationsEnabled
-                  ? "bg-[color:var(--brand,#FF385C)]/90"
-                  : "bg-neutral-200 text-neutral-400"
-                }`}
-            >
-              <span
-                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${notificationsEnabled ? "translate-x-5" : "translate-x-1"
-                  }`}
+              <ToggleSwitch
+                checked={notificationsEnabled}
+                onChange={handleNotificationsToggle}
+                ariaLabel="Aktiver notifikationer"
               />
-            </span>
-          </button>
+            </div>
+          </div>
         </Card>
 
         {/* Auto-save indicator */}
