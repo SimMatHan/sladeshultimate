@@ -11,6 +11,11 @@ import { fetchLeaderboardProfiles, fetchUserRecentDrinks, clearLeaderboardCache,
 import { db } from '../firebase';
 import { resolveMockChannelKey, isMemberOfMockChannel, MOCK_CHANNEL_KEYS } from '../utils/mockChannels';
 
+const ACHIEVEMENT_LOOKUP = ACHIEVEMENTS.reduce((acc, achievement) => {
+  acc[achievement.id] = achievement;
+  return acc;
+}, {});
+
 const leaderboardProfiles = [
   {
     id: 'sara-holm',
@@ -32,6 +37,12 @@ const leaderboardProfiles = [
       { id: 'sara-cocktail', label: 'Cocktails', count: 27 },
       { id: 'sara-wine', label: 'Natural wine', count: 15 },
     ],
+    achievements: {
+      reset_confirmed: { count: 3 },
+      obeerma: { count: 5 },
+      full_bender: { count: 2 },
+      like_fine_wine: { count: 4 },
+    },
     recentDrinks: [
       { id: 'sara-recent-1', label: 'Sladesh shot', timestamp: 'I dag • 20:14' },
       { id: 'sara-recent-2', label: 'Passion spritz', timestamp: 'I går • 23:02' },
@@ -59,6 +70,11 @@ const leaderboardProfiles = [
       { id: 'mads-shot', label: 'Sladesh shots', count: 21 },
       { id: 'mads-other', label: 'Andre', count: 16 },
     ],
+    achievements: {
+      obeerma: { count: 2 },
+      full_bender: { count: 1 },
+      like_fine_wine: { count: 1 },
+    },
     recentDrinks: [
       { id: 'mads-recent-1', label: 'Pilsner', timestamp: 'I dag • 19:45' },
       { id: 'mads-recent-2', label: 'Mosaik IPA', timestamp: 'I går • 22:10' },
@@ -86,6 +102,10 @@ const leaderboardProfiles = [
       { id: 'camilla-seltzer', label: 'Hard seltzer', count: 20 },
       { id: 'camilla-bubbles', label: 'Bobler', count: 16 },
     ],
+    achievements: {
+      full_bender: { count: 3 },
+      obeerma: { count: 1 },
+    },
     recentDrinks: [
       { id: 'camilla-recent-1', label: 'Raspberry sour', timestamp: 'I dag • 18:55' },
       { id: 'camilla-recent-2', label: 'Sladesh shot', timestamp: 'I går • 23:40' },
@@ -113,6 +133,10 @@ const leaderboardProfiles = [
       { id: 'jonas-shot', label: 'Sladesh shots', count: 18 },
       { id: 'jonas-other', label: 'Mocktails', count: 16 },
     ],
+    achievements: {
+      reset_confirmed: { count: 1 },
+      like_fine_wine: { count: 2 },
+    },
     recentDrinks: [
       { id: 'jonas-recent-1', label: 'Gin & tonic', timestamp: 'I dag • 19:05' },
       { id: 'jonas-recent-2', label: 'Classic pilsner', timestamp: 'I går • 22:47' },
@@ -251,6 +275,7 @@ export default function Leaderboard() {
   const navigate = useNavigate();
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(!USE_MOCK_DATA);
+  const [achievementsReady, setAchievementsReady] = useState(false);
   const [error, setError] = useState(null);
   const topSectionRef = useRef(null);
   const listContainerRef = useRef(null);
@@ -355,6 +380,18 @@ export default function Leaderboard() {
     return [...profiles].sort(comparator);
   }, [profiles, sortMode]);
 
+  useEffect(() => {
+    // Defer achievement rendering to avoid initial layout shift when the page mounts
+    if (!loading) {
+      const id = requestAnimationFrame(() => setAchievementsReady(true));
+      return () => {
+        cancelAnimationFrame(id);
+        setAchievementsReady(false);
+      };
+    }
+    setAchievementsReady(false);
+  }, [loading]);
+
   return (
     <PageTransition>
       <Page title="Topliste">
@@ -396,6 +433,7 @@ export default function Leaderboard() {
                     onSelect={(p) => navigate(`/profile/${p.id}`, { state: { profile: p, from: 'leaderboard' } })}
                     isActive={false}
                     sortMode={sortMode}
+                    achievementsReady={achievementsReady}
                   />
                 ))
               )}
@@ -446,7 +484,7 @@ function SortToggle({ options, active, onChange }) {
   );
 }
 
-function ProfileCard({ profile, rank, onSelect, isActive, sortMode }) {
+function ProfileCard({ profile, rank, onSelect, isActive, sortMode, achievementsReady }) {
   const rankBadge = `#${rank}`;
   const displayName = profile.username || profile.name || 'Ukendt';
 
@@ -466,36 +504,130 @@ function ProfileCard({ profile, rank, onSelect, isActive, sortMode }) {
       className={`w-full text-left transition ${isActive ? '-translate-y-0.5' : 'hover:-translate-y-0.5'}`}
     >
       <div
-        className={`relative grid grid-cols-[auto_auto_1fr_auto] items-center gap-4 rounded-3xl border border-[var(--line)] p-4 shadow-sm transition ${isActive ? 'ring-2 ring-[var(--brand)] ring-offset-2' : 'hover:shadow-md'
+        className={`relative grid grid-cols-[auto_auto_1fr_auto] grid-rows-[auto_auto] items-start gap-x-4 gap-y-2 rounded-3xl border border-[var(--line)] p-4 shadow-sm transition ${isActive ? 'ring-2 ring-[var(--brand)] ring-offset-2' : 'hover:shadow-md'
           }`}
         style={{
           backgroundColor: 'var(--surface)',
         }}
       >
-        <span
-          className="flex h-10 w-10 items-center justify-center rounded-full border bg-[var(--subtle)] text-[13px] font-semibold"
-          style={{
-            borderColor: 'var(--line)',
-            color: 'var(--ink)'
-          }}
-        >
-          {rankBadge}
-        </span>
+        <div className="row-span-2 flex items-center self-stretch">
+          <span
+            className="flex h-10 w-10 items-center justify-center rounded-full border bg-[var(--subtle)] text-[13px] font-semibold"
+            style={{
+              borderColor: 'var(--line)',
+              color: 'var(--ink)'
+            }}
+          >
+            {rankBadge}
+          </span>
+        </div>
 
-        <Avatar
-          emoji={profile.profileEmoji}
-          gradient={profile.profileGradient || profile.avatarGradient}
-          initials={profile.initials}
-        />
+        <div className="row-span-2 flex items-center self-stretch">
+          <Avatar
+            emoji={profile.profileEmoji}
+            gradient={profile.profileGradient || profile.avatarGradient}
+            initials={profile.initials}
+          />
+        </div>
 
-        <span className="min-w-0 truncate text-sm font-semibold" style={{ color: 'var(--ink)' }}>{displayName}</span>
+        <div className="min-w-0">
+          <span className="block truncate text-sm font-semibold" style={{ color: 'var(--ink)' }}>{displayName}</span>
+        </div>
 
-        <div className="text-right leading-tight">
+        <div className="row-span-2 self-stretch text-right leading-tight flex flex-col items-end justify-center">
           <span className="block text-base font-semibold tabular-nums" style={{ color: 'var(--ink)' }}>{valueFormatted}</span>
           <span className="block text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>Drikke</span>
         </div>
+
+        <AchievementEmblems
+          achievements={profile.achievements}
+          ready={achievementsReady}
+          className="col-start-3 col-span-1 w-full pt-1"
+        />
       </div>
     </button>
+  );
+}
+
+function AchievementEmblems({ achievements, ready, className = '' }) {
+  const containerClassName = ['flex flex-wrap items-center gap-1.5', className].filter(Boolean).join(' ');
+  const placeholderClassName = ['min-h-[28px]', className].filter(Boolean).join(' ');
+
+  // Keep layout stable even before achievements render or when none exist
+  if (!ready) {
+    return <div className={placeholderClassName} aria-hidden="true" />;
+  }
+
+  const entries = Object.entries(achievements || {})
+    .map(([id, data]) => {
+      const achievement = ACHIEVEMENT_LOOKUP[id];
+      const count = data?.count || 0;
+      if (!achievement || count <= 0) return null;
+
+      return {
+        id,
+        count,
+        image: achievement.image,
+        title: achievement.title,
+      };
+    })
+    .filter(Boolean);
+
+  if (entries.length === 0) {
+    return <div className={placeholderClassName} aria-hidden="true" />;
+  }
+
+  entries.sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    return a.title.localeCompare(b.title);
+  });
+
+  const maxVisible = 1;
+  const topEntries = entries.slice(0, maxVisible);
+  const remainingCount = entries.length - topEntries.length;
+  const showOverflow = remainingCount > 0;
+
+  return (
+    <div className={containerClassName}>
+      {topEntries.map((item) => (
+        <div
+          key={item.id}
+          className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 shadow-sm"
+          style={{
+            borderColor: 'var(--line)',
+            backgroundColor: 'var(--subtle)',
+          }}
+          aria-label={`${item.title} x${item.count}`}
+          title={`${item.title} x${item.count}`}
+        >
+          <span
+            className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border bg-white"
+            style={{ borderColor: 'var(--line)' }}
+          >
+            <img src={item.image} alt="" className="h-6 w-6 object-contain" loading="lazy" />
+          </span>
+          {item.count > 1 && (
+            <span className="text-[11px] font-semibold leading-none" style={{ color: 'var(--muted)' }}>
+              x{item.count}
+            </span>
+          )}
+        </div>
+      ))}
+      {showOverflow && (
+        <div
+          className="inline-flex items-center justify-center rounded-full border px-2 py-1 text-[11px] font-semibold leading-none"
+          style={{
+            borderColor: 'var(--line)',
+            color: 'var(--muted)',
+            backgroundColor: 'var(--surface)',
+          }}
+          title={`+${remainingCount} flere badges`}
+          aria-label={`+${remainingCount} flere badges`}
+        >
+          +{remainingCount}
+        </div>
+      )}
+    </div>
   );
 }
 

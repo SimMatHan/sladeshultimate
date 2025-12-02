@@ -10,6 +10,7 @@ export const ACHIEVEMENTS = [
   {
     id: 'obeerma',
     type: 'total_drinks',
+    variationType: 'beer',
     threshold: 15,
     title: 'Obeerma',
     description: 'Beers down the hatch. Change is brewing.',
@@ -17,7 +18,7 @@ export const ACHIEVEMENTS = [
   },
   {
     id: 'full_bender',
-    type: 'total_all_drinks',
+    type: 'run_drinks',
     threshold: 20,
     title: 'Full Bender',
     description: 'Twenty drinks. Maybe switch to water for one round?',
@@ -25,11 +26,11 @@ export const ACHIEVEMENTS = [
   },
   {
     id: 'like_fine_wine',
-    type: 'total_wine_drinks',
+    type: 'total_drinks',
+    variationType: 'wine',
     threshold: 5,
     title: 'Like Fine Wine',
     description: 'Five wines deep and still aging gracefully.',
     image: '/assets/achievements/likefinewine.png',
   },
 ]
-

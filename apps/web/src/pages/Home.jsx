@@ -200,6 +200,23 @@ export default function Home() {
     navigate("/achievements");
   };
 
+  const handleOpenResetConfirm = useCallback(() => {
+    setShowResetConfirm(true);
+  }, []);
+
+  const handleCloseResetConfirm = useCallback(() => {
+    setShowResetConfirm(false);
+  }, []);
+
+  const handleConfirmReset = useCallback(async () => {
+    if (!showResetConfirm) return;
+
+    const success = await resetRun();
+    if (success) {
+      setShowResetConfirm(false);
+    }
+  }, [resetRun, showResetConfirm]);
+
   const isCheckInDisabled = checkedIn || isCheckInBusy;
 
   // Update expiresAt when it expires to show the next reset boundary
@@ -452,11 +469,11 @@ export default function Home() {
             <Card
               bare
               className="group relative px-5 py-4 cursor-pointer transition hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent overflow-hidden"
-              onClick={() => setShowResetConfirm(true)}
+              onClick={handleOpenResetConfirm}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
-                  setShowResetConfirm(true);
+                  handleOpenResetConfirm();
                 }
               }}
               role="button"
@@ -487,7 +504,7 @@ export default function Home() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => setShowResetConfirm(false)}
+            onClick={handleCloseResetConfirm}
           />
           <motion.div
             className="relative w-full max-w-sm overflow-hidden rounded-2xl bg-white p-6 shadow-xl dark:bg-zinc-900"
@@ -510,19 +527,14 @@ export default function Home() {
             <div className="mt-6 flex justify-end gap-3">
               <button
                 type="button"
-                onClick={() => setShowResetConfirm(false)}
+                onClick={handleCloseResetConfirm}
                 className="rounded-lg px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
               >
                 Annuller
               </button>
               <button
                 type="button"
-                onClick={async () => {
-                  const success = await resetRun();
-                  if (success) {
-                    setShowResetConfirm(false);
-                  }
-                }}
+                onClick={handleConfirmReset}
                 disabled={isResetting}
                 className="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-50"
               >

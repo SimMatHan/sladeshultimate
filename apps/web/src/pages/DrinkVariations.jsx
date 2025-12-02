@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { CATEGORIES } from "../constants/drinks";
@@ -30,6 +30,15 @@ export default function DrinkVariations() {
   );
 
   const items = variantsByCategory?.[categoryId] ?? [];
+
+  const resetScrollPosition = useCallback(() => {
+    const scrollRegion = document.querySelector(".scroll-region");
+    if (scrollRegion) {
+      scrollRegion.scrollTop = 0;
+    } else {
+      window.scrollTo({ top: 0, behavior: "auto" });
+    }
+  }, []);
 
   const navigateToCategory = useCallback(
     (nextCategoryId) => {
@@ -113,6 +122,17 @@ export default function DrinkVariations() {
       navigate("/home", { replace: true });
     }
   }, [category, navigate]);
+
+  useLayoutEffect(() => {
+    // Reset immediately on mount/category change to avoid rendering at previous offset
+    resetScrollPosition();
+  }, [categoryId, resetScrollPosition]);
+
+  useEffect(() => {
+    // Run again on next frame in case layout shifts after initial paint
+    const raf = requestAnimationFrame(resetScrollPosition);
+    return () => cancelAnimationFrame(raf);
+  }, [categoryId, resetScrollPosition]);
 
   useEffect(() => {
     const activePill = carouselRef.current?.querySelector(
