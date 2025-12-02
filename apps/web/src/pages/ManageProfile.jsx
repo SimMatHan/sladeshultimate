@@ -39,6 +39,10 @@ export default function ManageProfile() {
     email: "",
     profileEmoji: "🍹",
     profileGradient: "from-rose-400 to-orange-500",
+    promilleEnabled: false,
+    promilleHeightCm: "",
+    promilleWeightKg: "",
+    promilleGender: "",
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -73,12 +77,17 @@ export default function ManageProfile() {
         const firestoreUser = await getUser(currentUser.uid);
 
         if (firestoreUser) {
+          const promille = firestoreUser.promille || {};
           setUserData({
             username: firestoreUser.username || "",
             fullName: firestoreUser.fullName || currentUser.displayName || "",
             email: firestoreUser.email || currentUser.email || "",
             profileEmoji: firestoreUser.profileEmoji || "🍹",
             profileGradient: firestoreUser.profileGradient || "from-rose-400 to-orange-500",
+            promilleEnabled: !!promille.enabled,
+            promilleHeightCm: promille.heightCm ? String(promille.heightCm) : "",
+            promilleWeightKg: promille.weightKg ? String(promille.weightKg) : "",
+            promilleGender: promille.gender || "",
           });
         } else {
           // Fallback to Firebase Auth data
@@ -121,6 +130,15 @@ export default function ManageProfile() {
     setSaving(true);
     setSaved(false);
 
+    const heightNumber = Number(userData.promilleHeightCm);
+    const weightNumber = Number(userData.promilleWeightKg);
+    const promilleData = {
+      enabled: !!userData.promilleEnabled,
+      heightCm: !Number.isNaN(heightNumber) && heightNumber > 0 ? heightNumber : null,
+      weightKg: !Number.isNaN(weightNumber) && weightNumber > 0 ? weightNumber : null,
+      gender: userData.promilleGender || null
+    };
+
     // Debounce save operation (400ms)
     saveTimeoutRef.current = setTimeout(async () => {
       try {
@@ -128,6 +146,8 @@ export default function ManageProfile() {
           username: userData.username.trim(),
           profileEmoji: userData.profileEmoji,
           profileGradient: userData.profileGradient,
+          // Promille data saved for the optional counter experience
+          promille: promilleData
         });
 
         // Also save to localStorage for profile picture (for now)
@@ -153,7 +173,16 @@ export default function ManageProfile() {
         clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [userData.username, userData.profileEmoji, userData.profileGradient, currentUser]);
+  }, [
+    userData.username,
+    userData.profileEmoji,
+    userData.profileGradient,
+    userData.promilleEnabled,
+    userData.promilleHeightCm,
+    userData.promilleWeightKg,
+    userData.promilleGender,
+    currentUser
+  ]);
 
   useEffect(() => {
     if (!feedback) return undefined;
@@ -227,6 +256,27 @@ export default function ManageProfile() {
     }
     
     setFeedback(newValue ? "Notifikationer aktiveret" : "Notifikationer deaktiveret");
+  };
+
+  const handlePromilleToggle = () => {
+    setUserData((prev) => {
+      const nextEnabled = !prev.promilleEnabled;
+      return {
+        ...prev,
+        promilleEnabled: nextEnabled,
+        promilleHeightCm: nextEnabled ? prev.promilleHeightCm : "",
+        promilleWeightKg: nextEnabled ? prev.promilleWeightKg : "",
+        promilleGender: nextEnabled ? prev.promilleGender : "",
+      };
+    });
+  };
+
+  const handlePromilleChange = (field) => (e) => {
+    const value = e.target.value;
+    setUserData((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
   };
 
   if (loading) {
@@ -345,6 +395,93 @@ export default function ManageProfile() {
                 {userData.email}
               </div>
             </div>
+          </div>
+        </Card>
+
+        <Card className="px-5 py-6 space-y-4">
+          <div className="space-y-1">
+            <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+              Promille counter
+            </div>
+            <h2 className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>
+              Promille counter
+            </h2>
+            <p className="text-sm" style={{ color: 'var(--muted)' }}>
+              Valgfrit. Gemmer h&#248;jde, v&#230;gt og k&#248;n, hvis du vil bruge promille counteren.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--line)', backgroundColor: 'var(--surface)' }}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="space-y-1">
+                <span className="block text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                  Vil du pr&#248;ve promille counter?
+                </span>
+                <span className="block text-xs" style={{ color: 'var(--muted)' }}>
+                  Sl&#229; til for at gemme h&#248;jde, v&#230;gt og k&#248;n.
+                </span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={userData.promilleEnabled}
+                onClick={handlePromilleToggle}
+                className="relative inline-flex h-7 w-12 items-center rounded-full transition"
+                style={{ backgroundColor: userData.promilleEnabled ? 'var(--brand)' : 'var(--line)' }}
+              >
+                <span
+                  className={`inline-block h-6 w-6 transform rounded-full bg-white shadow transition ${userData.promilleEnabled ? "translate-x-5" : "translate-x-1"}`}
+                />
+              </button>
+            </div>
+
+            {userData.promilleEnabled && (
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="H&#248;jde (cm)"
+                  value={userData.promilleHeightCm}
+                  onChange={handlePromilleChange("promilleHeightCm")}
+                  min="0"
+                  className="w-full rounded-xl border px-4 py-3 text-sm transition focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-2"
+                  style={{
+                    borderColor: 'var(--line)',
+                    backgroundColor: 'var(--surface)',
+                    color: 'var(--ink)'
+                  }}
+                />
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="V&#230;gt (kg)"
+                  value={userData.promilleWeightKg}
+                  onChange={handlePromilleChange("promilleWeightKg")}
+                  min="0"
+                  className="w-full rounded-xl border px-4 py-3 text-sm transition focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-2"
+                  style={{
+                    borderColor: 'var(--line)',
+                    backgroundColor: 'var(--surface)',
+                    color: 'var(--ink)'
+                  }}
+                />
+                <select
+                  value={userData.promilleGender}
+                  onChange={handlePromilleChange("promilleGender")}
+                  className="w-full rounded-xl border px-4 py-3 text-sm transition focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-2 sm:col-span-2"
+                  style={{
+                    borderColor: 'var(--line)',
+                    backgroundColor: 'var(--surface)',
+                    color: 'var(--ink)'
+                  }}
+                >
+                  <option value="">K&#248;n</option>
+                  <option value="male">Mand</option>
+                  <option value="female">Kvinde</option>
+                  <option value="other">Andet</option>
+                </select>
+              </div>
+            )}
           </div>
         </Card>
 

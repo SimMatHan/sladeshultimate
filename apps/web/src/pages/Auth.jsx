@@ -14,6 +14,10 @@ export default function Auth() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
+  const [enablePromille, setEnablePromille] = useState(false);
+  const [heightCm, setHeightCm] = useState("");
+  const [weightKg, setWeightKg] = useState("");
+  const [gender, setGender] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -44,6 +48,10 @@ export default function Auth() {
     setPassword("");
     setFullName("");
     setUsername("");
+    setEnablePromille(false);
+    setHeightCm("");
+    setWeightKg("");
+    setGender("");
     const updated = new URLSearchParams(searchParams);
     updated.set("mode", nextMode);
     setSearchParams(updated, { replace: true });
@@ -59,6 +67,8 @@ export default function Auth() {
         const trimmedFullName = fullName.trim();
         const normalizedUsername = username.trim().toLowerCase();
         const usernamePattern = /^[a-z0-9._-]{3,20}$/;
+        const heightValue = Number(heightCm);
+        const weightValue = Number(weightKg);
 
         if (!trimmedFullName) {
           setError("Fulde navn er påkrævet");
@@ -76,7 +86,34 @@ export default function Auth() {
           return;
         }
 
-        await signUp(email, password, trimmedFullName, normalizedUsername);
+        if (enablePromille) {
+          if (!heightCm || Number.isNaN(heightValue) || heightValue <= 0) {
+            setError("Angiv din højde i centimeter for promille counteren.");
+            setIsSubmitting(false);
+            return;
+          }
+          if (!weightKg || Number.isNaN(weightValue) || weightValue <= 0) {
+            setError("Angiv din vægt i kilo for promille counteren.");
+            setIsSubmitting(false);
+            return;
+          }
+          if (!gender) {
+            setError("Vælg køn for promille counteren.");
+            setIsSubmitting(false);
+            return;
+          }
+        }
+
+        const promilleSettings = enablePromille
+          ? {
+              enabled: true,
+              heightCm: heightValue,
+              weightKg: weightValue,
+              gender,
+            }
+          : { enabled: false };
+
+        await signUp(email, password, trimmedFullName, normalizedUsername, null, promilleSettings);
         // User will be automatically created in Firestore via useAuth hook
         // Navigate after successful signup
         navigate("/onboarding", { replace: true });
@@ -189,6 +226,69 @@ export default function Auth() {
             className="w-full px-4 py-3 rounded-md border border-line bg-surface text-ink placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-50 disabled:cursor-not-allowed"
           />
 
+          {mode === "signup" && (
+            <div className="rounded-md border border-line bg-subtle px-4 py-3 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <p className="text-sm font-semibold text-ink">Vil du prøve promille counter?</p>
+                  <p className="text-xs text-muted">Valgfrit. Gemmer højde, vægt og køn, hvis du vil teste den.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEnablePromille((prev) => !prev)}
+                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition ${
+                    enablePromille ? "bg-brand" : "bg-line"
+                  }`}
+                  aria-pressed={enablePromille}
+                  aria-label="Aktivér promille counter"
+                  disabled={isSubmitting}
+                >
+                  <span
+                    className={`inline-block h-6 w-6 transform rounded-full bg-white shadow transition ${
+                      enablePromille ? "translate-x-5" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {enablePromille && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="Højde (cm)"
+                    value={heightCm}
+                    onChange={(e) => setHeightCm(e.target.value)}
+                    min="0"
+                    disabled={isSubmitting}
+                    className="w-full px-4 py-3 rounded-md border border-line bg-surface text-ink placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="Vægt (kg)"
+                    value={weightKg}
+                    onChange={(e) => setWeightKg(e.target.value)}
+                    min="0"
+                    disabled={isSubmitting}
+                    className="w-full px-4 py-3 rounded-md border border-line bg-surface text-ink placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                  <select
+                    value={gender}
+                    onChange={(e) => setGender(e.target.value)}
+                    disabled={isSubmitting}
+                    className="w-full px-4 py-3 rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-50 disabled:cursor-not-allowed sm:col-span-2"
+                  >
+                    <option value="">Køn</option>
+                    <option value="male">Mand</option>
+                    <option value="female">Kvinde</option>
+                    <option value="other">Andet</option>
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
+
           <button
             type="submit"
             disabled={isSubmitting || loading}
@@ -207,7 +307,6 @@ export default function Auth() {
           <div className="mt-6 text-center text-sm">
             <p className="text-muted">
               Glemt adgangskode?
-              {/* Opdatér evt. sti */}
               {" "}
               <Link to="/reset" className="text-brand font-medium">Nulstil</Link>
             </p>

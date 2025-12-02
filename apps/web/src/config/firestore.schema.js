@@ -20,6 +20,12 @@ export const USER_SCHEMA = {
   initials: 'string',         // Derived from fullName (e.g., "SH")
   avatarGradient: 'string',   // e.g., "from-rose-400 to-orange-500"
   onboardingCompleted: 'boolean', // Whether onboarding was completed (gates splash)
+  promille: {                 // Optional promille counter preferences
+    enabled: 'boolean',
+    heightCm: 'number | null',
+    weightKg: 'number | null',
+    gender: '"male" | "female" | "other" | null'
+  },
   
   // Activity Tracking
   totalDrinks: 'number',      // Lifetime aggregated count (never resets)

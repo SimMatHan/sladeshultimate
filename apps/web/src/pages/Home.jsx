@@ -13,6 +13,7 @@ import { CATEGORIES } from "../constants/drinks";
 import { useDrinkLog } from "../contexts/DrinkLogContext";
 import { MAP_TILE_LAYER_PROPS } from "../utils/mapTiles";
 import { ACHIEVEMENTS } from "../config/achievements";
+import { estimatePromille } from "../utils/promille";
 import "leaflet/dist/leaflet.css";
 
 const DEFAULT_MAP_CENTER = [55.6761, 12.5683];
@@ -135,6 +136,13 @@ export default function Home() {
   const userTotalDrinks = userData?.totalDrinks || 0;
   const unlockedAchievements = Object.keys(userData?.achievements || {}).length;
   const totalAchievements = ACHIEVEMENTS.length;
+  const promilleSettings = userData?.promille || {};
+  const promilleEnabled = !!(
+    promilleSettings.enabled &&
+    promilleSettings.heightCm &&
+    promilleSettings.weightKg &&
+    promilleSettings.gender
+  );
 
   // Extract and expand drinks from variantCounts
   const currentRunDrinks = useMemo(() => {
@@ -164,6 +172,22 @@ export default function Home() {
     // Sort by timestamp (newest first)
     return drinks.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }, [variantCounts, userData?.lastDrinkAt]);
+
+  const promilleValue = useMemo(() => {
+    if (!promilleEnabled) return null;
+    return estimatePromille({
+      heightCm: promilleSettings.heightCm,
+      weightKg: promilleSettings.weightKg,
+      gender: promilleSettings.gender,
+      drinkCount: currentRunDrinkCount || 0
+    });
+  }, [
+    promilleEnabled,
+    promilleSettings.heightCm,
+    promilleSettings.weightKg,
+    promilleSettings.gender,
+    currentRunDrinkCount
+  ]);
 
   const handleCheckInClick = useCallback(async () => {
     if (!currentUser) {
@@ -335,11 +359,17 @@ export default function Home() {
                   i dag
                 </span>
               </div>
-              <p className="mt-3 text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
-                {userTotalDrinks > 0
-                  ? `${userTotalDrinks} i din Sladesh-tid`
-                  : "Registrer hver variation med drinkvælgeren nedenfor."}
-              </p>
+              {promilleEnabled && promilleValue !== null ? (
+                <p className="mt-3 text-xs leading-relaxed font-semibold" style={{ color: 'var(--ink)' }}>
+                  Din promille er {Number(promilleValue).toFixed(3)}
+                </p>
+              ) : (
+                <p className="mt-3 text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
+                  {userTotalDrinks > 0
+                    ? `${userTotalDrinks} i din Sladesh-tid`
+                    : "Registrer hver variation med drinkvælgeren nedenfor."}
+                </p>
+              )}
             </Card>
           </div>
         </div>
@@ -457,7 +487,7 @@ export default function Home() {
                     Map
                   </div>
                   <div className="mt-2 text-lg font-semibold" style={{ color: 'var(--ink)' }}>
-                    Find nærmeste bar
+                    Find vennerne
                   </div>
                   <p className="mt-2 text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
                     Navigér til kortet for at se hotspots og venner i nærheden.
@@ -559,42 +589,51 @@ export default function Home() {
             exit={{ opacity: 0, scale: 0.95 }}
             style={{ backgroundColor: "var(--surface)" }}
           >
-            {/* Header */}
-            <div 
-              className="flex items-center justify-between p-6 pb-4 border-b"
-              style={{ borderColor: "var(--line)" }}
-            >
-              <h3 
-                className="text-lg font-semibold text-zinc-900 dark:text-zinc-100"
-                style={{ color: "var(--ink)" }}
-              >
-                Dit nuværende run
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowCurrentRunModal(false)}
-                className="rounded-lg p-1.5 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2"
-                aria-label="Luk"
-              >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  style={{ color: "var(--muted)" }}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
+            
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6 -webkit-overflow-scrolling-touch">
+              <div className="space-y-4 mb-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl border px-4 py-3" style={{ borderColor: "var(--line)", backgroundColor: "var(--subtle)" }}>
+                    <p className="text-xs uppercase font-semibold tracking-wide" style={{ color: "var(--muted)" }}>
+                      I dag
+                    </p>
+                    <p className="text-2xl font-semibold" style={{ color: "var(--ink)" }}>
+                      {currentRunDrinkCount}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border px-4 py-3" style={{ borderColor: "var(--line)", backgroundColor: "var(--subtle)" }}>
+                    <p className="text-xs uppercase font-semibold tracking-wide" style={{ color: "var(--muted)" }}>
+                      Total
+                    </p>
+                    <p className="text-2xl font-semibold" style={{ color: "var(--ink)" }}>
+                      {userTotalDrinks}
+                    </p>
+                  </div>
+                  {promilleEnabled && promilleValue !== null && (
+                    <div className="col-span-2 rounded-xl border px-4 py-3 space-y-2" style={{ borderColor: "var(--line)", backgroundColor: "var(--surface)" }}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs uppercase font-semibold tracking-wide" style={{ color: "var(--muted)" }}>
+                            Din promille
+                          </p>
+                          <p className="text-2xl font-semibold" style={{ color: "var(--ink)" }}>
+                            {Number(promilleValue).toFixed(3)}
+                          </p>
+                        </div>
+                        <span className="text-[11px] font-semibold rounded-full px-3 py-1" style={{ backgroundColor: "var(--subtle)", color: "var(--muted)" }}>
+                          Estimat
+                        </span>
+                      </div>
+                      <p className="text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
+                        Groft estimat baseret på dine oplysninger og loggede drinks. Drik ansvarligt.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {currentRunDrinkCount === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <p 
@@ -606,6 +645,12 @@ export default function Home() {
                 </div>
               ) : (
                 <div className="space-y-0">
+                                    <p 
+                    className="text-sm font-medium text-zinc-900 dark:text-zinc-100"
+                    style={{ color: "var(--ink)" }}
+                  >
+                    Din Aktivitet
+                  </p>
                   {currentRunDrinks.map((drink, index) => (
                     <div
                       key={drink.id}

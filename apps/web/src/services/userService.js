@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { deriveInitials, generateAvatarGradient } from '../config/firestore.schema'
+import { normalizePromilleInput } from '../utils/promille'
 
 const RESET_BOUNDARY_HOURS = [0, 12]
 const RESET_TIMEZONE = 'Europe/Copenhagen'
@@ -263,9 +264,10 @@ function normalizeUsername(username = '') {
  * @param {string} userData.fullName - User's full name (required)
  * @param {string} userData.username - User's unique username (required)
  * @param {string} [userData.displayName] - Optional display name (defaults to fullName)
+ * @param {Object} [userData.promilleSettings] - Optional promille counter inputs
  * @returns {Promise<void>}
  */
-export async function createUser({ uid, email, fullName, username, displayName = null }) {
+export async function createUser({ uid, email, fullName, username, displayName = null, promilleSettings = null }) {
   if (!uid || !email || !fullName || !username) {
     throw new Error('uid, email, fullName og username skal udfyldes for at oprette en bruger')
   }
@@ -275,6 +277,7 @@ export async function createUser({ uid, email, fullName, username, displayName =
   const initials = deriveInitials(fullName)
   const avatarGradient = generateAvatarGradient(uid)
   const normalizedUsername = normalizeUsername(username)
+  const promille = normalizePromilleInput(promilleSettings || {})
 
   const userDoc = {
     uid,
@@ -305,6 +308,8 @@ export async function createUser({ uid, email, fullName, username, displayName =
     lastMessageViewedAt: {},
     joinedChannelIds: [],
     activeChannelId: null,
+    // Promille data saved for the optional counter experience
+    promille,
     createdAt: now,
     updatedAt: now,
     lastActiveAt: now

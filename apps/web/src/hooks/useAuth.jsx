@@ -39,9 +39,10 @@ export function useAuth() {
    * @param {string} fullName - User's full name (required)
    * @param {string} username - Unique username (required)
    * @param {string} [displayName] - Optional display name (defaults to fullName)
+   * @param {Object} [promilleSettings] - Optional promille counter inputs
    * @returns {Promise<UserCredential>}
    */
-  const signUp = useCallback(async (email, password, fullName, username, displayName = null) => {
+  const signUp = useCallback(async (email, password, fullName, username, displayName = null, promilleSettings = null) => {
     try {
       setError(null)
       
@@ -62,7 +63,8 @@ export function useAuth() {
         email: user.email,
         fullName,
         username,
-        displayName: displayName || fullName
+        displayName: displayName || fullName,
+        promilleSettings
       })
 
       // Ensure default channel exists and add user to it
