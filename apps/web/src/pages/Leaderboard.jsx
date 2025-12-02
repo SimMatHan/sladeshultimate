@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getDoc, doc } from 'firebase/firestore';
 import { ACHIEVEMENTS } from '../config/achievements';
 import Page from '../components/Page';
+import PageTransition from '../components/PageTransition';
 import { useChannel } from '../hooks/useChannel';
 import { useAuth } from '../hooks/useAuth';
 import { USE_MOCK_DATA } from '../config/env';
@@ -246,7 +248,7 @@ export default function Leaderboard() {
   const { currentUser } = useAuth();
   const activeChannelId = selectedChannel?.id || null;
   const [sortMode, setSortMode] = useState('current-run-most');
-  const [selectedProfile, setSelectedProfile] = useState(null);
+  const navigate = useNavigate();
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(!USE_MOCK_DATA);
   const [error, setError] = useState(null);
@@ -348,122 +350,60 @@ export default function Leaderboard() {
     };
   }, [activeChannelId]);
 
-  // Fetch recent drinks when a profile is selected (only in production mode)
-  useEffect(() => {
-    if (USE_MOCK_DATA || !selectedProfile) return;
-
-    const loadRecentDrinks = async () => {
-      try {
-        const recentDrinks = await fetchUserRecentDrinks(selectedProfile.id, 3);
-        setSelectedProfile(prev => ({
-          ...prev,
-          recentDrinks: recentDrinks.length > 0 ? recentDrinks : prev.recentDrinks
-        }));
-      } catch (err) {
-        console.error('Error loading recent drinks:', err);
-      }
-    };
-
-    loadRecentDrinks();
-  }, [selectedProfile?.id, USE_MOCK_DATA]);
-
   const sortedProfiles = useMemo(() => {
     const comparator = sortComparators[sortMode] || sortComparators['current-run-most'];
     return [...profiles].sort(comparator);
   }, [profiles, sortMode]);
 
-  // FIXED: Removed listMaxHeight calculation. Content now flows naturally in .scroll-region.
-  // No need for height calculations or nested scroll containers.
-
-  useEffect(() => {
-    if (!selectedProfile) return undefined;
-    const handleKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        setSelectedProfile(null);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedProfile]);
-
-  // Lock body scroll when modal overlay is open (ProfileDetailSheet is a modal)
-  useEffect(() => {
-    if (!selectedProfile) return undefined;
-
-    const scrollRegion = document.querySelector('.scroll-region');
-    const originalScrollRegionOverflow = scrollRegion ? scrollRegion.style.overflow : null;
-
-    // FIXED: Only lock the main scroll region when modal is open.
-    // The list container no longer has its own scroll, so we don't need to lock it.
-    if (scrollRegion) {
-      scrollRegion.style.overflow = 'hidden';
-    }
-
-    return () => {
-      if (scrollRegion) {
-        scrollRegion.style.overflow = originalScrollRegionOverflow || '';
-      }
-    };
-  }, [selectedProfile]);
-
   return (
-    <Page title="Topliste">
-      <div className="flex flex-col gap-4">
-        <div ref={topSectionRef} className="shrink-0 space-y-4 pt-1">
-          <p className="text-sm" style={{ color: 'var(--muted)' }}>
-            Følg med i hvem der har tracket flest drinks i Sladesh Crew. Tryk på et kort for at se deres
-            seneste aktivitet.
-          </p>
+    <PageTransition>
+      <Page title="Topliste">
+        <div className="flex flex-col gap-4">
+          <div ref={topSectionRef} className="shrink-0 space-y-4 pt-1">
+            <p className="text-sm" style={{ color: 'var(--muted)' }}>
+              Følg med i hvem der har tracket flest drinks i Sladesh Crew. Tryk på et kort for at se deres
+              seneste aktivitet.
+            </p>
 
-          <SortToggle options={sortOptions} active={sortMode} onChange={setSortMode} />
-        </div>
+            <SortToggle options={sortOptions} active={sortMode} onChange={setSortMode} />
+          </div>
 
-        {/* FIXED: Removed nested overflow-y-auto container. Content now flows naturally in .scroll-region.
-            This eliminates double-scroll conflicts and scroll lock issues on iOS. */}
-        <div
-          ref={listContainerRef}
-          className="-mr-3 pr-3 pb-6"
-        >
-          <div className="space-y-3">
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <p className="text-sm" style={{ color: 'var(--muted)' }}>Indlæser...</p>
-              </div>
-            ) : error ? (
-              <div className="flex items-center justify-center py-12">
-                <p className="text-sm" style={{ color: 'var(--muted)' }}>{error}</p>
-              </div>
-            ) : sortedProfiles.length === 0 ? (
-              <div className="flex items-center justify-center py-12">
-                <p className="text-sm" style={{ color: 'var(--muted)' }}>
-                  Ingen data endnu. Vær den første til at tracke drinks!
-                </p>
-              </div>
-            ) : (
-              sortedProfiles.map((profile, index) => (
-                <ProfileCard
-                  key={profile.id}
-                  profile={profile}
-                  rank={index + 1}
-                  onSelect={setSelectedProfile}
-                  isActive={selectedProfile?.id === profile.id}
-                  sortMode={sortMode}
-                />
-              ))
-            )}
+          <div
+            ref={listContainerRef}
+            className="-mr-3 pr-3 pb-6"
+          >
+            <div className="space-y-3">
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <p className="text-sm" style={{ color: 'var(--muted)' }}>Indlæser...</p>
+                </div>
+              ) : error ? (
+                <div className="flex items-center justify-center py-12">
+                  <p className="text-sm" style={{ color: 'var(--muted)' }}>{error}</p>
+                </div>
+              ) : sortedProfiles.length === 0 ? (
+                <div className="flex items-center justify-center py-12">
+                  <p className="text-sm" style={{ color: 'var(--muted)' }}>
+                    Ingen data endnu. Vær den første til at tracke drinks!
+                  </p>
+                </div>
+              ) : (
+                sortedProfiles.map((profile, index) => (
+                  <ProfileCard
+                    key={profile.id}
+                    profile={profile}
+                    rank={index + 1}
+                    onSelect={(p) => navigate(`/profile/${p.id}`, { state: { profile: p, from: 'leaderboard' } })}
+                    isActive={false}
+                    sortMode={sortMode}
+                  />
+                ))
+              )}
+            </div>
           </div>
         </div>
-      </div>
-
-      {selectedProfile ? (
-        <ProfileDetailSheet
-          profile={selectedProfile}
-          sortMode={sortMode}
-          onClose={() => setSelectedProfile(null)}
-        />
-      ) : null}
-    </Page>
+      </Page>
+    </PageTransition>
   );
 }
 
@@ -580,241 +520,3 @@ function Avatar({ emoji, gradient, initials, className = 'h-12 w-12 text-xl' }) 
     </div>
   );
 }
-
-function ProfileDetailSheet({ profile, sortMode, onClose }) {
-  const [userData, setUserData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const overlayFullName = profile.name || profile.username || 'Ukendt';
-  const overlayUsername = profile.username;
-
-  // Lock body scroll when overlay is open
-  useEffect(() => {
-    const original = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = original;
-    };
-  }, []);
-
-  // Fetch user data from Firestore when overlay opens
-  useEffect(() => {
-    if (USE_MOCK_DATA) {
-      // Use mock data from profile
-      setUserData({
-        totalDrinks: profile.totalDrinks || 0,
-        currentRunDrinkCount: profile.currentRunDrinkCount || 0,
-        drinkTypes: profile.drinkBreakdown ?
-          profile.drinkBreakdown.reduce((acc, item) => {
-            // Convert drinkBreakdown to drinkTypes format
-            const type = item.label.toLowerCase().replace(/\s+/g, '');
-            acc[type] = item.count;
-            return acc;
-          }, {}) : {},
-        drinkVariations: {},
-        createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days ago for mock
-        achievements: {} // Mock achievements could be added here if needed
-      });
-      setLoading(false);
-      return;
-    }
-
-    const fetchUserData = async () => {
-      try {
-        setLoading(true);
-        const userRef = doc(db, 'users', profile.id);
-        const userSnap = await getDoc(userRef);
-
-        if (userSnap.exists()) {
-          const data = userSnap.data();
-          setUserData({
-            totalDrinks: data.totalDrinks || 0,
-            currentRunDrinkCount: data.currentRunDrinkCount || 0,
-            drinkTypes: data.drinkTypes || {},
-            drinkVariations: data.drinkVariations || {},
-            createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt || new Date()),
-            achievements: data.achievements || {}
-          });
-        } else {
-          // Fallback to profile data if user not found
-          setUserData({
-            totalDrinks: profile.totalDrinks || 0,
-            currentRunDrinkCount: profile.currentRunDrinkCount || 0,
-            drinkTypes: {},
-            drinkVariations: {},
-            createdAt: new Date(),
-            achievements: {}
-          });
-        }
-      } catch (error) {
-        console.error('Error fetching user data:', error);
-        // Fallback to profile data on error
-        setUserData({
-          totalDrinks: profile.totalDrinks || 0,
-          currentRunDrinkCount: profile.currentRunDrinkCount || 0,
-          drinkTypes: {},
-          drinkVariations: {},
-          createdAt: new Date(),
-          achievements: {}
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchUserData();
-  }, [profile.id]);
-
-  // Build drink breakdown - always use drinkVariations for current run
-  const buildDrinkBreakdown = () => {
-    if (!userData) return [];
-
-    // Always use drinkVariations for current run
-    const breakdown = [];
-    const variations = userData.drinkVariations || {};
-
-    Object.entries(variations).forEach(([type, typeVariations]) => {
-      if (typeVariations && typeof typeVariations === 'object') {
-        Object.entries(typeVariations).forEach(([variation, count]) => {
-          if (count > 0) {
-            breakdown.push({
-              id: `${type}-${variation}`,
-              label: variation,
-              count: count
-            });
-          }
-        });
-      }
-    });
-
-    return breakdown.sort((a, b) => b.count - a.count);
-  };
-
-  const drinkBreakdown = userData ? buildDrinkBreakdown() : [];
-  const breakdownTotal = drinkBreakdown.reduce((sum, item) => sum + item.count, 0);
-
-  const mainNumber = userData ? (userData.totalDrinks || 0) : 0;
-
-  // Get unlocked achievements
-  const unlockedAchievements = useMemo(() => {
-    if (!userData || !userData.achievements) return [];
-    return ACHIEVEMENTS.filter(achievement => {
-      const userAchievement = userData.achievements[achievement.id];
-      // Check if unlocked (assuming existence in the map means unlocked or check a property)
-      return !!userAchievement;
-    }).map(achievement => ({
-      ...achievement,
-      userData: userData.achievements[achievement.id]
-    }));
-  }, [userData]);
-
-  if (loading) {
-    return null; // Or a spinner matching the modal style
-  }
-
-  return (
-    <div
-      className="pointer-events-auto fixed inset-0 z-[1300] flex items-center justify-center bg-black/35 backdrop-blur-md px-6 text-center"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="relative w-full max-w-sm rounded-[32px] border border-[color:var(--line)] bg-[color:var(--surface,#fff)] text-left shadow-[0_30px_60px_rgba(15,23,42,0.35)] max-h-[85vh] flex flex-col overflow-hidden">
-        <button
-          type="button"
-          aria-label="Luk"
-          onClick={onClose}
-          className="absolute right-4 top-4 z-10 inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-[color:var(--line)] text-xl font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--bg,#f7f8fb)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2"
-        >
-          ×
-        </button>
-
-        {/* Fixed Header Section */}
-        <div className="shrink-0 px-6 pt-10 pb-4 flex flex-col items-center gap-6 text-center border-b border-[var(--line)] bg-[var(--surface)]">
-          {/* Header Info */}
-          <div className="flex flex-col items-center gap-3">
-            <Avatar
-              emoji={profile.profileEmoji}
-              gradient={profile.profileGradient || profile.avatarGradient}
-              initials={profile.initials}
-              className="h-20 w-20 text-4xl shadow-md"
-            />
-            <div>
-              <h3 className="text-2xl font-semibold leading-tight" style={{ color: 'var(--ink)' }}>{overlayFullName}</h3>
-              {overlayUsername && <p className="text-sm font-medium" style={{ color: 'var(--muted)' }}>@{overlayUsername}</p>}
-            </div>
-          </div>
-
-          {/* Stats Grid */}
-          <div className="grid grid-cols-2 gap-3 w-full">
-            <div className="rounded-2xl border border-[var(--line)] bg-[var(--subtle)] p-4 flex flex-col items-center justify-center gap-1">
-              <span className="text-2xl font-bold tabular-nums" style={{ color: 'var(--ink)' }}>{mainNumber.toLocaleString('da-DK')}</span>
-              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>Total i Sladesh-tid</span>
-            </div>
-            <div className="rounded-2xl border border-[var(--line)] bg-[var(--subtle)] p-4 flex flex-col items-center justify-center gap-1">
-              <span className="text-2xl font-bold tabular-nums" style={{ color: 'var(--ink)' }}>{(userData?.currentRunDrinkCount || 0).toLocaleString('da-DK')}</span>
-              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>Loggede drinks i dag</span>
-            </div>
-          </div>
-
-          {/* Achievements Section */}
-          <div className="w-full space-y-3 pt-2">
-            <h4 className="text-xs font-bold uppercase tracking-widest text-left pl-1" style={{ color: 'var(--muted)' }}>Achievements</h4>
-            {unlockedAchievements.length > 0 ? (
-              <div className="flex flex-wrap gap-3 justify-center bg-[var(--subtle)] rounded-2xl p-4 border border-[var(--line)]">
-                {unlockedAchievements.map(ach => (
-                  <div key={ach.id} className="relative group" title={ach.title}>
-                    <img
-                      src={ach.image}
-                      alt={ach.title}
-                      className="w-12 h-12 object-contain drop-shadow-sm transition-transform hover:scale-110"
-                    />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex items-center justify-center rounded-2xl border border-dashed border-[var(--line)] p-6">
-                <p className="text-sm font-medium" style={{ color: 'var(--muted)' }}>Ingen achievements endnu</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Scrollable Drink Breakdown */}
-        <div className="flex-1 overflow-y-auto px-6 py-6 min-h-0 overscroll-contain">
-          {drinkBreakdown.length > 0 ? (
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-widest text-left pl-1" style={{ color: 'var(--muted)' }}>Top Drinks</h4>
-              <div className="space-y-4">
-                {drinkBreakdown.map(item => {
-                  const percentage = breakdownTotal ? Math.round((item.count / breakdownTotal) * 100) : 0;
-                  return (
-                    <div key={item.id} className="flex flex-col gap-1">
-                      <div className="flex items-end justify-between text-sm">
-                        <span className="font-medium text-[var(--ink)]">{item.label}</span>
-                        <div className="flex items-center gap-1.5 tabular-nums">
-                          <span className="text-xs font-medium text-[var(--muted)]">{percentage}%</span>
-                          <span className="font-bold text-[var(--ink)]">{item.count}</span>
-                        </div>
-                      </div>
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--subtle)]">
-                        <div
-                          className="h-full rounded-full bg-[var(--brand)] transition-all duration-500 ease-out"
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <div className="flex h-32 items-center justify-center rounded-2xl border border-dashed border-[var(--line)]">
-              <p className="text-sm" style={{ color: 'var(--muted)' }}>Ingen drinks data endnu</p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-

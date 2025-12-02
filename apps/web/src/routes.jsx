@@ -20,6 +20,7 @@ import AdminPortal from './pages/AdminPortal'
 import NotificationsDebug from './pages/NotificationsDebug'
 import DrinkVariations from './pages/DrinkVariations'
 import Achievements from './pages/Achievements'
+import ProfileDetails from './pages/ProfileDetails'
 import { isAdminUser } from './config/admin'
 import useDisplayMode from './hooks/useDisplayMode'
 import useStandaloneOverscrollBlock from './hooks/useStandaloneOverscrollBlock'
@@ -36,24 +37,24 @@ function SplashRouter() {
   const { userData, loading: userDataLoading } = useUserData()
   const [minDelayPassed, setMinDelayPassed] = useState(false)
   const [shouldExit, setShouldExit] = useState(false)
-  
+
   // Set minimum delay timer (3.5 seconds)
   useEffect(() => {
     const timer = setTimeout(() => {
       setMinDelayPassed(true)
     }, 3500)
-    
+
     return () => clearTimeout(timer)
   }, [])
-  
+
   // Navigate only when auth loading, user data loading, AND minimum delay have all completed
   useEffect(() => {
     // Wait for auth to load, user data to load, and minimum delay to pass
     if (loading || userDataLoading || !minDelayPassed) return
-    
+
     // Trigger exit animation first
     setShouldExit(true)
-    
+
     // Wait for exit animation to complete (0.4s) before navigating
     const navigateTimer = setTimeout(() => {
       if (!isSignedIn) return navigate('/auth?mode=signin', { replace: true })
@@ -62,12 +63,12 @@ function SplashRouter() {
       }
       return navigate('/home', { replace: true })
     }, 400) // Match exit animation duration
-    
+
     return () => clearTimeout(navigateTimer)
   }, [navigate, isSignedIn, loading, userDataLoading, minDelayPassed])
-  
+
   return (
-    <AnimatePresence mode="wait" onExitComplete={() => {}}>
+    <AnimatePresence mode="wait" onExitComplete={() => { }}>
       {!shouldExit && <Splash key="splash" />}
     </AnimatePresence>
   )
@@ -76,24 +77,24 @@ function SplashRouter() {
 function GuardOnboard({ children }) {
   const { isSignedIn, loading } = useAuthGuard()
   const { userData, loading: userDataLoading } = useUserData()
-  
+
   if (loading || userDataLoading) return <div>Indlæser...</div> // Or a loading component
   if (!isSignedIn) return <Navigate to="/auth?mode=signin" replace />
-  
+
   if (userData?.onboardingCompleted) return <Navigate to="/home" replace />
-  
+
   return children
 }
 
 function GuardApp({ children }) {
   const { isSignedIn, loading } = useAuthGuard()
   const { userData, loading: userDataLoading } = useUserData()
-  
+
   if (loading || userDataLoading) return <div>Indlæser...</div> // Or a loading component
   if (!isSignedIn) return <Navigate to="/auth?mode=signin" replace />
-  
+
   if (!userData?.onboardingCompleted) return <Navigate to="/onboarding" replace />
-  
+
   return children
 }
 
@@ -171,6 +172,7 @@ export default function RoutesView() {
         <Route path="more" element={<More />} />
         <Route path="drink/:categoryId" element={<DrinkVariations />} />
         <Route path="manage-channels" element={<ManageChannels />} />
+        <Route path="profile/:userId" element={<ProfileDetails />} />
         <Route path="manage-profile" element={<ManageProfile />} />
         <Route
           path="notifications"

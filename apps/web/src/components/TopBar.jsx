@@ -5,12 +5,12 @@ import { useChannel } from "../hooks/useChannel";
 import { useUserData } from "../contexts/UserDataContext";
 import { useAuth } from "../hooks/useAuth";
 import { USE_MOCK_DATA } from "../config/env";
-import { 
-  subscribeToMessages, 
-  sendMessage, 
-  getMessageQuota, 
+import {
+  subscribeToMessages,
+  sendMessage,
+  getMessageQuota,
   markMessagesAsSeen,
-  getUnreadMessageCount 
+  getUnreadMessageCount
 } from "../services/messageService";
 
 const DEFAULT_MESSAGES = [
@@ -86,7 +86,7 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
   // Load quota when panel opens and refresh periodically
   useEffect(() => {
     if (!open || !userId) return;
-    
+
     const loadQuota = async () => {
       try {
         const currentQuota = await getMessageQuota(userId);
@@ -95,13 +95,13 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
         console.error('Error loading quota:', error);
       }
     };
-    
+
     // Load immediately
     loadQuota();
-    
+
     // Refresh quota every 5 seconds while panel is open
     const intervalId = setInterval(loadQuota, 5000);
-    
+
     return () => clearInterval(intervalId);
   }, [open, userId]);
 
@@ -130,10 +130,10 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
         canSend: quota.remaining > 1
       };
       setQuota(optimisticQuota);
-      
+
       await sendMessage(channelId, userId, userName, messageInput);
       setMessageInput("");
-      
+
       // Refresh quota from Firestore after a short delay to ensure update is visible
       setTimeout(async () => {
         try {
@@ -188,7 +188,7 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
     >
       <div className="flex flex-col h-full">
         {/* Messages List */}
-        <div 
+        <div
           ref={messagesContainerRef}
           className="flex-1 overflow-y-auto px-6 py-4"
           style={{ maxHeight: "calc(70vh - 140px)" }}
@@ -210,11 +210,10 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
                     {message.userName}
                   </div>
                   <div
-                    className={`max-w-[75%] rounded-2xl px-4 py-2 ${
-                      isOwnMessage
-                        ? "bg-[color:var(--brand,#FF385C)] text-white"
-                        : "bg-[color:var(--line)]"
-                    }`}
+                    className={`max-w-[75%] rounded-2xl px-4 py-2 ${isOwnMessage
+                      ? "bg-[color:var(--brand,#FF385C)] text-white"
+                      : "bg-[color:var(--line)]"
+                      }`}
                     style={!isOwnMessage ? { color: 'var(--ink)' } : {}}
                   >
                     <p className="text-sm break-words">{message.content}</p>
@@ -249,8 +248,8 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
               disabled={!quota.canSend || isSending}
               maxLength={500}
               className="flex-1 px-4 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ 
-                borderColor: 'var(--line)', 
+              style={{
+                borderColor: 'var(--line)',
                 backgroundColor: 'var(--surface)',
                 color: 'var(--ink)'
               }}
@@ -393,7 +392,7 @@ export default function TopBar({
 
     let intervalId;
     let unsubscribeMessages;
-    
+
     const updateUnreadCount = async () => {
       try {
         const count = await getUnreadMessageCount(selectedChannel.id, currentUser.uid);
@@ -405,7 +404,7 @@ export default function TopBar({
 
     // Update immediately
     updateUnreadCount();
-    
+
     // Update every 30 seconds
     intervalId = setInterval(updateUnreadCount, 30000);
 
@@ -427,7 +426,7 @@ export default function TopBar({
   // Handler for overlay toggle
   const handleOverlayToggle = (overlay) => {
     setActiveOverlay(prev => prev === overlay ? null : overlay);
-    
+
     // When messages overlay opens, mark as seen and reset unread count
     if (overlay === 'messages' && currentUser && selectedChannel?.id) {
       markMessagesAsSeen(currentUser.uid, selectedChannel.id).catch(console.error);
@@ -469,20 +468,35 @@ export default function TopBar({
   const isDrinkPage = location.pathname === '/drink' || location.pathname.startsWith('/drink/')
   const isMapPage = location.pathname.startsWith('/map')
   const isAchievementsPage = location.pathname === '/achievements'
+  const isProfilePage = location.pathname.startsWith('/profile/')
 
   const showBackButton =
     ['/admin', '/manage-channels', '/manage-profile'].includes(location.pathname) ||
     isAchievementsPage ||
     isDrinkPage ||
-    isMapPage
+    isMapPage ||
+    isProfilePage
 
   const handleBackClick = useCallback(() => {
+    if (isProfilePage) {
+      // Navigate back to the originating page (leaderboard or map)
+      const from = location.state?.from;
+      if (from === 'leaderboard') {
+        navigate('/leaderboard', { replace: false });
+      } else if (from === 'map') {
+        navigate('/map', { replace: false });
+      } else {
+        // Fallback to home if no originating page
+        navigate('/home', { replace: false });
+      }
+      return;
+    }
     if (isDrinkPage || isMapPage || isAchievementsPage) {
       navigate('/home', { replace: true })
       return
     }
     navigate(-1)
-  }, [isDrinkPage, isMapPage, isAchievementsPage, navigate])
+  }, [isProfilePage, isDrinkPage, isMapPage, isAchievementsPage, navigate, location.state])
 
   return (
     <div className={`flex items-center gap-3 h-16 ${className}`}>
@@ -633,7 +647,7 @@ export default function TopBar({
               />
             </svg>
             {unreadCount > 0 && (
-              <span 
+              <span
                 className="absolute top-0 right-0 h-3 w-3 rounded-full bg-red-500 border-2"
                 style={{ borderColor: 'var(--surface)' }}
                 aria-label={`${unreadCount} nye beskeder`}

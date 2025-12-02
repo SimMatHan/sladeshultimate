@@ -10,16 +10,24 @@ const tabs = [
       (pathname) => pathname.startsWith('/drink/'),
       (pathname) => pathname === '/map' || pathname.startsWith('/map/'),
       (pathname) => pathname === '/achievements',
+      (pathname, location) => pathname.startsWith('/profile/') && location.state?.from === 'map',
     ],
   },
   { to: '/sladesh', label: 'Sladesh', Icon: SparkIcon },
-  { to: '/leaderboard', label: 'Score', Icon: TrophyIcon },
+  {
+    to: '/leaderboard',
+    label: 'Score',
+    Icon: TrophyIcon,
+    additionalActivePaths: [
+      (pathname, location) => pathname.startsWith('/profile/') && location.state?.from === 'leaderboard'
+    ]
+  },
   { to: '/more', label: 'More', Icon: MenuIcon, additionalActivePaths: ['/manage-channels', '/manage-profile', '/admin'] },
 ]
 
 function Item({ to, label, Icon, end, additionalActivePaths = [] }) {
   const location = useLocation()
-  
+
   return (
     <NavLink
       to={to}
@@ -28,16 +36,15 @@ function Item({ to, label, Icon, end, additionalActivePaths = [] }) {
       className={({ isActive }) => {
         const isAdditionalActive = additionalActivePaths.some((extra) => {
           if (typeof extra === 'function') {
-            return extra(location.pathname)
+            return extra(location.pathname, location)
           }
           return location.pathname === extra
         })
         const shouldBeActive = isActive || isAdditionalActive
-        return `flex flex-col items-center justify-center text-xs transition-colors ${
-          shouldBeActive 
-            ? 'text-[color:var(--brand,#FF385C)]' 
+        return `flex flex-col items-center justify-center text-xs transition-colors ${shouldBeActive
+            ? 'text-[color:var(--brand,#FF385C)]'
             : 'text-[color:var(--muted,#717171)]'
-        }`
+          }`
       }}
     >
       <span className="leading-none mb-1" aria-hidden="true">
@@ -50,7 +57,7 @@ function Item({ to, label, Icon, end, additionalActivePaths = [] }) {
 
 export default function TabBar() {
   return (
-    <nav 
+    <nav
       className="h-16 grid grid-cols-4 bg-[var(--surface)]"
       aria-label="Primary navigation"
     >
