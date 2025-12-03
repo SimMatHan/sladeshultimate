@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { LocationProvider } from './contexts/LocationContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { UserDataProvider } from './contexts/UserDataContext'
+import { SladeshProvider } from './contexts/SladeshContext'
 import App from './App.jsx'
 import './index.css'
 import { initServiceWorkerUpdates } from './utils/serviceWorkerUpdates'
@@ -42,9 +43,9 @@ const bootstrapOrientationLock = () => {
   lockOrientationToPortrait()
   updateLandscapeFallbackClass()
 
-  ;['orientationchange', 'resize'].forEach((eventName) => {
-    window.addEventListener(eventName, updateLandscapeFallbackClass, { passive: true })
-  })
+    ;['orientationchange', 'resize'].forEach((eventName) => {
+      window.addEventListener(eventName, updateLandscapeFallbackClass, { passive: true })
+    })
 }
 
 if (typeof window !== 'undefined' && !window.__slaOrientationLockInitialized) {
@@ -62,7 +63,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <ThemeProvider>
         <LocationProvider>
           <UserDataProvider>
-            <App />
+            <SladeshProvider>
+              <App />
+            </SladeshProvider>
           </UserDataProvider>
         </LocationProvider>
       </ThemeProvider>

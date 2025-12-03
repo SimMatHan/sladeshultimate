@@ -83,6 +83,24 @@ const builders = {
         ...context.data
       }
     }
+  },
+  sladesh_received: (context = {}) => {
+    const senderName = context.senderName || context.data?.senderName || 'En ven'
+    const sladeshId = context.sladeshId || context.data?.sladeshId
+    return {
+      title: context.title || `${senderName} har sendt dig en Sladesh!`,
+      body: context.body || 'Åbn appen og gennemfør udfordringen 🍺',
+      tag: context.tag || `sladesh_${sladeshId || 'challenge'}`,
+      data: {
+        type: 'sladesh_received',
+        senderId: context.senderId || context.data?.senderId,
+        senderName,
+        sladeshId,
+        channelId: context.channelId || context.data?.channelId,
+        url: context.data?.url || '/home',
+        ...context.data
+      }
+    }
   }
 }
 
@@ -122,4 +140,3 @@ function buildNotificationPayload(type = 'test', context = {}) {
 module.exports = {
   buildNotificationPayload
 }
-

@@ -101,7 +101,7 @@ async function deleteOldMessages() {
     for (const channelDoc of channelsSnapshot.docs) {
         const channelId = channelDoc.id;
         const messagesRef = channelDoc.ref.collection("messages");
-        
+
         // Query messages older than 24 hours
         const oldMessagesQuery = messagesRef
             .where("timestamp", "<", cutoffTime)
@@ -117,7 +117,7 @@ async function deleteOldMessages() {
 
     await bulkWriter.close();
     console.log(`Successfully deleted ${totalDeleted} old messages.`);
-    
+
     return { deletedCount: totalDeleted };
 }
 
@@ -150,15 +150,15 @@ exports.manualDeleteOldMessages = functions
         try {
             console.log("Running manual deletion of old messages...");
             const result = await deleteOldMessages();
-            res.status(200).json({ 
-                success: true, 
+            res.status(200).json({
+                success: true,
                 deletedCount: result.deletedCount,
                 message: `Successfully deleted ${result.deletedCount} old messages.`
             });
         } catch (error) {
             console.error("Error deleting old messages:", error);
-            res.status(500).json({ 
-                success: false, 
+            res.status(500).json({
+                success: false,
                 error: error.message || "Error deleting old messages."
             });
         }
@@ -328,17 +328,17 @@ async function notifySubscriptions(subDocs, payload) {
                 keys: docSnap.get("keys")
             };
             if (!subscription.endpoint || !subscription.keys) {
-                await docSnap.ref.delete().catch(() => {});
+                await docSnap.ref.delete().catch(() => { });
                 return { status: "skipped" };
             }
             try {
                 await sendWebPush(subscription, payload);
-                await docSnap.ref.update({ lastUsedAt: FieldValue.serverTimestamp() }).catch(() => {});
+                await docSnap.ref.update({ lastUsedAt: FieldValue.serverTimestamp() }).catch(() => { });
                 return { status: "sent" };
             } catch (error) {
                 console.error("[push] send error", { subscriptionId: docSnap.id, error: error.message });
                 if (isUnrecoverablePushError(error)) {
-                    await docSnap.ref.delete().catch(() => {});
+                    await docSnap.ref.delete().catch(() => { });
                 }
                 return { status: "failed", error };
             }
@@ -600,7 +600,7 @@ async function maybeSendDrinkMilestoneNotification(userId, beforeData = {}, afte
     }
 
     const channelId = afterData.activeChannelId || null;
-    
+
     // Only send notifications if user is in a valid channel (not excluded)
     if (isChannelExcluded(channelId)) {
         return;
@@ -624,7 +624,7 @@ async function maybeSendDrinkMilestoneNotification(userId, beforeData = {}, afte
         // Exclude users who are members of "Den Åbne Kanal"
         return !joinedChannelIds.includes(DEN_AABNE_CHANNEL_ID);
     });
-    
+
     if (!recipients.length) {
         console.log("[notifications] drink_milestone no recipients", { channelId, userId });
         return;
@@ -680,7 +680,7 @@ exports.sendUsageReminders = functions
     .onRun(async () => {
         const now = new Date();
         const currentSlot = getCurrentReminderSlot(now);
-        
+
         if (!currentSlot) {
             console.log("[notifications] usage_reminder skipped - not at a reminder time");
             return null;
@@ -760,4 +760,75 @@ exports.sendUsageReminders = functions
         });
 
         return null;
+    });
+
+/**
+ * Sends a notification when a Sladesh challenge is created.
+ * Triggered when a document is created in the sladeshChallenges collection.
+ */
+exports.onSladeshSent = functions
+    .region(DEFAULT_REGION)
+    .firestore.document("sladeshChallenges/{challengeId}")
+    .onCreate(async (snap, context) => {
+        const challenge = snap.data();
+        const challengeId = context.params.challengeId;
+
+        if (!challenge || !challenge.receiverId) {
+            console.warn("[sladesh] Missing challenge data or receiverId", { challengeId });
+            return null;
+        }
+
+        console.log("[sladesh] Processing new Sladesh challenge", {
+            challengeId,
+            senderId: challenge.senderId,
+            receiverId: challenge.receiverId
+        });
+
+        try {
+            // Get receiver's user document
+            const receiverDoc = await db.collection("users").doc(challenge.receiverId).get();
+
+            if (!receiverDoc.exists) {
+                console.warn("[sladesh] Receiver not found", { receiverId: challenge.receiverId });
+                return null;
+            }
+
+            const senderName = challenge.senderName || "En ven";
+            const channelId = challenge.channelId || null;
+
+            // Build notification payload
+            const payload = buildNotificationPayload("sladesh_received", {
+                senderId: challenge.senderId,
+                senderName,
+                sladeshId: challengeId,
+                channelId,
+                data: {
+                    url: "/home"
+                }
+            });
+
+            // Send notification to receiver
+            const result = await deliverNotificationToUserDoc(receiverDoc, payload, {
+                channelId,
+                senderId: challenge.senderId,
+                senderName,
+                type: "sladesh_received"
+            });
+
+            console.log("[sladesh] Notification delivered", {
+                challengeId,
+                receiverId: challenge.receiverId,
+                sent: result.sent,
+                failed: result.failed,
+                skipped: result.skipped
+            });
+
+            return null;
+        } catch (error) {
+            console.error("[sladesh] Error sending notification", {
+                challengeId,
+                error: error.message
+            });
+            return null;
+        }
     });

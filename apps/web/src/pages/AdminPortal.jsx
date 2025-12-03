@@ -18,6 +18,7 @@ import { useAuth } from "../hooks/useAuth";
 import { isAdminUser } from "../config/admin";
 import { CATEGORIES } from "../constants/drinks";
 import { resetAchievements } from "../services/userService";
+import { useSladesh } from "../contexts/SladeshContext";
 
 const DRINK_CATEGORIES = CATEGORIES.map(({ id, name }) => ({
   value: id,
@@ -86,6 +87,7 @@ export default function AdminPortal() {
   const [isUpdatingVariation, setIsUpdatingVariation] = useState(false);
   const [achievementFeedback, setAchievementFeedback] = useState(null);
   const [isResettingAchievements, setIsResettingAchievements] = useState(false);
+  const { debugReceiveSladesh } = useSladesh();
 
   const handleVariationChange = (field) => (event) => {
     setVariationForm((prev) => ({
@@ -563,6 +565,21 @@ export default function AdminPortal() {
                 {isResettingAchievements ? "Nulstiller..." : "Nulstil Achievement-tællere"}
               </button>
             </div>
+            <div className="space-y-2 pt-4 border-t" style={{ borderColor: 'var(--line)' }}>
+              <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
+                Sladesh Debug
+              </div>
+              <p className="text-xs text-[color:var(--muted)]">
+                Simuler at du modtager en Sladesh for at teste flowet (overlay, timer, kamera).
+              </p>
+              <button
+                type="button"
+                onClick={debugReceiveSladesh}
+                className="rounded-2xl border border-amber-200 bg-white px-4 py-2 text-sm font-semibold text-amber-600 shadow-sm transition hover:bg-amber-50"
+              >
+                Simuler Sladesh
+              </button>
+            </div>
           </Card>
         </section>
 
@@ -664,8 +681,8 @@ export default function AdminPortal() {
               </div>
             )}
             {!variationsLoading && customVariations.length === 0 && !variationsError && (
-                <div className="rounded-2xl border border-dashed px-4 py-3 text-sm text-[color:var(--muted)]">
-                  Ingen brugerdefinerede variationer endnu.
+              <div className="rounded-2xl border border-dashed px-4 py-3 text-sm text-[color:var(--muted)]">
+                Ingen brugerdefinerede variationer endnu.
               </div>
             )}
             <div className="space-y-6">
@@ -810,7 +827,7 @@ export default function AdminPortal() {
               })}
             </div>
           </Card>
-        </section>
+        </section >
 
         <section className="space-y-3">
           <div>
@@ -1049,8 +1066,8 @@ export default function AdminPortal() {
             </Card>
           )}
         </section>
-      </div>
-    </Page>
+      </div >
+    </Page >
   );
 }
 

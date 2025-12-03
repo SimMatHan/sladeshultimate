@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getDoc, doc } from 'firebase/firestore';
 import { ACHIEVEMENTS } from '../config/achievements';
+import { useSladesh, SLADESH_STATUS } from '../contexts/SladeshContext';
 import Page from '../components/Page';
 import PageTransition from '../components/PageTransition';
 import { useChannel } from '../hooks/useChannel';
@@ -494,8 +495,56 @@ function ProfileCard({ profile, rank, onSelect, isActive, sortMode, achievements
   // Defensive check: fallback to 0 if value is missing (prevents "stuck at 0" from showing undefined/null)
   // The value originates from userService.js addDrink() where it's computed using Firestore increment
   const displayValue = profile.currentRunDrinkCount || 0;
-
   const valueFormatted = displayValue.toLocaleString('da-DK');
+
+  const { getUserSladeshStatus } = useSladesh();
+  const sladeshStatus = getUserSladeshStatus(profile.id);
+
+  const getSladeshBadge = () => {
+    if (!sladeshStatus) return null;
+
+    // If completed/failed, maybe we don't show it prominently, or we show "Last Sladesh: Won"
+    // For now, let's focus on active ones or recent ones
+
+    const isSender = sladeshStatus.senderId === profile.id;
+    const isReceiver = sladeshStatus.receiverId === profile.id;
+
+    if (sladeshStatus.status === SLADESH_STATUS.IN_PROGRESS) {
+      if (isReceiver) {
+        return (
+          <span className="inline-flex items-center gap-1 rounded-md bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
+            🚨 Sladeshed
+          </span>
+        );
+      }
+      if (isSender) {
+        return (
+          <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+            🏹 Sender
+          </span>
+        );
+      }
+    }
+
+    if (sladeshStatus.status === SLADESH_STATUS.COMPLETED) {
+      // Only show if recent (e.g. < 1 hour ago) - for now just show it
+      return (
+        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+          ✅ Sladesh Won
+        </span>
+      );
+    }
+
+    if (sladeshStatus.status === SLADESH_STATUS.FAILED) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-bold text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+          💀 Sladesh Lost
+        </span>
+      );
+    }
+
+    return null;
+  };
 
   return (
     <button
@@ -531,7 +580,10 @@ function ProfileCard({ profile, rank, onSelect, isActive, sortMode, achievements
         </div>
 
         <div className="min-w-0">
-          <span className="block truncate text-sm font-semibold" style={{ color: 'var(--ink)' }}>{displayName}</span>
+          <div className="flex items-center gap-2">
+            <span className="block truncate text-sm font-semibold" style={{ color: 'var(--ink)' }}>{displayName}</span>
+            {getSladeshBadge()}
+          </div>
         </div>
 
         <div className="row-span-2 self-stretch text-right leading-tight flex flex-col items-end justify-center">

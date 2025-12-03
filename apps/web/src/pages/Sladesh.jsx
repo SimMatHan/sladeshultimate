@@ -416,11 +416,14 @@ export default function Sladesh() {
       setUserProfile((prev) =>
         prev
           ? {
-              ...prev,
-              lastSladeshSentAt: new Date(),
-            }
-          : prev
       );
+
+      console.log('[Sladesh] Successfully sent Sladesh', {
+        recipient: pendingTarget.username || pendingTarget.name,
+        recipientId: pendingTarget.id,
+        venue
+      });
+
       setStatusMessage({ tone: "success", body: `Sladesh sendt til ${pendingTarget.username || pendingTarget.name}.` });
       setPendingTarget(null);
     } catch (error) {
@@ -544,8 +547,8 @@ export default function Sladesh() {
                   statusMessage.tone === "error"
                     ? "var(--brand)"
                     : statusMessage.tone === "success"
-                    ? "var(--ink)"
-                    : "var(--muted)",
+                      ? "var(--ink)"
+                      : "var(--muted)",
               }}
             >
               {statusMessage.body}
@@ -569,12 +572,12 @@ export default function Sladesh() {
 function OrbitBackdrop() {
   // Enhanced brand color intensity for dark mode
   const { isDarkMode } = useTheme();
-  
+
   const brandOpacity1 = isDarkMode ? 0.65 : 0.28;
   const brandOpacity2 = isDarkMode ? 0.55 : 0.24;
   const brandOpacity3 = isDarkMode ? 0.45 : 0.18;
   const surfaceOpacity = isDarkMode ? 0.3 : 0.85;
-  
+
   const ringStyle = {
     background:
       `conic-gradient(from -90deg, rgba(var(--brand-rgb) / ${brandOpacity1}) 0deg, rgba(var(--brand-rgb) / ${brandOpacity2}) 150deg, color-mix(in srgb, var(--surface) ${surfaceOpacity}%, transparent) 240deg, rgba(var(--brand-rgb) / ${brandOpacity3}) 330deg, rgba(var(--brand-rgb) / ${brandOpacity1}) 360deg)`,
@@ -588,7 +591,7 @@ function OrbitBackdrop() {
     <>
       {/* Outer glow layer for dark mode */}
       {isDarkMode && (
-        <div 
+        <div
           className="pointer-events-none absolute left-1/2 top-1/2 h-[340px] w-[340px] -translate-x-1/2 -translate-y-1/2 rounded-full"
           style={{
             background: `radial-gradient(circle, rgba(var(--brand-rgb) / 0.15) 0%, transparent 70%)`,
@@ -596,17 +599,17 @@ function OrbitBackdrop() {
           }}
         />
       )}
-      <div 
-        className="pointer-events-none absolute left-1/2 top-1/2 h-[320px] w-[320px] -translate-x-1/2 -translate-y-1/2 rounded-full shadow-[0_40px_80px_rgba(15,23,42,0.12)]" 
+      <div
+        className="pointer-events-none absolute left-1/2 top-1/2 h-[320px] w-[320px] -translate-x-1/2 -translate-y-1/2 rounded-full shadow-[0_40px_80px_rgba(15,23,42,0.12)]"
         style={{ backgroundColor: 'color-mix(in srgb, var(--surface) 80%, transparent)' }}
       />
       <div
         className="pointer-events-none absolute left-1/2 top-1/2 h-[320px] w-[320px] -translate-x-1/2 -translate-y-1/2 rounded-full"
         style={ringStyle}
       />
-      <div 
-        className="pointer-events-none absolute left-1/2 top-1/2 h-[180px] w-[180px] -translate-x-1/2 -translate-y-1/2 rounded-full border backdrop-blur-sm" 
-        style={{ 
+      <div
+        className="pointer-events-none absolute left-1/2 top-1/2 h-[180px] w-[180px] -translate-x-1/2 -translate-y-1/2 rounded-full border backdrop-blur-sm"
+        style={{
           borderColor: 'color-mix(in srgb, var(--surface) 60%, transparent)',
           backgroundColor: 'color-mix(in srgb, var(--surface) 40%, transparent)',
           ...(isDarkMode ? {
@@ -653,7 +656,7 @@ function OrbitAvatar({ participant, disabled, onSelect }) {
 function AvatarBadge({ participant, size = "h-16 w-16", textSize = "text-lg" }) {
   const gradient = participant.profileGradient || participant.accent || "from-rose-400 to-orange-500";
   const emoji = participant.profileEmoji;
-  
+
   // Use emoji if available, otherwise fall back to initials
   if (emoji) {
     return (
@@ -664,7 +667,7 @@ function AvatarBadge({ participant, size = "h-16 w-16", textSize = "text-lg" }) 
       </div>
     );
   }
-  
+
   // Fallback to initials
   return (
     <div
@@ -752,7 +755,7 @@ function RequestOverlay({ participant, onClose, onConfirm, loading }) {
 function OverlayAvatar({ participant }) {
   const gradient = participant.profileGradient || participant.avatarGradient || participant.accent || "from-rose-400 to-orange-500";
   const emoji = participant.profileEmoji;
-  
+
   // Use emoji if available, otherwise fall back to initials
   if (emoji) {
     return (
@@ -763,7 +766,7 @@ function OverlayAvatar({ participant }) {
       </div>
     );
   }
-  
+
   // Fallback to initials
   return (
     <div
@@ -792,13 +795,13 @@ function OrbitCenterButton({ disabled, onPress }) {
   // Theme-aware styling for circle visibility
   const circleStyle = isDarkMode
     ? {
-        borderColor: "color-mix(in srgb, var(--line) 60%, transparent)",
-        backgroundColor: "color-mix(in srgb, var(--surface) 45%, transparent)",
-      }
+      borderColor: "color-mix(in srgb, var(--line) 60%, transparent)",
+      backgroundColor: "color-mix(in srgb, var(--surface) 45%, transparent)",
+    }
     : {
-        borderColor: "var(--line)",
-        backgroundColor: "color-mix(in srgb, var(--line) 30%, transparent)",
-      };
+      borderColor: "var(--line)",
+      backgroundColor: "color-mix(in srgb, var(--line) 30%, transparent)",
+    };
 
   return (
     <>

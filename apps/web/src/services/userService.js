@@ -33,13 +33,22 @@ const TIMEZONE_FORMATTER = new Intl.DateTimeFormat('en-US', {
 })
 
 function normalizeToDate(value) {
-  if (!value) return null
-  if (value instanceof Date) return value
+  // DEFENSIVE: Explicitly handle null, undefined, empty string, empty object
+  // This prevents corrupt data from being treated as valid timestamps
+  if (!value || value === '' || (typeof value === 'object' && Object.keys(value).length === 0 && !(value instanceof Date))) {
+    return null
+  }
+  if (value instanceof Date) {
+    // Validate the date is not Invalid Date
+    return Number.isNaN(value.getTime()) ? null : value
+  }
   if (typeof value.toDate === 'function') {
-    return value.toDate()
+    const date = value.toDate()
+    return Number.isNaN(date.getTime()) ? null : date
   }
   if (typeof value.seconds === 'number') {
-    return new Date(value.seconds * 1000)
+    const date = new Date(value.seconds * 1000)
+    return Number.isNaN(date.getTime()) ? null : date
   }
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime()) ? null : parsed
@@ -73,10 +82,20 @@ export function getLatestResetBoundary(now = new Date()) {
   const zoned = shiftDateByOffset(now, offsetMs)
   const boundary = new Date(zoned)
   const zonedHour = boundary.getUTCHours()
-  boundary.setUTCHours(RESET_BOUNDARY_HOUR, 0, 0, 0)
-  if (zonedHour < RESET_BOUNDARY_HOUR) {
-    boundary.setUTCDate(boundary.getUTCDate() - 1)
+
+  // SLADESH BLOCKS: Two 12-hour blocks per day
+  // Block 1: 00:00 - 12:00 (midnight to noon)
+  // Block 2: 12:00 - 24:00 (noon to midnight)
+  // This allows users to send one Sladesh in each block
+
+  if (zonedHour >= 12) {
+    // Currently in the 12:00-24:00 block, so latest boundary is 12:00 today
+    boundary.setUTCHours(12, 0, 0, 0)
+  } else {
+    // Currently in the 00:00-12:00 block, so latest boundary is 00:00 today
+    boundary.setUTCHours(0, 0, 0, 0)
   }
+
   return shiftDateByOffset(boundary, -offsetMs)
 }
 
@@ -85,10 +104,20 @@ export function getNextResetBoundary(now = new Date()) {
   const zoned = shiftDateByOffset(now, offsetMs)
   const boundary = new Date(zoned)
   const zonedHour = boundary.getUTCHours()
-  boundary.setUTCHours(RESET_BOUNDARY_HOUR, 0, 0, 0)
-  if (zonedHour >= RESET_BOUNDARY_HOUR) {
+
+  // SLADESH BLOCKS: Two 12-hour blocks per day
+  // Block 1: 00:00 - 12:00 (midnight to noon)
+  // Block 2: 12:00 - 24:00 (noon to midnight)
+
+  if (zonedHour >= 12) {
+    // Currently in the 12:00-24:00 block, next boundary is 00:00 tomorrow
     boundary.setUTCDate(boundary.getUTCDate() + 1)
+    boundary.setUTCHours(0, 0, 0, 0)
+  } else {
+    // Currently in the 00:00-12:00 block, next boundary is 12:00 today
+    boundary.setUTCHours(12, 0, 0, 0)
   }
+
   return shiftDateByOffset(boundary, -offsetMs)
 }
 
@@ -96,10 +125,37 @@ export function getSladeshCooldownState(userData = {}, now = new Date()) {
   const lastSentAt = normalizeToDate(userData.lastSladeshSentAt)
   const blockStart = getLatestResetBoundary(now)
   const blockEnd = getNextResetBoundary(now)
+
+  // DEBUG: Log the raw value to help identify corrupt data
+  if (userData.lastSladeshSentAt !== null && userData.lastSladeshSentAt !== undefined) {
+    console.log('[getSladeshCooldownState] Raw lastSladeshSentAt:', userData.lastSladeshSentAt)
+    console.log('[getSladeshCooldownState] Normalized lastSentAt:', lastSentAt)
+  }
+
+  // DEFENSIVE: Only block if we have a valid, non-null date
+  // This ensures corrupt data (empty objects, invalid timestamps) doesn't incorrectly block users
+  // A user should ONLY be blocked if they have a valid timestamp within the current 12-hour block
+  if (!lastSentAt || !(lastSentAt instanceof Date) || Number.isNaN(lastSentAt.getTime())) {
+    return {
+      blocked: false,
+      canSend: true,
+      lastSentAt: null,
+      blockStartedAt: blockStart,
+      blockEndsAt: blockEnd
+    }
+  }
+
+  // Check if the valid timestamp falls within the current block
   const blocked =
-    !!lastSentAt &&
     lastSentAt.getTime() >= blockStart.getTime() &&
     lastSentAt.getTime() < blockEnd.getTime()
+
+  console.log('[getSladeshCooldownState] Cooldown check:', {
+    blocked,
+    lastSentAt: lastSentAt.toISOString(),
+    blockStart: blockStart.toISOString(),
+    blockEnd: blockEnd.toISOString()
+  })
 
   return {
     blocked,
@@ -539,58 +595,62 @@ export async function addCheckIn(userId, checkInData) {
     currentLocation: {
       ...checkInData.location,
       venue: checkInData.venue,
-      timestamp: Timestamp.now()
-    },
+      lastActiveAt: serverTimestamp()
+    }
+  })
+}
+
+/**
+ * Add a Sladesh challenge
+ * Creates a challenge document and updates sender/receiver stats
+ * @param {string} senderId - Sender user ID
+ * @param {Object} sladeshData - Sladesh data
+ * @param {string} sladeshData.type - Type (should be "sent")
+ * @param {string} sladeshData.recipientId - Recipient user ID
+ * @param {string} sladeshData.venue - Venue name
+ * @param {Object} sladeshData.location - Location with lat/lng
+ * @param {string} [sladeshData.channelId] - Optional channel ID
+ * @returns {Promise<string>} Document ID of the new challenge
+ */
+export async function addSladesh(senderId, sladeshData) {
+  const { recipientId, venue, location, channelId } = sladeshData
+
+  // Create challenge document
+  const challengesRef = collection(db, 'sladeshChallenges')
+  const challengeDoc = await addDoc(challengesRef, {
+    senderId,
+    recipientId,
+    venue,
+    location,
+    channelId: channelId || null,
+    status: 'pending',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  })
+
+  // Update sender stats
+  const senderRef = doc(db, 'users', senderId)
+  await updateDoc(senderRef, {
+    sladeshSent: increment(1),
+    lastSladeshSentAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     lastActiveAt: serverTimestamp()
   })
 
-  return "check-in-optimized" // Return dummy ID or void since it's unused
+  // Update recipient stats
+  const recipientRef = doc(db, 'users', recipientId)
+  await updateDoc(recipientRef, {
+    sladeshReceived: increment(1),
+    updatedAt: serverTimestamp()
+  })
+
+  return challengeDoc.id
 }
 
 /**
- * Add a sladesh activity to user's sladesh subcollection
- * Updates user's sladesh counts
+ * Update user's location
  * @param {string} userId - User ID
- * @param {Object} sladeshData - Sladesh data
- * @param {string} sladeshData.type - "sent" or "received"
- * @param {string} [sladeshData.recipientId] - If type is "sent"
- * @param {string} [sladeshData.senderId] - If type is "received"
- * @param {string} sladeshData.venue - Venue name
- * @param {Object} sladeshData.location - Location with lat/lng
- * @param {string} [sladeshData.channelId] - Optional channel ID
- * @returns {Promise<string>} Document ID of the new sladesh
- */
-export async function addSladesh(userId, sladeshData) {
-  // Update user's sladesh counts
-  const userRef = doc(db, 'users', userId)
-  const userSnap = await getDoc(userRef)
-  const userData = userSnap.data()
-
-  const updates = {
-    updatedAt: serverTimestamp(),
-    lastActiveAt: serverTimestamp()
-  }
-
-  if (sladeshData.type === 'sent') {
-    updates.sladeshSent = (userData.sladeshSent || 0) + 1
-    updates.lastSladeshSentAt = serverTimestamp()
-  } else if (sladeshData.type === 'received') {
-    updates.sladeshReceived = (userData.sladeshReceived || 0) + 1
-  }
-
-  await updateDoc(userRef, updates)
-
-  return "sladesh-optimized"
-}
-
-/**
- * Update user's current location
- * @param {string} userId - User ID
- * @param {Object} locationData - Location data
- * @param {number} locationData.lat - Latitude
- * @param {number} locationData.lng - Longitude
- * @param {string} locationData.venue - Venue name
+ * @param {Object} locationData - Location data with lat, lng, and venue
  * @returns {Promise<void>}
  */
 export async function updateUserLocation(userId, locationData) {
@@ -600,45 +660,8 @@ export async function updateUserLocation(userId, locationData) {
       lat: locationData.lat,
       lng: locationData.lng,
       venue: locationData.venue,
-      timestamp: serverTimestamp()
+      lastActiveAt: serverTimestamp()
     },
-    updatedAt: serverTimestamp(),
-    lastActiveAt: serverTimestamp()
-  })
-}
-
-/**
- * DEV ONLY: Reset all drink-related fields for a user
- * Resets totalDrinks, currentRunDrinkCount, drinkTypes, and drinkVariations
- * Does not affect auth or other user fields
- * @param {string} userId - User ID
- * @returns {Promise<void>}
- */
-export async function resetDrinks(userId) {
-  const userRef = doc(db, 'users', userId)
-  await updateDoc(userRef, {
-    totalDrinks: 0,
-    currentRunDrinkCount: 0,
-    drinkTypes: {},
-    drinkVariations: {},
-    updatedAt: serverTimestamp(),
-    lastActiveAt: serverTimestamp()
-  })
-}
-
-/**
- * Reset only the current run's drink count and variations
- * Preserves totalDrinks (lifetime count)
- * @param {string} userId - User ID
- * @returns {Promise<void>}
- */
-export async function resetCurrentRun(userId) {
-  const userRef = doc(db, 'users', userId)
-  await updateDoc(userRef, {
-    currentRunDrinkCount: 0,
-    drinkVariations: {},
-    currentLocation: null,
-    totalRunResets: increment(1),
     updatedAt: serverTimestamp(),
     lastActiveAt: serverTimestamp()
   })
@@ -657,4 +680,35 @@ export async function resetAchievements(userId) {
     updatedAt: serverTimestamp(),
     lastActiveAt: serverTimestamp()
   })
+}
+
+/**
+ * DEV ONLY: Clean up corrupt lastSladeshSentAt values
+ * Sets lastSladeshSentAt to null for users where it's invalid
+ * This fixes the bug where users are incorrectly blocked from sending Sladesh
+ * @param {string} userId - User ID
+ * @returns {Promise<{cleaned: boolean, oldValue: any}>}
+ */
+export async function cleanupSladeshTimestamp(userId) {
+  const userRef = doc(db, 'users', userId)
+  const userSnap = await getDoc(userRef)
+
+  if (!userSnap.exists()) {
+    throw new Error(`User ${userId} not found`)
+  }
+
+  const userData = userSnap.data()
+  const lastSentAt = normalizeToDate(userData.lastSladeshSentAt)
+
+  // If normalizeToDate returns null but the field exists and is not null, clean it up
+  if (!lastSentAt && userData.lastSladeshSentAt !== null && userData.lastSladeshSentAt !== undefined) {
+    console.log(`[cleanupSladeshTimestamp] Cleaning up corrupt lastSladeshSentAt for user ${userId}:`, userData.lastSladeshSentAt)
+    await updateDoc(userRef, {
+      lastSladeshSentAt: null,
+      updatedAt: serverTimestamp()
+    })
+    return { cleaned: true, oldValue: userData.lastSladeshSentAt }
+  }
+
+  return { cleaned: false, oldValue: userData.lastSladeshSentAt }
 }

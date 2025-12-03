@@ -85,6 +85,24 @@ const builders = {
         ...context.data
       }
     }
+  },
+  sladesh_received: (context = {}) => {
+    const senderName = context.senderName || 'En ven'
+    const sladeshId = context.sladeshId
+    return {
+      title: context.title || `${senderName} har sendt dig en Sladesh!`,
+      body: context.body || 'Åbn appen og gennemfør udfordringen 🍺',
+      tag: context.tag || `sladesh_${sladeshId || 'challenge'}`,
+      data: {
+        type: 'sladesh_received',
+        senderId: context.senderId,
+        senderName,
+        sladeshId,
+        channelId: context.channelId,
+        url: context.data?.url || '/home',
+        ...context.data
+      }
+    }
   }
 }
 
@@ -143,4 +161,3 @@ module.exports = {
   sendWebPush,
   isUnrecoverablePushError
 }
-

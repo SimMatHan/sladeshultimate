@@ -21,6 +21,8 @@ import {
 import { DrinkLogProvider } from '../contexts/DrinkLogContext'
 import { AchievementProvider, useAchievements } from '../contexts/AchievementContext'
 import AchievementUnlockedOverlay from './AchievementUnlockedOverlay'
+import SladeshScanner from './SladeshScanner'
+import { useSladesh } from '../contexts/SladeshContext'
 import { CATEGORIES } from '../constants/drinks'
 import { APP_VERSION } from '../appVersion'
 
@@ -75,8 +77,9 @@ export default function AppShell() {
   const [isRequestingNotifications, setIsRequestingNotifications] = useState(false)
   const [notificationError, setNotificationError] = useState(null)
   const [showVersionPopup, setShowVersionPopup] = useState(false)
+  const { isLocked } = useSladesh()
   const blockingOverlayVisible =
-    (!checkedIn && showCheckInGate) || showSuccessOverlay || showNotificationPrompt || showVersionPopup
+    (!checkedIn && showCheckInGate) || showSuccessOverlay || showNotificationPrompt || showVersionPopup || isLocked
   const showChannelLoader = isChannelSwitching || (!selectedChannel && channelsLoading)
 
   // FIXED: Lock scroll region when blocking overlays are visible to prevent background scrolling
@@ -508,6 +511,8 @@ export default function AppShell() {
               </div>
             </div>
           )}
+
+          {isLocked && <SladeshScanner />}
 
           <AchievementOverlayPortal />
         </AchievementProvider>

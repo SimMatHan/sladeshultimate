@@ -4,6 +4,7 @@ import Page from "../components/Page";
 import { useAuth } from "../hooks/useAuth";
 import { isAdminUser } from "../config/admin";
 
+
 function ActionCard({
   icon,
   title,
@@ -96,6 +97,7 @@ export default function More() {
   const { currentUser } = useAuth();
   const isAdmin = isAdminUser(currentUser);
 
+
   const handleSignOut = () => {
     localStorage.removeItem("signedIn");
     localStorage.removeItem("onboarded");
@@ -132,21 +134,7 @@ export default function More() {
             actionLabel="Profil"
             tone="profile"
           />
-        </div>
 
-        <div className="space-y-3">
-          <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-            Konto
-          </div>
-          {isAdmin && (
-            <ActionCard
-              icon="🔔"
-              title="Notifikationstest"
-              description="Se status, prøv igen og send en test til dig selv."
-              to="/notifications"
-              actionLabel="Notifikationer"
-            />
-          )}
           <ActionCard
             icon="🚪"
             title="Log ud af Sladesh"
