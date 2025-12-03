@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import { collection, doc, onSnapshot, query, updateDoc, where, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../hooks/useAuth';
+import { db } from '../firebase';
 
 const SladeshContext = createContext(null);
 
@@ -42,6 +44,75 @@ export function SladeshProvider({ children }) {
         );
     }, [challenges, currentUser]);
 
+    // Subscribe to incoming challenges for the current user and lock the app when one arrives
+    useEffect(() => {
+        if (!currentUser?.uid) {
+            setChallenges([]);
+            return undefined;
+        }
+
+        const challengesRef = collection(db, 'sladeshChallenges');
+        const q = query(
+            challengesRef,
+            where('recipientId', '==', currentUser.uid)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+        const next = snapshot.docs.map((docSnap) => {
+            const data = docSnap.data();
+            const createdAtMs = data.createdAt?.toMillis
+                ? data.createdAt.toMillis()
+                : data.createdAt?.seconds
+                  ? data.createdAt.seconds * 1000
+                  : null;
+            const deadlineAtMs = data.deadlineAt?.toMillis
+                ? data.deadlineAt.toMillis()
+                : data.deadlineAt?.seconds
+                  ? data.deadlineAt.seconds * 1000
+                  : (createdAtMs ? createdAtMs + 10 * 60 * 1000 : null);
+            const statusRaw = (data.status || 'pending').toString().toLowerCase();
+            const status =
+                statusRaw === 'failed'
+                    ? SLADESH_STATUS.FAILED
+                    : statusRaw === 'completed'
+                        ? SLADESH_STATUS.COMPLETED
+                        : SLADESH_STATUS.IN_PROGRESS; // treat pending/in_progress as active
+
+            // Optional: mark the challenge as in_progress server-side so sender sees the state change
+            if (statusRaw === 'pending') {
+                updateDoc(doc(db, 'sladeshChallenges', docSnap.id), {
+                        status: 'in_progress',
+                        updatedAt: serverTimestamp(),
+                    }).catch((err) => console.error('[sladesh] Failed to mark challenge in progress', err));
+                }
+
+                return {
+                    id: docSnap.id,
+                    senderId: data.senderId,
+                    senderName: data.senderName || data.senderId || 'Ukendt',
+                    receiverId: data.recipientId,
+                    receiverName: data.receiverName || data.recipientId || 'Ukendt',
+                    status,
+                    createdAt: createdAtMs,
+                    deadlineAt: deadlineAtMs,
+                    proofBeforeImage: data.proofBeforeImage || null,
+                    proofAfterImage: data.proofAfterImage || null,
+                };
+            });
+
+            setChallenges(next);
+        });
+
+        return () => unsubscribe();
+    }, [currentUser]);
+
+    const syncChallengeUpdate = useCallback((challengeId, updates) => {
+        updateDoc(doc(db, 'sladeshChallenges', challengeId), {
+            ...updates,
+            updatedAt: serverTimestamp(),
+        }).catch((err) => console.error('[sladesh] Failed to sync challenge update', err));
+    }, []);
+
     // Check if app should be locked
     const isLocked = !!activeChallenge;
 
@@ -69,7 +140,8 @@ export function SladeshProvider({ children }) {
         setChallenges((prev) =>
             prev.map((c) => (c.id === challengeId ? { ...c, ...updates } : c))
         );
-    }, []);
+        syncChallengeUpdate(challengeId, updates);
+    }, [syncChallengeUpdate]);
 
     // Mark challenge as failed
     const failChallenge = useCallback((challengeId) => {

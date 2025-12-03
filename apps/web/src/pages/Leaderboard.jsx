@@ -23,7 +23,7 @@ const leaderboardProfiles = [
     username: 'saraholm',
     name: 'Sara Holm',
     initials: 'SH',
-    profileEmoji: '🍹',
+    profileEmoji: '­ƒì╣',
     profileGradient: 'from-rose-400 to-orange-500',
     avatarGradient: 'from-rose-400 to-orange-500',
     totalDrinks: 148,
@@ -45,9 +45,9 @@ const leaderboardProfiles = [
       like_fine_wine: { count: 4 },
     },
     recentDrinks: [
-      { id: 'sara-recent-1', label: 'Sladesh shot', timestamp: 'I dag • 20:14' },
-      { id: 'sara-recent-2', label: 'Passion spritz', timestamp: 'I går • 23:02' },
-      { id: 'sara-recent-3', label: 'Cold IPA', timestamp: 'I går • 21:38' },
+      { id: 'sara-recent-1', label: 'Sladesh shot', timestamp: 'I dag ÔÇó 20:14' },
+      { id: 'sara-recent-2', label: 'Passion spritz', timestamp: 'I g├Ñr ÔÇó 23:02' },
+      { id: 'sara-recent-3', label: 'Cold IPA', timestamp: 'I g├Ñr ÔÇó 21:38' },
     ],
     mockChannels: [MOCK_CHANNEL_KEYS.OPEN],
   },
@@ -56,15 +56,15 @@ const leaderboardProfiles = [
     username: 'madslarsen',
     name: 'Mads Larsen',
     initials: 'ML',
-    profileEmoji: '🍺',
+    profileEmoji: '­ƒì║',
     profileGradient: 'from-sky-400 to-indigo-500',
     avatarGradient: 'from-sky-400 to-indigo-500',
     totalDrinks: 131,
     currentRunDrinkCount: 8,
     weeklyAverage: 15,
     streakDays: 5,
-    topDrink: 'Kolde øl',
-    favoriteSpot: 'Ølbaren',
+    topDrink: 'Kolde ├©l',
+    favoriteSpot: '├ÿlbaren',
     drinkBreakdown: [
       { id: 'mads-lager', label: 'Lager', count: 58 },
       { id: 'mads-ipa', label: 'IPA', count: 36 },
@@ -77,9 +77,9 @@ const leaderboardProfiles = [
       like_fine_wine: { count: 1 },
     },
     recentDrinks: [
-      { id: 'mads-recent-1', label: 'Pilsner', timestamp: 'I dag • 19:45' },
-      { id: 'mads-recent-2', label: 'Mosaik IPA', timestamp: 'I går • 22:10' },
-      { id: 'mads-recent-3', label: 'Sladesh shot', timestamp: 'I går • 21:58' },
+      { id: 'mads-recent-1', label: 'Pilsner', timestamp: 'I dag ÔÇó 19:45' },
+      { id: 'mads-recent-2', label: 'Mosaik IPA', timestamp: 'I g├Ñr ÔÇó 22:10' },
+      { id: 'mads-recent-3', label: 'Sladesh shot', timestamp: 'I g├Ñr ÔÇó 21:58' },
     ],
     mockChannels: [MOCK_CHANNEL_KEYS.OPEN],
   },
@@ -88,7 +88,7 @@ const leaderboardProfiles = [
     username: 'camillabeck',
     name: 'Camilla Beck',
     initials: 'CB',
-    profileEmoji: '🍸',
+    profileEmoji: '­ƒì©',
     profileGradient: 'from-purple-400 to-fuchsia-500',
     avatarGradient: 'from-purple-400 to-fuchsia-500',
     totalDrinks: 118,
@@ -108,9 +108,9 @@ const leaderboardProfiles = [
       obeerma: { count: 1 },
     },
     recentDrinks: [
-      { id: 'camilla-recent-1', label: 'Raspberry sour', timestamp: 'I dag • 18:55' },
-      { id: 'camilla-recent-2', label: 'Sladesh shot', timestamp: 'I går • 23:40' },
-      { id: 'camilla-recent-3', label: 'Mango seltzer', timestamp: 'I går • 21:12' },
+      { id: 'camilla-recent-1', label: 'Raspberry sour', timestamp: 'I dag ÔÇó 18:55' },
+      { id: 'camilla-recent-2', label: 'Sladesh shot', timestamp: 'I g├Ñr ÔÇó 23:40' },
+      { id: 'camilla-recent-3', label: 'Mango seltzer', timestamp: 'I g├Ñr ÔÇó 21:12' },
     ],
     mockChannels: [MOCK_CHANNEL_KEYS.BALLADE],
   },
@@ -119,7 +119,7 @@ const leaderboardProfiles = [
     username: 'jonasmikkelsen',
     name: 'Jonas Mikkelsen',
     initials: 'JM',
-    profileEmoji: '🥃',
+    profileEmoji: '­ƒÑâ',
     profileGradient: 'from-emerald-400 to-teal-500',
     avatarGradient: 'from-emerald-400 to-teal-500',
     totalDrinks: 104,
@@ -139,9 +139,9 @@ const leaderboardProfiles = [
       like_fine_wine: { count: 2 },
     },
     recentDrinks: [
-      { id: 'jonas-recent-1', label: 'Gin & tonic', timestamp: 'I dag • 19:05' },
-      { id: 'jonas-recent-2', label: 'Classic pilsner', timestamp: 'I går • 22:47' },
-      { id: 'jonas-recent-3', label: 'Cucumber cooler', timestamp: 'I går • 17:30' },
+      { id: 'jonas-recent-1', label: 'Gin & tonic', timestamp: 'I dag ÔÇó 19:05' },
+      { id: 'jonas-recent-2', label: 'Classic pilsner', timestamp: 'I g├Ñr ÔÇó 22:47' },
+      { id: 'jonas-recent-3', label: 'Cucumber cooler', timestamp: 'I g├Ñr ÔÇó 17:30' },
     ],
     mockChannels: [MOCK_CHANNEL_KEYS.BALLADE],
   },
@@ -150,7 +150,7 @@ const leaderboardProfiles = [
     username: 'alinethomsen',
     name: 'Aline Thomsen',
     initials: 'AT',
-    profileEmoji: '🍷',
+    profileEmoji: '­ƒìÀ',
     profileGradient: 'from-amber-400 to-red-500',
     avatarGradient: 'from-amber-400 to-red-500',
     totalDrinks: 97,
@@ -161,14 +161,14 @@ const leaderboardProfiles = [
     favoriteSpot: 'Tagterrassen',
     drinkBreakdown: [
       { id: 'aline-spritz', label: 'Spritz cocktails', count: 42 },
-      { id: 'aline-rose', label: 'Rosé', count: 26 },
+      { id: 'aline-rose', label: 'Ros├®', count: 26 },
       { id: 'aline-shot', label: 'Sladesh shots', count: 17 },
-      { id: 'aline-beer', label: 'Lette øl', count: 12 },
+      { id: 'aline-beer', label: 'Lette ├©l', count: 12 },
     ],
     recentDrinks: [
-      { id: 'aline-recent-1', label: 'Aperol spritz', timestamp: 'I dag • 17:20' },
-      { id: 'aline-recent-2', label: 'Rosé', timestamp: 'I går • 20:35' },
-      { id: 'aline-recent-3', label: 'Sladesh shot', timestamp: 'I går • 19:55' },
+      { id: 'aline-recent-1', label: 'Aperol spritz', timestamp: 'I dag ÔÇó 17:20' },
+      { id: 'aline-recent-2', label: 'Ros├®', timestamp: 'I g├Ñr ÔÇó 20:35' },
+      { id: 'aline-recent-3', label: 'Sladesh shot', timestamp: 'I g├Ñr ÔÇó 19:55' },
     ],
     mockChannels: [MOCK_CHANNEL_KEYS.OPEN],
   },
@@ -177,7 +177,7 @@ const leaderboardProfiles = [
     username: 'frederikolsen',
     name: 'Frederik Olsen',
     initials: 'FO',
-    profileEmoji: '☕',
+    profileEmoji: 'Ôÿò',
     profileGradient: 'from-slate-400 to-slate-600',
     avatarGradient: 'from-slate-400 to-slate-600',
     totalDrinks: 86,
@@ -193,9 +193,9 @@ const leaderboardProfiles = [
       { id: 'frederik-other', label: 'Andre', count: 15 },
     ],
     recentDrinks: [
-      { id: 'frederik-recent-1', label: 'Irish coffee', timestamp: 'I dag • 16:45' },
-      { id: 'frederik-recent-2', label: 'Nitro stout', timestamp: 'I går • 21:17' },
-      { id: 'frederik-recent-3', label: 'Sladesh shot', timestamp: 'I går • 20:11' },
+      { id: 'frederik-recent-1', label: 'Irish coffee', timestamp: 'I dag ÔÇó 16:45' },
+      { id: 'frederik-recent-2', label: 'Nitro stout', timestamp: 'I g├Ñr ÔÇó 21:17' },
+      { id: 'frederik-recent-3', label: 'Sladesh shot', timestamp: 'I g├Ñr ÔÇó 20:11' },
     ],
     mockChannels: [MOCK_CHANNEL_KEYS.BALLADE],
   },
@@ -204,7 +204,7 @@ const leaderboardProfiles = [
     username: 'cecilieknudsen',
     name: 'Cecilie Knudsen',
     initials: 'CK',
-    profileEmoji: '🍾',
+    profileEmoji: '­ƒì¥',
     profileGradient: 'from-pink-400 to-rose-500',
     avatarGradient: 'from-pink-400 to-rose-500',
     totalDrinks: 82,
@@ -220,9 +220,9 @@ const leaderboardProfiles = [
       { id: 'cecilie-seltzer', label: 'Hard seltzer', count: 10 },
     ],
     recentDrinks: [
-      { id: 'cecilie-recent-1', label: 'Paloma', timestamp: 'I dag • 18:10' },
-      { id: 'cecilie-recent-2', label: 'Celebration bubbles', timestamp: 'I går • 22:41' },
-      { id: 'cecilie-recent-3', label: 'Sladesh shot', timestamp: 'I går • 21:03' },
+      { id: 'cecilie-recent-1', label: 'Paloma', timestamp: 'I dag ÔÇó 18:10' },
+      { id: 'cecilie-recent-2', label: 'Celebration bubbles', timestamp: 'I g├Ñr ÔÇó 22:41' },
+      { id: 'cecilie-recent-3', label: 'Sladesh shot', timestamp: 'I g├Ñr ÔÇó 21:03' },
     ],
     mockChannels: [MOCK_CHANNEL_KEYS.OPEN],
   },
@@ -231,7 +231,7 @@ const leaderboardProfiles = [
     username: 'mathiashansen',
     name: 'Mathias Hansen',
     initials: 'MH',
-    profileEmoji: '🍺',
+    profileEmoji: '­ƒì║',
     profileGradient: 'from-cyan-400 to-blue-500',
     avatarGradient: 'from-cyan-400 to-blue-500',
     totalDrinks: 75,
@@ -247,9 +247,9 @@ const leaderboardProfiles = [
       { id: 'mathias-other', label: 'Alkoholfri', count: 10 },
     ],
     recentDrinks: [
-      { id: 'mathias-recent-1', label: 'Hop Shop IPA', timestamp: 'I dag • 17:55' },
-      { id: 'mathias-recent-2', label: 'Summer lager', timestamp: 'I går • 19:22' },
-      { id: 'mathias-recent-3', label: 'Sladesh shot', timestamp: 'I går • 18:49' },
+      { id: 'mathias-recent-1', label: 'Hop Shop IPA', timestamp: 'I dag ÔÇó 17:55' },
+      { id: 'mathias-recent-2', label: 'Summer lager', timestamp: 'I g├Ñr ÔÇó 19:22' },
+      { id: 'mathias-recent-3', label: 'Sladesh shot', timestamp: 'I g├Ñr ÔÇó 18:49' },
     ],
     mockChannels: [MOCK_CHANNEL_KEYS.BALLADE],
   },
@@ -257,7 +257,7 @@ const leaderboardProfiles = [
 
 const sortOptions = [
   { id: 'current-run-most', label: 'Topslugere' },
-  { id: 'current-run-least', label: 'Letvægtere' },
+  { id: 'current-run-least', label: 'Letv├ªgtere' },
 ];
 
 const sortComparators = {
@@ -339,7 +339,7 @@ export default function Leaderboard() {
         // Error callback for subscription errors
         console.error('Error in leaderboard subscription:', err);
         if (isMounted) {
-          setError('Kunne ikke indlæse leaderboard');
+          setError('Kunne ikke indl├ªse leaderboard');
           setProfiles([]);
           setLoading(false);
         }
@@ -399,7 +399,7 @@ export default function Leaderboard() {
         <div className="flex flex-col gap-4">
           <div ref={topSectionRef} className="shrink-0 space-y-4 pt-1">
             <p className="text-sm" style={{ color: 'var(--muted)' }}>
-              Følg med i hvem der har tracket flest drinks i Sladesh Crew. Tryk på et kort for at se deres
+              Følg med i hvem der har tracket flest drinks i Sladesh Crew. Tryk på en bruger for at se deres
               seneste aktivitet.
             </p>
 
@@ -513,14 +513,14 @@ function ProfileCard({ profile, rank, onSelect, isActive, sortMode, achievements
       if (isReceiver) {
         return (
           <span className="inline-flex items-center gap-1 rounded-md bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
-            🚨 Sladeshed
+            Sladeshed
           </span>
         );
       }
       if (isSender) {
         return (
           <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-            🏹 Sender
+            ­Sender
           </span>
         );
       }
@@ -530,7 +530,7 @@ function ProfileCard({ profile, rank, onSelect, isActive, sortMode, achievements
       // Only show if recent (e.g. < 1 hour ago) - for now just show it
       return (
         <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-          ✅ Sladesh Won
+          Sladesh Won
         </span>
       );
     }
@@ -538,7 +538,7 @@ function ProfileCard({ profile, rank, onSelect, isActive, sortMode, achievements
     if (sladeshStatus.status === SLADESH_STATUS.FAILED) {
       return (
         <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-bold text-gray-600 dark:bg-gray-800 dark:text-gray-400">
-          💀 Sladesh Lost
+          Sladesh Lost
         </span>
       );
     }

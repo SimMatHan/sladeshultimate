@@ -307,6 +307,20 @@ async function refreshDrinkDayStatus(userRef, userData, now = new Date()) {
   return nextData
 }
 
+// Reset the current drink run manually (used by UI reset action)
+export async function resetCurrentRun(userId, now = new Date()) {
+  const userRef = doc(db, 'users', userId)
+  const boundary = Timestamp.fromDate(getLatestDrinkDayBoundary(now))
+  await updateDoc(userRef, {
+    currentRunDrinkCount: 0,
+    drinkVariations: {},
+    lastDrinkDayStart: boundary,
+    totalRunResets: increment(1),
+    updatedAt: serverTimestamp(),
+    lastActiveAt: serverTimestamp()
+  })
+}
+
 function normalizeUsername(username = '') {
   return username.trim().toLowerCase()
 }
@@ -614,6 +628,7 @@ export async function addCheckIn(userId, checkInData) {
  */
 export async function addSladesh(senderId, sladeshData) {
   const { recipientId, venue, location, channelId } = sladeshData
+  const deadlineAt = Timestamp.fromMillis(Date.now() + 10 * 60 * 1000) // 10 minutes from send time
 
   // Create challenge document
   const challengesRef = collection(db, 'sladeshChallenges')
@@ -623,6 +638,7 @@ export async function addSladesh(senderId, sladeshData) {
     venue,
     location,
     channelId: channelId || null,
+    deadlineAt,
     status: 'pending',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
@@ -645,6 +661,42 @@ export async function addSladesh(senderId, sladeshData) {
   })
 
   return challengeDoc.id
+}
+
+/**
+ * Admin/dev: Reset Sladesh state for a user
+ * - Clears counters and lastSladeshSentAt
+ * - Marks any pending/in-progress challenges (as sender or receiver) as failed
+ */
+export async function resetSladeshState(userId) {
+  const userRef = doc(db, 'users', userId)
+  await updateDoc(userRef, {
+    sladeshSent: 0,
+    sladeshReceived: 0,
+    lastSladeshSentAt: null,
+    updatedAt: serverTimestamp(),
+    lastActiveAt: serverTimestamp()
+  })
+
+  const challengesRef = collection(db, 'sladeshChallenges')
+  const qRecipient = query(challengesRef, where('recipientId', '==', userId))
+  const qSender = query(challengesRef, where('senderId', '==', userId))
+
+  const [recipientSnap, senderSnap] = await Promise.all([getDocs(qRecipient), getDocs(qSender)])
+  const updates = [...recipientSnap.docs, ...senderSnap.docs]
+  const now = serverTimestamp()
+
+  await Promise.all(
+    updates.map((docSnap) => {
+      const data = docSnap.data() || {}
+      const status = (data.status || '').toString().toLowerCase()
+      if (status === 'completed' || status === 'failed') return Promise.resolve()
+      return updateDoc(doc(db, 'sladeshChallenges', docSnap.id), {
+        status: 'failed',
+        updatedAt: now
+      })
+    })
+  )
 }
 
 /**

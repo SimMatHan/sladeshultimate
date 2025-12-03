@@ -416,6 +416,12 @@ export default function Sladesh() {
       setUserProfile((prev) =>
         prev
           ? {
+              ...prev,
+              lastSladeshSentAt: new Date(),
+            }
+          : {
+              lastSladeshSentAt: new Date(),
+            }
       );
 
       console.log('[Sladesh] Successfully sent Sladesh', {

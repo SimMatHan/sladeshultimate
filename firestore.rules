@@ -14,6 +14,16 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() && request.auth.token.email == "simonmathiashansen@gmail.com";
     }
+
+    // Validate Sladesh challenge payload
+    function isValidSladeshChallenge() {
+      return request.resource.data.keys().hasAll(['senderId', 'recipientId', 'status', 'createdAt', 'updatedAt']) &&
+             request.resource.data.senderId is string &&
+             request.resource.data.recipientId is string &&
+             request.resource.data.status is string &&
+             request.resource.data.createdAt is timestamp &&
+             request.resource.data.updatedAt is timestamp;
+    }
     
     match /drinkVariations/{docId} {
       allow read: if isAuthenticated();
@@ -57,6 +67,22 @@ service cloud.firestore {
         allow read: if isOwner(userId);
         allow create, update, delete: if isOwner(userId);
       }
+    }
+
+    // Sladesh challenges (top-level collection)
+    match /sladeshChallenges/{challengeId} {
+      // Authenticated users can read their challenges
+      allow read: if isAuthenticated();
+
+      // Sender can create a challenge
+      allow create: if isAuthenticated() &&
+        isValidSladeshChallenge() &&
+        request.resource.data.senderId == request.auth.uid;
+
+      // Sender or receiver can update status/proof
+      allow update: if isAuthenticated() &&
+        resource.data.keys().hasAll(['senderId', 'recipientId']) &&
+        (resource.data.senderId == request.auth.uid || resource.data.recipientId == request.auth.uid);
     }
     
     // Channels collection

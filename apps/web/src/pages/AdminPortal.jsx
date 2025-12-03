@@ -17,7 +17,7 @@ import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { isAdminUser } from "../config/admin";
 import { CATEGORIES } from "../constants/drinks";
-import { resetAchievements } from "../services/userService";
+import { resetAchievements, resetSladeshState } from "../services/userService";
 import { useSladesh } from "../contexts/SladeshContext";
 
 const DRINK_CATEGORIES = CATEGORIES.map(({ id, name }) => ({
@@ -44,6 +44,8 @@ function FeedbackBanner({ feedback, onDismiss }) {
     feedback.status === "error"
       ? "border-red-200 bg-red-50 text-red-700"
       : "border-emerald-200 bg-emerald-50 text-emerald-700";
+
+  
 
   return (
     <div
@@ -87,6 +89,8 @@ export default function AdminPortal() {
   const [isUpdatingVariation, setIsUpdatingVariation] = useState(false);
   const [achievementFeedback, setAchievementFeedback] = useState(null);
   const [isResettingAchievements, setIsResettingAchievements] = useState(false);
+  const [sladeshFeedback, setSladeshFeedback] = useState(null);
+  const [isResettingSladesh, setIsResettingSladesh] = useState(false);
   const { debugReceiveSladesh } = useSladesh();
 
   const handleVariationChange = (field) => (event) => {
@@ -500,16 +504,18 @@ export default function AdminPortal() {
     }
   };
 
+  
+
   const handleResetAchievements = async () => {
     if (!currentUser || !isAdmin) {
       setAchievementFeedback({
         status: "error",
-        message: "Du skal være logget ind som admin.",
+        message: "Du skal vaere logget ind som admin.",
       });
       return;
     }
 
-    if (!window.confirm("Er du sikker på, at du vil nulstille alle achievement-tællere? Dette kan ikke fortrydes.")) {
+    if (!window.confirm("Er du sikker paa, at du vil nulstille alle achievement-taellere? Dette kan ikke fortrydes.")) {
       return;
     }
 
@@ -519,7 +525,7 @@ export default function AdminPortal() {
       await resetAchievements(currentUser.uid);
       setAchievementFeedback({
         status: "success",
-        message: "Alle achievement-tællere er nulstillet.",
+        message: "Alle achievement-taellere er nulstillet.",
       });
     } catch (error) {
       console.error("[AdminPortal] Failed to reset achievements", error);
@@ -529,6 +535,34 @@ export default function AdminPortal() {
       });
     } finally {
       setIsResettingAchievements(false);
+    }
+  };
+
+  const handleResetSladesh = async () => {
+    if (!currentUser || !isAdmin) {
+      setSladeshFeedback({
+        status: "error",
+        message: "Du skal vaere logget ind som admin.",
+      });
+      return;
+    }
+
+    setIsResettingSladesh(true);
+    setSladeshFeedback(null);
+    try {
+      await resetSladeshState(currentUser.uid);
+      setSladeshFeedback({
+        status: "success",
+        message: "Sladesh data er nulstillet for din bruger.",
+      });
+    } catch (error) {
+      console.error("[AdminPortal] Failed to reset sladesh", error);
+      setSladeshFeedback({
+        status: "error",
+        message: error.message || "Kunne ikke nulstille Sladesh.",
+      });
+    } finally {
+      setIsResettingSladesh(false);
     }
   };
 
@@ -549,6 +583,10 @@ export default function AdminPortal() {
               feedback={achievementFeedback}
               onDismiss={() => setAchievementFeedback(null)}
             />
+            <FeedbackBanner
+              feedback={sladeshFeedback}
+              onDismiss={() => setSladeshFeedback(null)}
+            />
             <div className="space-y-2">
               <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
                 Achievements
@@ -563,6 +601,22 @@ export default function AdminPortal() {
                 className="rounded-2xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 shadow-sm transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isResettingAchievements ? "Nulstiller..." : "Nulstil Achievement-tællere"}
+              </button>
+            </div>
+            <div className="space-y-2 pt-4 border-t" style={{ borderColor: 'var(--line)' }}>
+              <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
+                Sladesh Reset
+              </div>
+              <p className="text-xs text-[color:var(--muted)]">
+                Nulstil Sladesh for din bruger (tメllere + marker aktive udfordringer som failed) til test.
+              </p>
+              <button
+                type="button"
+                onClick={handleResetSladesh}
+                disabled={isResettingSladesh || !isAdmin}
+                className="rounded-2xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 shadow-sm transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isResettingSladesh ? "Nulstiller..." : "Nulstil Sladesh"}
               </button>
             </div>
             <div className="space-y-2 pt-4 border-t" style={{ borderColor: 'var(--line)' }}>
@@ -1070,4 +1124,7 @@ export default function AdminPortal() {
     </Page >
   );
 }
+
+
+
 
