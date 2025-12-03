@@ -80,8 +80,8 @@ export default function SladeshScanner() {
             />
 
             {/* Timer Display (always visible if running) */}
-            {timeLeft !== null && step !== 'intro' && step !== 'success' && (
-                <div className="absolute top-6 right-6 rounded-full px-4 py-2 text-lg font-bold font-mono" style={{ backgroundColor: 'var(--subtle)', color: timeLeft < 60000 ? 'var(--brand)' : 'var(--ink)' }}>
+            {timeLeft !== null && step !== 'success' && (
+                <div className="absolute top-12 right-6 rounded-full px-4 py-2 text-lg font-bold font-mono" style={{ backgroundColor: 'var(--subtle)', color: timeLeft < 60000 ? 'var(--brand)' : 'var(--ink)' }}>
                     {formatTime(timeLeft)}
                 </div>
             )}
@@ -104,7 +104,7 @@ export default function SladeshScanner() {
                         className="w-full py-4 rounded-2xl text-lg font-bold shadow-lg transform transition active:scale-95"
                         style={{ backgroundColor: 'var(--brand)', color: 'white' }}
                     >
-                        Lad os køre! 📸
+                        Lets go! 📸
                     </button>
                 </div>
             )}

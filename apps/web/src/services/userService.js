@@ -627,14 +627,16 @@ export async function addCheckIn(userId, checkInData) {
  * @returns {Promise<string>} Document ID of the new challenge
  */
 export async function addSladesh(senderId, sladeshData) {
-  const { recipientId, venue, location, channelId } = sladeshData
+  const { recipientId, venue, location, channelId, senderName = null, recipientName = null } = sladeshData
   const deadlineAt = Timestamp.fromMillis(Date.now() + 10 * 60 * 1000) // 10 minutes from send time
 
   // Create challenge document
   const challengesRef = collection(db, 'sladeshChallenges')
   const challengeDoc = await addDoc(challengesRef, {
     senderId,
+    senderName: senderName || null,
     recipientId,
+    recipientName: recipientName || null,
     venue,
     location,
     channelId: channelId || null,

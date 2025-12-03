@@ -392,6 +392,8 @@ export default function Sladesh() {
       await addSladesh(currentUser.uid, {
         type: "sent",
         recipientId: pendingTarget.id,
+        senderName: userProfile?.fullName || currentUser.displayName || currentUser.email || currentUser.uid,
+        recipientName: pendingTarget.name || pendingTarget.username || pendingTarget.id,
         venue,
         location: {
           lat: resolvedLocation.lat ?? DEFAULT_LOCATION.lat,

@@ -41,7 +41,13 @@ service cloud.firestore {
                       request.resource.data.uid == userId &&
                       request.resource.data.email == request.auth.token.email;
       
-      allow update, delete: if isOwner(userId);
+      allow update, delete: if isOwner(userId) ||
+        (
+          // Allow narrow update for sladeshReceived counter by others (e.g. sender)
+          isAuthenticated() &&
+          request.resource.data.keys().hasOnly(['sladeshReceived', 'updatedAt']) &&
+          request.resource.data.sladeshReceived == ((resource.data.sladeshReceived == null ? 0 : resource.data.sladeshReceived) + 1)
+        );
       
       // User subcollections
       match /drinks/{drinkId} {

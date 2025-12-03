@@ -513,7 +513,7 @@ function ProfileCard({ profile, rank, onSelect, isActive, sortMode, achievements
       if (isReceiver) {
         return (
           <span className="inline-flex items-center gap-1 rounded-md bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
-            Sladeshed
+            Sladesh in progress - fra {sladeshStatus.senderName || sladeshStatus.senderId}
           </span>
         );
       }
@@ -582,11 +582,11 @@ function ProfileCard({ profile, rank, onSelect, isActive, sortMode, achievements
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="block truncate text-sm font-semibold" style={{ color: 'var(--ink)' }}>{displayName}</span>
-            {getSladeshBadge()}
-          </div>
+            </div>
         </div>
 
         <div className="row-span-2 self-stretch text-right leading-tight flex flex-col items-end justify-center">
+          {getSladeshBadge()}
           <span className="block text-base font-semibold tabular-nums" style={{ color: 'var(--ink)' }}>{valueFormatted}</span>
           <span className="block text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>Drikke</span>
         </div>
@@ -704,3 +704,7 @@ function Avatar({ emoji, gradient, initials, className = 'h-12 w-12 text-xl' }) 
     </div>
   );
 }
+
+
+
+
