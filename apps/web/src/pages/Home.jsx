@@ -671,12 +671,6 @@ export default function Home() {
                           {drink.categoryName}
                         </div>
                       </div>
-                      <div 
-                        className="text-xs text-zinc-500 dark:text-zinc-400 shrink-0"
-                        style={{ color: "var(--muted)" }}
-                      >
-                        {formatTimestamp(drink.timestamp)}
-                      </div>
                     </div>
                   ))}
                 </div>

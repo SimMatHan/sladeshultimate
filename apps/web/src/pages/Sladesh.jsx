@@ -124,7 +124,7 @@ export default function Sladesh() {
   const { currentUser } = useAuth();
   const { selectedChannel } = useChannel();
   const { updateLocation, userLocation } = useLocation();
-  const { challenges } = useSladesh();
+  const { challenges, sendSladesh, removeChallenge } = useSladesh();
 
   const [userProfile, setUserProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(!USE_MOCK_DATA);
@@ -136,7 +136,18 @@ export default function Sladesh() {
   const [statusMessage, setStatusMessage] = useState(null);
   const [isSending, setIsSending] = useState(false);
   const [senderTimeLeft, setSenderTimeLeft] = useState(null);
-  const [senderDismissedChallengeId, setSenderDismissedChallengeId] = useState(null);
+  const FINISHED_SENDER_CHALLENGES_KEY = "sladesh:finishedSenderChallenges";
+  const [finishedSenderChallengeIds, setFinishedSenderChallengeIds] = useState(() => {
+    try {
+      if (typeof window === "undefined") return new Set();
+      const stored = window.localStorage.getItem(FINISHED_SENDER_CHALLENGES_KEY);
+      if (!stored) return new Set();
+      const parsed = JSON.parse(stored);
+      return new Set(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      return new Set();
+    }
+  });
   const [nextResetAt, setNextResetAt] = useState(() => getNextResetBoundary(new Date()));
   const [mockLastSladeshAt, setMockLastSladeshAt] = useState(() => {
     if (!USE_MOCK_DATA) return null;
@@ -313,6 +324,15 @@ export default function Sladesh() {
     return () => clearInterval(id);
   }, []);
 
+  useEffect(() => {
+    try {
+      if (typeof window === "undefined") return;
+      window.localStorage.setItem(FINISHED_SENDER_CHALLENGES_KEY, JSON.stringify(Array.from(finishedSenderChallengeIds)));
+    } catch {
+      // ignore
+    }
+  }, [finishedSenderChallengeIds]);
+
   const latestSenderChallenge = useMemo(() => {
     if (!currentUser) return null;
     const latest = [...challenges]
@@ -323,25 +343,32 @@ export default function Sladesh() {
 
   const senderChallengeInCurrentBlock = useMemo(() => {
     if (!latestSenderChallenge) return null;
-    if (latestSenderChallenge.status === SLADESH_STATUS.IN_PROGRESS) {
-      return latestSenderChallenge;
-    }
     const createdAtMs = latestSenderChallenge.createdAt || 0;
     const blockStart = getLatestResetBoundary(new Date()).getTime();
     if (!createdAtMs) return latestSenderChallenge;
     return createdAtMs >= blockStart ? latestSenderChallenge : null;
   }, [latestSenderChallenge]);
 
+  useEffect(() => {
+    if (!senderChallengeInCurrentBlock) return;
+    if (senderChallengeInCurrentBlock.status === SLADESH_STATUS.IN_PROGRESS) return;
+    setFinishedSenderChallengeIds((prev) => {
+      if (prev.has(senderChallengeInCurrentBlock.id)) return prev;
+      const next = new Set(prev);
+      next.add(senderChallengeInCurrentBlock.id);
+      return next;
+    });
+  }, [senderChallengeInCurrentBlock]);
+
   const senderLockChallenge = useMemo(() => {
     if (!senderChallengeInCurrentBlock) return null;
+    const isFinished = finishedSenderChallengeIds.has(senderChallengeInCurrentBlock.id);
+    if (isFinished) return null;
     if (senderChallengeInCurrentBlock.status === SLADESH_STATUS.IN_PROGRESS) {
       return senderChallengeInCurrentBlock;
     }
-    if (senderDismissedChallengeId === senderChallengeInCurrentBlock.id) {
-      return null;
-    }
-    return senderChallengeInCurrentBlock;
-  }, [senderChallengeInCurrentBlock, senderDismissedChallengeId]);
+    return null;
+  }, [finishedSenderChallengeIds, senderChallengeInCurrentBlock]);
 
   useEffect(() => {
     if (!senderLockChallenge) {
@@ -454,8 +481,27 @@ export default function Sladesh() {
       return;
     }
 
+    setIsSending(true);
+
+    const target = pendingTarget;
+    const senderName = userProfile?.fullName || currentUser.displayName || currentUser.email || currentUser.uid;
+    const recipientName = target.name || target.username || target.id;
+    const optimisticCreatedAt = Date.now();
+    const optimisticDeadlineAt = optimisticCreatedAt + 10 * 60 * 1000;
+    const optimisticChallenge = sendSladesh(
+      { id: currentUser.uid, name: senderName },
+      { id: target.id, name: recipientName },
+      {
+        challengeId: crypto.randomUUID(),
+        createdAt: optimisticCreatedAt,
+        deadlineAt: optimisticDeadlineAt,
+      }
+    );
+
+    setPendingTarget(null);
+    setStatusMessage({ tone: "success", body: `Sladesh sendt til ${recipientName}.` });
+
     try {
-      setIsSending(true);
       updateLocation();
 
       const resolvedLocation =
@@ -475,15 +521,17 @@ export default function Sladesh() {
       // This ensures the sladesh is linked to the channel context in which it was sent.
       await addSladesh(currentUser.uid, {
         type: "sent",
-        recipientId: pendingTarget.id,
-        senderName: userProfile?.fullName || currentUser.displayName || currentUser.email || currentUser.uid,
-        recipientName: pendingTarget.name || pendingTarget.username || pendingTarget.id,
+        recipientId: target.id,
+        senderName,
+        recipientName,
         venue,
         location: {
           lat: resolvedLocation.lat ?? DEFAULT_LOCATION.lat,
           lng: resolvedLocation.lng ?? DEFAULT_LOCATION.lng,
         },
         channelId: selectedChannel?.id || null,
+        challengeId: optimisticChallenge.id,
+        deadlineAtMs: optimisticDeadlineAt,
       });
 
       // Save location to Firestore so user appears on map
@@ -511,15 +559,14 @@ export default function Sladesh() {
       );
 
       console.log('[Sladesh] Successfully sent Sladesh', {
-        recipient: pendingTarget.username || pendingTarget.name,
-        recipientId: pendingTarget.id,
+        recipient: recipientName,
+        recipientId: target.id,
         venue
       });
 
-      setStatusMessage({ tone: "success", body: `Sladesh sendt til ${pendingTarget.username || pendingTarget.name}.` });
-      setPendingTarget(null);
     } catch (error) {
       console.error("Error sending sladesh:", error);
+      removeChallenge(optimisticChallenge?.id);
       setStatusMessage({ tone: "error", body: "Kunne ikke sende Sladesh. Prøv igen." });
     } finally {
       setIsSending(false);
@@ -527,7 +574,9 @@ export default function Sladesh() {
   }, [
     currentUser,
     pendingTarget,
+    removeChallenge,
     selectedChannel,
+    sendSladesh,
     updateLocation,
     userLocation,
     userProfile,
@@ -549,7 +598,11 @@ export default function Sladesh() {
           nextResetAt={nextResetAt}
           onUnlock={() => {
             if (senderLockChallenge.status !== SLADESH_STATUS.IN_PROGRESS) {
-              setSenderDismissedChallengeId(senderLockChallenge.id);
+              setFinishedSenderChallengeIds((prev) => {
+                const next = new Set(prev);
+                next.add(senderLockChallenge.id);
+                return next;
+              });
             }
           }}
         />

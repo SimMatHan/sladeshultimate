@@ -198,22 +198,31 @@ export function SladeshProvider({ children }) {
     const isSenderLocked = !!activeSenderChallenge;
 
     // Create a new Sladesh challenge
-    const sendSladesh = useCallback((sender, receiver) => {
+    const sendSladesh = useCallback((sender, receiver, options = {}) => {
+        const now = Date.now();
         const newChallenge = {
-            id: crypto.randomUUID(),
+            id: options.challengeId || crypto.randomUUID(),
             senderId: sender.id,
             senderName: sender.name || sender.username,
             receiverId: receiver.id,
             receiverName: receiver.name || receiver.username,
-            status: SLADESH_STATUS.IN_PROGRESS,
-            createdAt: Date.now(),
-            deadlineAt: Date.now() + 10 * 60 * 1000, // 10 minutes from now
+            status: options.status || SLADESH_STATUS.IN_PROGRESS,
+            createdAt: options.createdAt ?? now,
+            deadlineAt: options.deadlineAt ?? now + 10 * 60 * 1000, // 10 minutes from now
             proofBeforeImage: null,
             proofAfterImage: null,
         };
 
-        setChallenges((prev) => [...prev, newChallenge]);
+        setChallenges((prev) => {
+            const next = [...prev.filter((c) => c.id !== newChallenge.id), newChallenge];
+            return next.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        });
         return newChallenge;
+    }, []);
+
+    const removeChallenge = useCallback((challengeId) => {
+        if (!challengeId) return;
+        setChallenges((prev) => prev.filter((c) => c.id !== challengeId));
     }, []);
 
     // Update an existing challenge
@@ -265,6 +274,7 @@ export function SladeshProvider({ children }) {
         isLocked,
         isSenderLocked,
         sendSladesh,
+        removeChallenge,
         updateChallenge,
         failChallenge,
         completeChallenge,

@@ -624,15 +624,26 @@ export async function addCheckIn(userId, checkInData) {
  * @param {string} sladeshData.venue - Venue name
  * @param {Object} sladeshData.location - Location with lat/lng
  * @param {string} [sladeshData.channelId] - Optional channel ID
+ * @param {string} [sladeshData.challengeId] - Optional fixed document ID (for optimistic UI)
+ * @param {number} [sladeshData.deadlineAtMs] - Optional deadline timestamp in ms
  * @returns {Promise<string>} Document ID of the new challenge
  */
 export async function addSladesh(senderId, sladeshData) {
-  const { recipientId, venue, location, channelId, senderName = null, recipientName = null } = sladeshData
-  const deadlineAt = Timestamp.fromMillis(Date.now() + 10 * 60 * 1000) // 10 minutes from send time
+  const {
+    recipientId,
+    venue,
+    location,
+    channelId,
+    senderName = null,
+    recipientName = null,
+    challengeId = null,
+    deadlineAtMs = null
+  } = sladeshData
+  const deadlineAt = Timestamp.fromMillis(deadlineAtMs ?? Date.now() + 10 * 60 * 1000) // 10 minutes from send time
 
   // Create challenge document
   const challengesRef = collection(db, 'sladeshChallenges')
-  const challengeDoc = await addDoc(challengesRef, {
+  const payload = {
     senderId,
     senderName: senderName || null,
     recipientId,
@@ -644,7 +655,16 @@ export async function addSladesh(senderId, sladeshData) {
     status: 'pending',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
-  })
+  }
+
+  let challengeDoc
+  if (challengeId) {
+    const docRef = doc(challengesRef, challengeId)
+    await setDoc(docRef, payload)
+    challengeDoc = docRef
+  } else {
+    challengeDoc = await addDoc(challengesRef, payload)
+  }
 
   // Update sender stats
   const senderRef = doc(db, 'users', senderId)
