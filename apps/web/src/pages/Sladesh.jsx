@@ -24,11 +24,11 @@ import { useTheme } from "../contexts/ThemeContext";
 import { useChannel } from "../hooks/useChannel";
 import { useAuth } from "../hooks/useAuth";
 import { USE_MOCK_DATA } from "../config/env";
-import { getUser, getSladeshCooldownState, addSladesh, updateUserLocation } from "../services/userService";
+import { getUser, getSladeshCooldownState, addSladesh, updateUserLocation, getNextResetBoundary, getLatestResetBoundary } from "../services/userService";
 import { getCheckedInChannelMembers } from "../services/channelService";
 import { incrementSladeshCount } from "../services/statsService";
 import { resolveMockChannelKey, isMemberOfMockChannel, MOCK_CHANNEL_KEYS } from "../utils/mockChannels";
-import { useSladesh } from "../contexts/SladeshContext";
+import { useSladesh, SLADESH_STATUS } from "../contexts/SladeshContext";
 
 const MOCK_PARTICIPANTS = [
   {
@@ -124,7 +124,7 @@ export default function Sladesh() {
   const { currentUser } = useAuth();
   const { selectedChannel } = useChannel();
   const { updateLocation, userLocation } = useLocation();
-  const { activeSenderChallenge } = useSladesh();
+  const { challenges } = useSladesh();
 
   const [userProfile, setUserProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(!USE_MOCK_DATA);
@@ -136,6 +136,8 @@ export default function Sladesh() {
   const [statusMessage, setStatusMessage] = useState(null);
   const [isSending, setIsSending] = useState(false);
   const [senderTimeLeft, setSenderTimeLeft] = useState(null);
+  const [senderDismissedChallengeId, setSenderDismissedChallengeId] = useState(null);
+  const [nextResetAt, setNextResetAt] = useState(() => getNextResetBoundary(new Date()));
   const [mockLastSladeshAt, setMockLastSladeshAt] = useState(() => {
     if (!USE_MOCK_DATA) return null;
     try {
@@ -306,23 +308,59 @@ export default function Sladesh() {
   }, [statusMessage]);
 
   useEffect(() => {
-    if (!activeSenderChallenge) {
+    const tick = () => setNextResetAt(getNextResetBoundary(new Date()));
+    const id = setInterval(tick, 60000);
+    return () => clearInterval(id);
+  }, []);
+
+  const latestSenderChallenge = useMemo(() => {
+    if (!currentUser) return null;
+    const latest = [...challenges]
+      .filter((c) => c.senderId === currentUser.uid)
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    return latest[0] || null;
+  }, [challenges, currentUser]);
+
+  const senderChallengeInCurrentBlock = useMemo(() => {
+    if (!latestSenderChallenge) return null;
+    if (latestSenderChallenge.status === SLADESH_STATUS.IN_PROGRESS) {
+      return latestSenderChallenge;
+    }
+    const createdAtMs = latestSenderChallenge.createdAt || 0;
+    const blockStart = getLatestResetBoundary(new Date()).getTime();
+    if (!createdAtMs) return latestSenderChallenge;
+    return createdAtMs >= blockStart ? latestSenderChallenge : null;
+  }, [latestSenderChallenge]);
+
+  const senderLockChallenge = useMemo(() => {
+    if (!senderChallengeInCurrentBlock) return null;
+    if (senderChallengeInCurrentBlock.status === SLADESH_STATUS.IN_PROGRESS) {
+      return senderChallengeInCurrentBlock;
+    }
+    if (senderDismissedChallengeId === senderChallengeInCurrentBlock.id) {
+      return null;
+    }
+    return senderChallengeInCurrentBlock;
+  }, [senderChallengeInCurrentBlock, senderDismissedChallengeId]);
+
+  useEffect(() => {
+    if (!senderLockChallenge) {
       setSenderTimeLeft(null);
       return undefined;
     }
 
     const calculate = () => {
-      if (!activeSenderChallenge.deadlineAt) {
+      if (!senderLockChallenge.deadlineAt) {
         setSenderTimeLeft(null);
         return;
       }
-      setSenderTimeLeft(Math.max(0, activeSenderChallenge.deadlineAt - Date.now()));
+      setSenderTimeLeft(Math.max(0, senderLockChallenge.deadlineAt - Date.now()));
     };
 
     calculate();
     const interval = setInterval(calculate, 1000);
     return () => clearInterval(interval);
-  }, [activeSenderChallenge]);
+  }, [senderLockChallenge]);
 
   const hasTargets = eligibleTargets.length > 0;
   const cooldownBlocked = !USE_MOCK_DATA && cooldownState.blocked;
@@ -331,27 +369,27 @@ export default function Sladesh() {
     : null;
 
   const lockedRecipientProfile = useMemo(() => {
-    if (!activeSenderChallenge) return null;
-    const match = eligibleTargets.find((member) => member.id === activeSenderChallenge.receiverId);
+    if (!senderLockChallenge) return null;
+    const match = eligibleTargets.find((member) => member.id === senderLockChallenge.receiverId);
     if (match) return match;
 
-    const name = activeSenderChallenge.receiverName || activeSenderChallenge.receiverId;
+    const name = senderLockChallenge.receiverName || senderLockChallenge.receiverId;
     return {
-      id: activeSenderChallenge.receiverId,
+      id: senderLockChallenge.receiverId,
       name,
       username: name,
       initials: deriveInitialsFromName(name),
       profileEmoji: null,
       profileGradient: "from-rose-400 to-orange-500",
     };
-  }, [activeSenderChallenge, eligibleTargets]);
+  }, [senderLockChallenge, eligibleTargets]);
 
   const cannotInitiateReason = useMemo(() => {
-    if (activeSenderChallenge) {
+    if (senderLockChallenge && senderLockChallenge.status === SLADESH_STATUS.IN_PROGRESS) {
       const displayName =
         lockedRecipientProfile?.username ||
         lockedRecipientProfile?.name ||
-        activeSenderChallenge.receiverName ||
+        senderLockChallenge.receiverName ||
         "din modtager";
       return `Du har allerede sendt en Sladesh til ${displayName}. Vent til den er afsluttet.`;
     }
@@ -370,7 +408,7 @@ export default function Sladesh() {
         : "Du kan sende igen senere.";
     }
     return null;
-  }, [cooldownBlocked, cooldownReadyAt, hasTargets, profileError, profileLoading]);
+  }, [cooldownBlocked, cooldownReadyAt, hasTargets, profileError, profileLoading, lockedRecipientProfile?.name, lockedRecipientProfile?.username, senderLockChallenge]);
 
   const guardAndSetTarget = useCallback(
     (target) => {
@@ -502,11 +540,18 @@ export default function Sladesh() {
 
   return (
     <Page title="Sladesh">
-      {activeSenderChallenge ? (
+      {senderLockChallenge ? (
         <SenderLockOverlay
           recipient={lockedRecipientProfile}
-          fallbackName={activeSenderChallenge.receiverName || activeSenderChallenge.receiverId}
+          fallbackName={senderLockChallenge.receiverName || senderLockChallenge.receiverId}
           timeLeftMs={senderTimeLeft}
+          status={senderLockChallenge.status}
+          nextResetAt={nextResetAt}
+          onUnlock={() => {
+            if (senderLockChallenge.status !== SLADESH_STATUS.IN_PROGRESS) {
+              setSenderDismissedChallengeId(senderLockChallenge.id);
+            }
+          }}
         />
       ) : null}
       <div className="flex flex-1 flex-col items-center justify-center gap-8 pb-8 pt-4">
@@ -630,15 +675,52 @@ export default function Sladesh() {
   );
 }
 
-function SenderLockOverlay({ recipient, fallbackName, timeLeftMs }) {
+function SenderLockOverlay({ recipient, fallbackName, timeLeftMs, status, nextResetAt, onUnlock }) {
   const { isDarkMode } = useTheme();
   const displayName = recipient?.username || recipient?.name || fallbackName || "modtageren";
+  const [resetRemaining, setResetRemaining] = useState(() =>
+    nextResetAt ? Math.max(0, nextResetAt.getTime() - Date.now()) : 0
+  );
   const participant = {
     ...recipient,
     initials: recipient?.initials || deriveInitialsFromName(displayName),
     profileGradient: recipient?.profileGradient || recipient?.avatarGradient || recipient?.accent || "from-rose-400 to-orange-500",
   };
-  const countdown = formatCountdown(timeLeftMs);
+  const derivedStatus =
+    status === SLADESH_STATUS.COMPLETED
+      ? SLADESH_STATUS.COMPLETED
+      : status === SLADESH_STATUS.FAILED || (timeLeftMs !== null && timeLeftMs <= 0)
+        ? SLADESH_STATUS.FAILED
+        : SLADESH_STATUS.IN_PROGRESS;
+  const countdown = derivedStatus === SLADESH_STATUS.IN_PROGRESS ? formatCountdown(timeLeftMs) : "00:00";
+  const resetCountdown = formatResetCountdown(resetRemaining);
+  const resetClock = nextResetAt ? TIME_FORMATTER.format(nextResetAt) : "--:--";
+  const heading =
+    derivedStatus === SLADESH_STATUS.COMPLETED
+      ? `${displayName} fuldførte`
+      : derivedStatus === SLADESH_STATUS.FAILED
+        ? `${displayName} fejlede`
+        : `Venter på ${displayName}`;
+  const statusCopy =
+    derivedStatus === SLADESH_STATUS.COMPLETED
+      ? "Completed"
+      : derivedStatus === SLADESH_STATUS.FAILED
+        ? "Failed"
+        : "Udfordring i gang";
+  const canUnlock = derivedStatus !== SLADESH_STATUS.IN_PROGRESS && typeof onUnlock === "function";
+
+  useEffect(() => {
+    if (!nextResetAt) {
+      setResetRemaining(0);
+      return undefined;
+    }
+    const tick = () => {
+      setResetRemaining(Math.max(0, nextResetAt.getTime() - Date.now()));
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [nextResetAt]);
 
   return (
     <div
@@ -655,33 +737,70 @@ function SenderLockOverlay({ recipient, fallbackName, timeLeftMs }) {
             Sladesh afsendt
           </p>
           <h3 className="text-xl font-bold" style={{ color: "var(--ink)" }}>
-            Venter på {displayName}
+            {heading}
           </h3>
           <p className="text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
-            Vi låser Sladesh, indtil udfordringen er færdig. Du kan sende en ny, når timeren rammer 0.
+            {derivedStatus === SLADESH_STATUS.IN_PROGRESS
+              ? "Vi låser, indtil modtagerens vindue er slut. Timeren matcher deres nedtælling."
+              : "Resultatet er landet. Du kan planlægge næste Sladesh efter reset-tidspunktet."}
           </p>
         </div>
 
         <div className="flex flex-col items-center gap-4">
           <OverlayAvatar participant={participant} />
-          <div
-            className="flex items-center gap-2 rounded-full px-4 py-2 font-mono text-lg font-semibold"
-            style={{
-              backgroundColor: "color-mix(in srgb, var(--brand) 10%, transparent)",
-              color: "var(--ink)",
-              border: "1px solid color-mix(in srgb, var(--line) 70%, transparent)",
-            }}
-          >
-            <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
-              Tid tilbage
-            </span>
-            <span>{countdown}</span>
+          <div className="flex flex-col w-full items-center gap-3">
+            <div
+              className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-wide"
+              style={{
+                backgroundColor: "color-mix(in srgb, var(--subtle) 70%, transparent)",
+                color:
+                  derivedStatus === SLADESH_STATUS.COMPLETED
+                    ? "var(--emerald, #10b981)"
+                    : derivedStatus === SLADESH_STATUS.FAILED
+                      ? "var(--brand)"
+                      : "var(--ink)",
+                border: "1px solid color-mix(in srgb, var(--line) 70%, transparent)",
+              }}
+            >
+              <span className="text-xs">{statusCopy}</span>
+            </div>
+            <div
+              className="flex w-full items-center justify-between rounded-2xl border px-4 py-3 font-mono text-lg font-semibold"
+              style={{
+                borderColor: "color-mix(in srgb, var(--line) 80%, transparent)",
+                backgroundColor: "color-mix(in srgb, var(--surface) 80%, transparent)",
+                color: "var(--ink)",
+              }}
+            >
+              <div className="flex flex-col items-start">
+                <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+                  Udfordringsur
+                </span>
+                <span>{countdown}</span>
+              </div>
+              <span className="text-xs" style={{ color: "var(--muted)" }}>
+                Synk. med modtager
+              </span>
+            </div>
+            <div
+              className="w-full rounded-2xl border px-4 py-3 text-left"
+              style={{
+                borderColor: "var(--line)",
+                backgroundColor: "var(--subtle)",
+                color: "var(--muted)",
+              }}
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-wide">Du får en ny Sladesh om:</p>
+              {resetCountdown ? (
+                <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+                  {resetCountdown}
+                </p>
+              ) : null}
+            </div>
           </div>
         </div>
 
-        <p className="mt-6 text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
-          Du ser denne låste visning indtil {displayName} har gennemført eller tiden løber ud.
-        </p>
+        
       </div>
     </div>
   );
@@ -977,4 +1096,13 @@ function formatCountdown(ms) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function formatResetCountdown(ms) {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (value) => value.toString().padStart(2, "0");
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 }
