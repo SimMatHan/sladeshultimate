@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback, useLayoutEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import Sheet from "./Sheet";
 import { useChannel } from "../hooks/useChannel";
 import { useUserData } from "../contexts/UserDataContext";
@@ -272,72 +273,174 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
   );
 }
 
-function ChannelPickerSheet({ open, onClose, channels, selectedChannel, onSelectChannel }) {
+function ChannelOverlay({ open, onClose, channels, selectedChannelId, onSelectChannel, onJoinChannel }) {
+  const [topOffset, setTopOffset] = useState("var(--topbar-height, 64px)");
+
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    const updateTopOffset = () => {
+      const topbar = document.querySelector(".topbar");
+      if (topbar) {
+        const { bottom } = topbar.getBoundingClientRect();
+        setTopOffset(`${bottom}px`);
+      }
+    };
+
+    updateTopOffset();
+    window.addEventListener("resize", updateTopOffset);
+    window.addEventListener("orientationchange", updateTopOffset);
+    return () => {
+      window.removeEventListener("resize", updateTopOffset);
+      window.removeEventListener("orientationchange", updateTopOffset);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const handleKey = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    };
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKey);
+    return () => {
+      document.body.style.overflow = originalOverflow || "";
+      window.removeEventListener("keydown", handleKey);
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
   return (
-    <Sheet
-      open={open}
-      onClose={onClose}
-      position="top"
-      title="Vælg kanal"
-      description="Vælg en kanal for at filtrere indhold"
-      height="min(60vh, 400px)"
-      animationDuration={300}
+    <div
+      className="fixed inset-x-0 z-50 flex items-start justify-center px-4"
+      style={{ top: topOffset, bottom: 0 }}
     >
-      {channels.length > 0 ? (
-        <ul className="sheet-list flex flex-col gap-3">
-          {channels.map((channel) => {
-            const isActive = selectedChannel?.id === channel.id;
-            return (
-              <li key={channel.id}>
+      <div
+        className="absolute inset-x-0 bg-black/40 backdrop-blur-sm"
+        style={{ top: 0, bottom: 0 }}
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="relative w-full max-w-sm max-h-[85vh] overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-zinc-900 flex flex-col"
+        style={{
+          backgroundColor: "var(--surface)",
+          maxHeight: `calc(100vh - ${topOffset} - 16px)`
+        }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Vælg kanal"
+      >
+        <div className="flex-1 overflow-y-auto p-6 -webkit-overflow-scrolling-touch">
+          <div className="space-y-1 mb-4">
+            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+              Kanaler
+            </p>
+            <h3 className="text-lg font-semibold" style={{ color: "var(--ink)" }}>
+              Vælg en kanal
+            </h3>
+          </div>
+
+          {channels.length ? (
+            channels.map((channel) => {
+              const isActive = selectedChannelId === channel.id;
+              return (
                 <button
+                  key={channel.id}
                   type="button"
                   onClick={() => onSelectChannel(channel.id)}
-                  className="channel-card text-left"
-                  aria-pressed={isActive}
+                  className="w-full text-left"
+                  aria-current={isActive ? "true" : undefined}
                 >
-                  <div className="flex items-start justify-between gap-4">
+                  <div
+                    className="flex items-center justify-between py-3 border-b last:border-0 px-2 rounded-xl transition-colors"
+                    style={{
+                      borderColor: "var(--line)",
+                      backgroundColor: isActive ? "rgba(var(--brand-rgb, 255 56 92), 0.08)" : "transparent",
+                    }}
+                  >
                     <div>
                       <div className="flex items-center gap-2">
-                        <div className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
-                          {channel.name}
+                        <div className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+                        {channel.name}
                         </div>
-                        {channel.isDefault ? <span className="overlay-card__badge">Standard</span> : null}
+                        {isActive ? (
+                          <span
+                            className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                            style={{ backgroundColor: "var(--brand)", color: "var(--brand-ink, #fff)" }}
+                          >
+                            Aktiv
+                          </span>
+                        ) : null}
                       </div>
-                      <div className="mt-1 text-xs" style={{ color: 'var(--muted)' }}>
-                        {channel.isDefault ? "Standardkanal" : "Tryk for at skifte"}
-                      </div>
-                      {isActive && (
-                        <div className="mt-3">
-                          <span className="overlay-card__badge">Aktiv</span>
-                        </div>
+                      {!isActive ? (
+                        <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+                          Tryk for at skifte
+                        </p>
+                      ) : (
+                        <p className="text-xs mt-0.5 font-semibold" style={{ color: "var(--brand)" }}>
+                          Aktiv kanal
+                        </p>
                       )}
                     </div>
-                    <div className="channel-card__indicator" data-active={isActive}>
-                      <svg
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
+                    {isActive ? (
+                      <span
+                        className="grid h-8 w-8 place-items-center rounded-full"
+                        style={{ backgroundColor: "var(--brand)", color: "var(--brand-ink, #fff)" }}
                       >
-                        <path d="M20 6L9 17l-5-5" />
-                      </svg>
-                    </div>
+                        <svg
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M20 6L9 17l-5-5" />
+                        </svg>
+                      </span>
+                    ) : (
+                      <span
+                        className="h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: "var(--line)" }}
+                        aria-hidden="true"
+                      />
+                    )}
                   </div>
                 </button>
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <div className="sheet-empty py-10 text-center text-xs">
-          Ingen kanaler tilgængelige
+              );
+            })
+          ) : (
+            <div className="py-10 text-center text-sm" style={{ color: "var(--muted)" }}>
+              Ingen kanaler endnu.
+            </div>
+          )}
         </div>
-      )}
-    </Sheet>
+
+        <div className="border-t px-6 py-4" style={{ borderColor: "var(--line)" }}>
+          <button
+            type="button"
+            onClick={onJoinChannel}
+            className="w-full rounded-xl border px-4 py-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2"
+            style={{
+              borderColor: "var(--line)",
+              backgroundColor: "var(--brand)",
+              color: "var(--ink)"
+            }}
+          >
+            Join kanal
+          </button>
+        </div>
+      </motion.div>
+    </div>
   );
 }
 
@@ -588,11 +691,11 @@ export default function TopBar({
               <path d="M6 9l6 6 6-6" />
             </svg>
           </button>
-          <ChannelPickerSheet
+          <ChannelOverlay
             open={activeOverlay === 'channels'}
             onClose={() => setActiveOverlay(null)}
             channels={pickerChannels}
-            selectedChannel={selectedChannel}
+            selectedChannelId={selectedChannel?.id}
             onSelectChannel={async (channelId) => {
               setActiveOverlay(null);
               try {
@@ -600,6 +703,10 @@ export default function TopBar({
               } catch (error) {
                 console.error('Failed to switch channel via picker:', error);
               }
+            }}
+            onJoinChannel={() => {
+              setActiveOverlay(null);
+              navigate('/manage-channels');
             }}
           />
         </div>
@@ -670,4 +777,3 @@ export default function TopBar({
     </div>
   );
 }
-

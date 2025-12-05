@@ -30,22 +30,23 @@ export const FALLBACK_THEME = {
 
 export const DEFAULT_VARIANTS = {
   beer: [
+    { name: "Pilsner", description: "Let i kroppen med floral bitterhed." },
     { name: "Lager", description: "Ren og sprød gylden øl." },
     { name: "Classic", description: "Balanceret favorit med maltsødme." },
     { name: "IPA", description: "Humlet med citrus- og blomsternoter." },
+    { name: "Hvede Øl", description: "Uklar hvedeøl med banan og nellike." },
+    { name: "Blanc", description: "Hvedeøl i belgisk stil med citrus og krydderi." },
     { name: "Stout", description: "Mørke ristede malte med strejf af chokolade." },
     { name: "Guinness", description: "Ikonisk irsk stout med cremet skum." },
-    { name: "Pilsner", description: "Let i kroppen med floral bitterhed." },
-    { name: "Hvede Øl", description: "Uklar hvedeøl med banan og nellike." },
     { name: "Sour", description: "Syrlig ale med livlig syre." },
-    { name: "Blanc", description: "Hvedeøl i belgisk stil med citrus og krydderi." },
+    { name: "Julebryg", description: "Julens nektar." },
   ],
   cider: [
     { name: "Apple", description: "Klassisk æblecider med frisk syrlighed." },
     { name: "Pear", description: "Blød, saftig pæresødme." },
+    { name: "Strawberry", description: "Sommerlig sødme med frugtig finish." },
     { name: "Mixed Berries", description: "Blend af bær med livlig farve." },
     { name: "Elderflower", description: "Blomstrende twist med let brus." },
-    { name: "Strawberry", description: "Sommerlig sødme med frugtig finish." },
   ],
   wine: [
     { name: "Red", description: "Dybe, fløjlsbløde noter af mørke frugter." },
@@ -56,23 +57,24 @@ export const DEFAULT_VARIANTS = {
     { name: "Orange", description: "Skinkontakt-hvidvin med markant karakter." },
   ],
   cocktail: [
-    { name: "Mojito", description: "Rom, mynte og lime over knust is." },
-    { name: "Smirnoff Ice", description: "Vodkadrik med citruskick." },
     { name: "Gin & Tonic", description: "Botanisk gin balanceret med tonic." },
+    { name: "Mojito", description: "Rom, mynte og lime over knust is." },
+    { name: "Espresso Martini", description: "Espresso rystet med vodka og likør." },
+    { name: "Smirnoff Ice", description: "Vodkadrik med citruskick." },
     { name: "Dark 'n Stormy", description: "Mørk rom og ginger beer med bid." },
     { name: "White Russian", description: "Vodka, kaffelikør og fløde." },
-    { name: "Espresso Martini", description: "Espresso rystet med vodka og likør." },
     { name: "Vermouth Tonic", description: "Aperitif serveret langt med tonic." },
   ],
   shot: [
     { name: "Tequila", description: "Serveres med salt og lime." },
-    { name: "Jägermeister", description: "Urte-likør serveret iskold." },
     { name: "Fisk", description: "Nordisk lakridsshot med mentol." },
+    { name: "Jägermeister", description: "Urte-likør serveret iskold." },
     { name: "Bailey", description: "Cremet irsk likør i et hurtigt skud." },
-    { name: "Gammel Dansk", description: "Bitter urtelikør fra Danmark." },
     { name: "Snaps", description: "Traditionel akvavit bedst iskold." },
+    { name: "Gammel Dansk", description: "Bitter urtelikør fra Danmark." },
   ],
 };
+
 
 export const CATEGORY_IDS = CATEGORIES.map((category) => category.id);
 
