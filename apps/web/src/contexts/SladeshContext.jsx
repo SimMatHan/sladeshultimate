@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
-import { collection, doc, onSnapshot, query, updateDoc, where, serverTimestamp } from 'firebase/firestore';
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { collection, doc, getDoc, onSnapshot, query, updateDoc, where, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../hooks/useAuth';
 import { db } from '../firebase';
 
@@ -15,6 +15,7 @@ const STORAGE_KEY = 'sladesh_challenges';
 
 export function SladeshProvider({ children }) {
     const { currentUser } = useAuth();
+    const userNameCacheRef = useRef({});
 
     // Load challenges from localStorage
     const [challenges, setChallenges] = useState(() => {
@@ -44,7 +45,91 @@ export function SladeshProvider({ children }) {
         );
     }, [challenges, currentUser]);
 
-    // Subscribe to incoming challenges for the current user and lock the app when one arrives
+    // Find active challenge the current user has sent (to lock sender UI)
+    const activeSenderChallenge = useMemo(() => {
+        if (!currentUser) return null;
+        return challenges.find(
+            (c) => c.senderId === currentUser.uid && c.status === SLADESH_STATUS.IN_PROGRESS
+        );
+    }, [challenges, currentUser]);
+
+    const resolveUserName = useCallback(async (userId, fallback = 'Ukendt') => {
+        if (!userId) return fallback;
+        if (userNameCacheRef.current[userId]) {
+            return userNameCacheRef.current[userId];
+        }
+
+        try {
+            const userSnap = await getDoc(doc(db, 'users', userId));
+            if (userSnap.exists()) {
+                const data = userSnap.data() || {};
+                const resolvedName = data.fullName || data.displayName || data.username || fallback || userId;
+                userNameCacheRef.current[userId] = resolvedName;
+                return resolvedName;
+            }
+        } catch (err) {
+            console.error(`[sladesh] Failed to fetch user ${userId} for name resolution`, err);
+        }
+
+        const resolvedName = fallback || userId;
+        userNameCacheRef.current[userId] = resolvedName;
+        return resolvedName;
+    }, []);
+
+    const hydrateChallenge = useCallback(async (docSnap) => {
+        const data = docSnap.data();
+        const createdAtMs = data.createdAt?.toMillis
+            ? data.createdAt.toMillis()
+            : data.createdAt?.seconds
+                ? data.createdAt.seconds * 1000
+                : null;
+        const deadlineAtMs = data.deadlineAt?.toMillis
+            ? data.deadlineAt.toMillis()
+            : data.deadlineAt?.seconds
+                ? data.deadlineAt.seconds * 1000
+                : (createdAtMs ? createdAtMs + 10 * 60 * 1000 : null);
+        const statusRaw = (data.status || 'pending').toString().toLowerCase();
+        const status =
+            statusRaw === 'failed'
+                ? SLADESH_STATUS.FAILED
+                : statusRaw === 'completed'
+                    ? SLADESH_STATUS.COMPLETED
+                    : SLADESH_STATUS.IN_PROGRESS; // treat pending/in_progress as active
+
+        if (statusRaw === 'pending') {
+            updateDoc(doc(db, 'sladeshChallenges', docSnap.id), {
+                status: 'in_progress',
+                updatedAt: serverTimestamp(),
+            }).catch((err) => console.error('[sladesh] Failed to mark challenge in progress', err));
+        }
+
+        const fallbackSenderName = data.senderName || data.senderId || 'Ukendt';
+        const fallbackReceiverName = data.receiverName || data.recipientName || data.recipientId || 'Ukendt';
+
+        const resolvedSenderName =
+            (!data.senderName || data.senderName === data.senderId)
+                ? await resolveUserName(data.senderId, fallbackSenderName)
+                : data.senderName;
+        const resolvedReceiverName =
+            (!data.receiverName && !data.recipientName) || fallbackReceiverName === data.recipientId
+                ? await resolveUserName(data.recipientId, fallbackReceiverName)
+                : fallbackReceiverName;
+
+        return {
+            id: docSnap.id,
+            senderId: data.senderId,
+            senderName: resolvedSenderName,
+            receiverId: data.recipientId,
+            receiverName: resolvedReceiverName,
+            status,
+            createdAt: createdAtMs,
+            deadlineAt: deadlineAtMs,
+            proofBeforeImage: data.proofBeforeImage || null,
+            proofAfterImage: data.proofAfterImage || null,
+        };
+    }, [resolveUserName]);
+
+    // Subscribe to challenges for the current user (both sent and received)
     useEffect(() => {
         if (!currentUser?.uid) {
             setChallenges([]);
@@ -52,59 +137,54 @@ export function SladeshProvider({ children }) {
         }
 
         const challengesRef = collection(db, 'sladeshChallenges');
-        const q = query(
+        const incomingQuery = query(
             challengesRef,
             where('recipientId', '==', currentUser.uid)
         );
+        const outgoingQuery = query(
+            challengesRef,
+            where('senderId', '==', currentUser.uid)
+        );
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-        const next = snapshot.docs.map((docSnap) => {
-            const data = docSnap.data();
-            const createdAtMs = data.createdAt?.toMillis
-                ? data.createdAt.toMillis()
-                : data.createdAt?.seconds
-                  ? data.createdAt.seconds * 1000
-                  : null;
-            const deadlineAtMs = data.deadlineAt?.toMillis
-                ? data.deadlineAt.toMillis()
-                : data.deadlineAt?.seconds
-                  ? data.deadlineAt.seconds * 1000
-                  : (createdAtMs ? createdAtMs + 10 * 60 * 1000 : null);
-            const statusRaw = (data.status || 'pending').toString().toLowerCase();
-            const status =
-                statusRaw === 'failed'
-                    ? SLADESH_STATUS.FAILED
-                    : statusRaw === 'completed'
-                        ? SLADESH_STATUS.COMPLETED
-                        : SLADESH_STATUS.IN_PROGRESS; // treat pending/in_progress as active
+        let isCancelled = false;
+        let incomingChallenges = [];
+        let outgoingChallenges = [];
 
-            // Optional: mark the challenge as in_progress server-side so sender sees the state change
-            if (statusRaw === 'pending') {
-                updateDoc(doc(db, 'sladeshChallenges', docSnap.id), {
-                        status: 'in_progress',
-                        updatedAt: serverTimestamp(),
-                    }).catch((err) => console.error('[sladesh] Failed to mark challenge in progress', err));
-                }
-
-                return {
-                    id: docSnap.id,
-                    senderId: data.senderId,
-                    senderName: data.senderName || data.senderId || 'Ukendt',
-                    receiverId: data.recipientId,
-                    receiverName: data.receiverName || data.recipientId || 'Ukendt',
-                    status,
-                    createdAt: createdAtMs,
-                    deadlineAt: deadlineAtMs,
-                    proofBeforeImage: data.proofBeforeImage || null,
-                    proofAfterImage: data.proofAfterImage || null,
-                };
+        const mergeAndSet = () => {
+            if (isCancelled) return;
+            const mergedMap = new Map();
+            [...incomingChallenges, ...outgoingChallenges].forEach((challenge) => {
+                mergedMap.set(challenge.id, challenge);
             });
+            const merged = Array.from(mergedMap.values()).sort(
+                (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
+            );
+            setChallenges(merged);
+        };
 
-            setChallenges(next);
-        });
+        const handleSnapshot = (type) => (snapshot) => {
+            const hydrateAndStore = async () => {
+                const hydrated = await Promise.all(snapshot.docs.map(hydrateChallenge));
+                if (isCancelled) return;
+                if (type === 'incoming') {
+                    incomingChallenges = hydrated;
+                } else {
+                    outgoingChallenges = hydrated;
+                }
+                mergeAndSet();
+            };
+            hydrateAndStore();
+        };
 
-        return () => unsubscribe();
-    }, [currentUser]);
+        const unsubscribeIncoming = onSnapshot(incomingQuery, handleSnapshot('incoming'));
+        const unsubscribeOutgoing = onSnapshot(outgoingQuery, handleSnapshot('outgoing'));
+
+        return () => {
+            isCancelled = true;
+            unsubscribeIncoming();
+            unsubscribeOutgoing();
+        };
+    }, [currentUser, hydrateChallenge]);
 
     const syncChallengeUpdate = useCallback((challengeId, updates) => {
         updateDoc(doc(db, 'sladeshChallenges', challengeId), {
@@ -115,6 +195,7 @@ export function SladeshProvider({ children }) {
 
     // Check if app should be locked
     const isLocked = !!activeChallenge;
+    const isSenderLocked = !!activeSenderChallenge;
 
     // Create a new Sladesh challenge
     const sendSladesh = useCallback((sender, receiver) => {
@@ -180,7 +261,9 @@ export function SladeshProvider({ children }) {
     const value = {
         challenges,
         activeChallenge,
+        activeSenderChallenge,
         isLocked,
+        isSenderLocked,
         sendSladesh,
         updateChallenge,
         failChallenge,

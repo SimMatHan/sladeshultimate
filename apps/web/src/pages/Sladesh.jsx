@@ -28,6 +28,7 @@ import { getUser, getSladeshCooldownState, addSladesh, updateUserLocation } from
 import { getCheckedInChannelMembers } from "../services/channelService";
 import { incrementSladeshCount } from "../services/statsService";
 import { resolveMockChannelKey, isMemberOfMockChannel, MOCK_CHANNEL_KEYS } from "../utils/mockChannels";
+import { useSladesh } from "../contexts/SladeshContext";
 
 const MOCK_PARTICIPANTS = [
   {
@@ -123,6 +124,7 @@ export default function Sladesh() {
   const { currentUser } = useAuth();
   const { selectedChannel } = useChannel();
   const { updateLocation, userLocation } = useLocation();
+  const { activeSenderChallenge } = useSladesh();
 
   const [userProfile, setUserProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(!USE_MOCK_DATA);
@@ -133,6 +135,7 @@ export default function Sladesh() {
   const [pendingTarget, setPendingTarget] = useState(null);
   const [statusMessage, setStatusMessage] = useState(null);
   const [isSending, setIsSending] = useState(false);
+  const [senderTimeLeft, setSenderTimeLeft] = useState(null);
   const [mockLastSladeshAt, setMockLastSladeshAt] = useState(() => {
     if (!USE_MOCK_DATA) return null;
     try {
@@ -302,13 +305,56 @@ export default function Sladesh() {
     return () => clearTimeout(timer);
   }, [statusMessage]);
 
+  useEffect(() => {
+    if (!activeSenderChallenge) {
+      setSenderTimeLeft(null);
+      return undefined;
+    }
+
+    const calculate = () => {
+      if (!activeSenderChallenge.deadlineAt) {
+        setSenderTimeLeft(null);
+        return;
+      }
+      setSenderTimeLeft(Math.max(0, activeSenderChallenge.deadlineAt - Date.now()));
+    };
+
+    calculate();
+    const interval = setInterval(calculate, 1000);
+    return () => clearInterval(interval);
+  }, [activeSenderChallenge]);
+
   const hasTargets = eligibleTargets.length > 0;
   const cooldownBlocked = !USE_MOCK_DATA && cooldownState.blocked;
   const cooldownReadyAt = cooldownState.blockEndsAt
     ? TIME_FORMATTER.format(cooldownState.blockEndsAt)
     : null;
 
+  const lockedRecipientProfile = useMemo(() => {
+    if (!activeSenderChallenge) return null;
+    const match = eligibleTargets.find((member) => member.id === activeSenderChallenge.receiverId);
+    if (match) return match;
+
+    const name = activeSenderChallenge.receiverName || activeSenderChallenge.receiverId;
+    return {
+      id: activeSenderChallenge.receiverId,
+      name,
+      username: name,
+      initials: deriveInitialsFromName(name),
+      profileEmoji: null,
+      profileGradient: "from-rose-400 to-orange-500",
+    };
+  }, [activeSenderChallenge, eligibleTargets]);
+
   const cannotInitiateReason = useMemo(() => {
+    if (activeSenderChallenge) {
+      const displayName =
+        lockedRecipientProfile?.username ||
+        lockedRecipientProfile?.name ||
+        activeSenderChallenge.receiverName ||
+        "din modtager";
+      return `Du har allerede sendt en Sladesh til ${displayName}. Vent til den er afsluttet.`;
+    }
     if (!hasTargets) {
       return "Ingen medlemmer er checket ind i denne kanal endnu.";
     }
@@ -456,6 +502,13 @@ export default function Sladesh() {
 
   return (
     <Page title="Sladesh">
+      {activeSenderChallenge ? (
+        <SenderLockOverlay
+          recipient={lockedRecipientProfile}
+          fallbackName={activeSenderChallenge.receiverName || activeSenderChallenge.receiverId}
+          timeLeftMs={senderTimeLeft}
+        />
+      ) : null}
       <div className="flex flex-1 flex-col items-center justify-center gap-8 pb-8 pt-4">
         <div className="relative w-full max-w-full">
           <div className="aspect-square">
@@ -574,6 +627,63 @@ export default function Sladesh() {
         />
       ) : null}
     </Page>
+  );
+}
+
+function SenderLockOverlay({ recipient, fallbackName, timeLeftMs }) {
+  const { isDarkMode } = useTheme();
+  const displayName = recipient?.username || recipient?.name || fallbackName || "modtageren";
+  const participant = {
+    ...recipient,
+    initials: recipient?.initials || deriveInitialsFromName(displayName),
+    profileGradient: recipient?.profileGradient || recipient?.avatarGradient || recipient?.accent || "from-rose-400 to-orange-500",
+  };
+  const countdown = formatCountdown(timeLeftMs);
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-center justify-center px-6 py-8"
+      style={{ backgroundColor: isDarkMode ? "rgba(6, 10, 24, 0.78)" : "rgba(11, 17, 32, 0.68)" }}
+    >
+      <div
+        className="w-full max-w-sm rounded-[28px] p-6 text-center shadow-[0_24px_60px_rgba(15,23,42,0.25)]"
+        style={{ backgroundColor: "var(--surface)" }}
+      >
+        <div className="mb-4 flex flex-col items-center gap-3">
+          <div className="text-3xl" aria-hidden="true">🚀</div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: "var(--muted)" }}>
+            Sladesh afsendt
+          </p>
+          <h3 className="text-xl font-bold" style={{ color: "var(--ink)" }}>
+            Venter på {displayName}
+          </h3>
+          <p className="text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
+            Vi låser Sladesh, indtil udfordringen er færdig. Du kan sende en ny, når timeren rammer 0.
+          </p>
+        </div>
+
+        <div className="flex flex-col items-center gap-4">
+          <OverlayAvatar participant={participant} />
+          <div
+            className="flex items-center gap-2 rounded-full px-4 py-2 font-mono text-lg font-semibold"
+            style={{
+              backgroundColor: "color-mix(in srgb, var(--brand) 10%, transparent)",
+              color: "var(--ink)",
+              border: "1px solid color-mix(in srgb, var(--line) 70%, transparent)",
+            }}
+          >
+            <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+              Tid tilbage
+            </span>
+            <span>{countdown}</span>
+          </div>
+        </div>
+
+        <p className="mt-6 text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
+          Du ser denne låste visning indtil {displayName} har gennemført eller tiden løber ud.
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -859,4 +969,12 @@ function deriveInitialsFromName(name = "") {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() || "")
     .join("");
+}
+
+function formatCountdown(ms) {
+  if (ms === null || ms === undefined) return "--:--";
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }

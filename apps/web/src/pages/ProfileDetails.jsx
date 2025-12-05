@@ -232,22 +232,10 @@ export default function ProfileDetails() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 gap-3 w-full">
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--subtle)] p-4 flex flex-col items-center justify-center gap-1">
-            <span className="text-3xl font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
-              {totalDrinks.toLocaleString('da-DK')}
-            </span>
-            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
-              Total i Sladesh-tid
-            </span>
-          </div>
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--subtle)] p-4 flex flex-col items-center justify-center gap-1">
-            <span className="text-3xl font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
-              {currentRun.toLocaleString('da-DK')}
-            </span>
-            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
-              Loggede drinks i dag
-            </span>
-          </div>
+          <StatTile value={totalDrinks} label="Total i Sladesh-tid" />
+          <StatTile value={currentRun} label="Loggede drinks i dag" />
+          <StatTile value={sladeshReceived} label="Sladesh modtaget" />
+          <StatTile value={sladeshSent} label="Sladesh sendt" />
         </div>
 
         {/* Achievements Section */}
@@ -280,35 +268,6 @@ export default function ProfileDetails() {
               </p>
             </div>
           )}
-        </div>
-      </div>
-      {/* Sladesh Stats */}
-      <div className="space-y-3 pt-4">
-        <div className="space-y-1 pl-1">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-left" style={{ color: 'var(--muted)' }}>
-            Sladesh
-          </h2>
-          <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
-            Se hvor mange Sladesh du har sendt og modtaget.
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-3 w-full">
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--subtle)] p-4 flex flex-col items-center justify-center gap-1">
-            <span className="text-3xl font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
-              {sladeshReceived.toLocaleString('da-DK')}
-            </span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-center" style={{ color: 'var(--muted)' }}>
-              Sladesh modtaget
-            </span>
-          </div>
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--subtle)] p-4 flex flex-col items-center justify-center gap-1">
-            <span className="text-3xl font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
-              {sladeshSent.toLocaleString('da-DK')}
-            </span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-center" style={{ color: 'var(--muted)' }}>
-              Sladesh sendt
-            </span>
-          </div>
         </div>
       </div>
       {/* Drink Breakdown */}
@@ -407,6 +366,19 @@ function BreakdownScopeToggle({ value, onChange }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function StatTile({ value = 0, label }) {
+  return (
+    <div className="rounded-2xl border border-[var(--line)] bg-[var(--subtle)] p-4 flex flex-col items-center justify-center gap-1">
+      <span className="text-3xl font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
+        {Number(value).toLocaleString('da-DK')}
+      </span>
+      <span className="text-[10px] font-bold uppercase tracking-wider text-center" style={{ color: 'var(--muted)' }}>
+        {label}
+      </span>
     </div>
   );
 }

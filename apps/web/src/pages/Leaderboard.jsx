@@ -500,47 +500,53 @@ function ProfileCard({ profile, rank, onSelect, isActive, sortMode, achievements
   const { getUserSladeshStatus } = useSladesh();
   const sladeshStatus = getUserSladeshStatus(profile.id);
 
+  const renderStatusTab = (label, tone) => {
+    const tones = {
+      progress: {
+        bg: 'color-mix(in srgb, var(--brand) 16%, transparent)',
+        text: 'var(--brand)',
+      },
+      success: {
+        bg: 'color-mix(in srgb, #22c55e 18%, transparent)',
+        text: '#15803d',
+      },
+      fail: {
+        bg: 'color-mix(in srgb, var(--muted) 24%, transparent)',
+        text: 'var(--muted)',
+      },
+    };
+
+    const palette = tones[tone] || tones.progress;
+
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide shadow-sm"
+        style={{
+          backgroundColor: palette.bg,
+          color: palette.text,
+          border: '1px solid color-mix(in srgb, var(--line) 60%, transparent)',
+        }}
+      >
+        {label}
+      </span>
+    );
+  };
+
   const getSladeshBadge = () => {
     if (!sladeshStatus) return null;
 
-    // If completed/failed, maybe we don't show it prominently, or we show "Last Sladesh: Won"
-    // For now, let's focus on active ones or recent ones
-
-    const isSender = sladeshStatus.senderId === profile.id;
     const isReceiver = sladeshStatus.receiverId === profile.id;
 
-    if (sladeshStatus.status === SLADESH_STATUS.IN_PROGRESS) {
-      if (isReceiver) {
-        return (
-          <span className="inline-flex items-center gap-1 rounded-md bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
-            Sladesh in progress - fra {sladeshStatus.senderName || sladeshStatus.senderId}
-          </span>
-        );
-      }
-      if (isSender) {
-        return (
-          <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-            ­Sender
-          </span>
-        );
-      }
+    if (sladeshStatus.status === SLADESH_STATUS.IN_PROGRESS && isReceiver) {
+      return renderStatusTab('In Progress', 'progress');
     }
 
     if (sladeshStatus.status === SLADESH_STATUS.COMPLETED) {
-      // Only show if recent (e.g. < 1 hour ago) - for now just show it
-      return (
-        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-          Sladesh Won
-        </span>
-      );
+      return renderStatusTab('Completed', 'success');
     }
 
     if (sladeshStatus.status === SLADESH_STATUS.FAILED) {
-      return (
-        <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-bold text-gray-600 dark:bg-gray-800 dark:text-gray-400">
-          Sladesh Lost
-        </span>
-      );
+      return renderStatusTab('Failed', 'fail');
     }
 
     return null;
@@ -704,7 +710,6 @@ function Avatar({ emoji, gradient, initials, className = 'h-12 w-12 text-xl' }) 
     </div>
   );
 }
-
 
 
 
