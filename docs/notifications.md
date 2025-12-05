@@ -263,6 +263,54 @@ Example payload:
 }
 ```
 
+##### `sladesh_received`
+- **Trigger:** `onSladeshSent` when a new `sladeshChallenges/{id}` document is created (a user sends a Sladesh).
+- **Audience:** The receiver of the Sladesh. Skips delivery if `channelId` is `RFYoEHhScYOkDaIbGSYA` (Den Åbne Kanal).
+- **Data:** `senderId`, `senderName`, `sladeshId`, optional `channelId`, deep link to the channel (`/home?channel=<id>` when present).
+- **Persistence:** A document is written under `notifications/{receiverId}/items` with `type: "sladesh_received"`. Cleanup uses the existing `deleteOldNotifications` job.
+
+Example payload:
+
+```json
+{
+  "title": "Mia har sendt dig en Sladesh!",
+  "body": "Åbn appen og gennemfør udfordringen 🍺",
+  "tag": "sladesh_abc123",
+  "data": {
+    "type": "sladesh_received",
+    "senderId": "uid123",
+    "senderName": "Mia",
+    "sladeshId": "abc123",
+    "channelId": "fredagsbaren",
+    "url": "/home?channel=fredagsbaren"
+  }
+}
+```
+
+##### `sladesh_completed`
+- **Trigger:** `onSladeshCompleted` when a `sladeshChallenges/{id}` document transitions to `status: "completed"`.
+- **Audience:** The sender of the Sladesh. Skips delivery if `channelId` is `RFYoEHhScYOkDaIbGSYA` (Den Åbne Kanal).
+- **Data:** `receiverId`, `receiverName`, `sladeshId`, optional `channelId`, deep link to `/home?channel=<id>` when present.
+- **Persistence:** A document is written under `notifications/{senderId}/items` with `type: "sladesh_completed"`. Cleaned by `deleteOldNotifications`.
+
+Example payload:
+
+```json
+{
+  "title": "Mia fuldførte din Sladesh",
+  "body": "Klar til næste udfordring? 🚀",
+  "tag": "sladesh_completed_abc123",
+  "data": {
+    "type": "sladesh_completed",
+    "receiverId": "uid123",
+    "receiverName": "Mia",
+    "sladeshId": "abc123",
+    "channelId": "fredagsbaren",
+    "url": "/home?channel=fredagsbaren"
+  }
+}
+```
+
 ---
 
 ### 9. Debugging & Monitoring
@@ -336,4 +384,3 @@ Example payload:
 - [ ] Cloud Function logs show `sent: N`, `failed: 0`
 
 Keep this doc handy whenever you need to ship a new notification or revisit backend fan-out logic. Updates welcome!***
-

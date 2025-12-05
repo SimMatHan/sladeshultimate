@@ -171,7 +171,7 @@ export default function DrinkVariations() {
       onTouchEnd={handleTouchEnd}
     >
       <div
-        className="sticky top-0 z-10 -mx-4 space-y-6 px-4 pb-4"
+        className="sticky top-0 z-10 -mx-4 space-y-6 px-4 pb-4 py-4"
         style={{
           backgroundColor: "var(--background, var(--surface,#ffffff))",
           backdropFilter: "blur(12px)",
@@ -218,7 +218,7 @@ export default function DrinkVariations() {
 
             <div
               ref={categoryRailRef}
-              className="flex gap-4 overflow-x-auto py-3 scroll-smooth snap-x snap-mandatory"
+              className="flex gap-4 overflow-x-auto py-1 scroll-smooth snap-x snap-mandatory"
               style={{
                 scrollbarWidth: "none",
                 WebkitOverflowScrolling: "touch",

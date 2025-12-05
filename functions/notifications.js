@@ -87,19 +87,39 @@ const builders = {
     }
   },
   sladesh_received: (context = {}) => {
-    const senderName = context.senderName || 'En ven'
-    const sladeshId = context.sladeshId
+    const senderName = context.senderName || context.data?.senderName || 'En ven'
+    const sladeshId = context.sladeshId || context.data?.sladeshId
+    const channelId = context.channelId || context.data?.channelId
     return {
       title: context.title || `${senderName} har sendt dig en Sladesh!`,
       body: context.body || 'Åbn appen og gennemfør udfordringen 🍺',
       tag: context.tag || `sladesh_${sladeshId || 'challenge'}`,
       data: {
         type: 'sladesh_received',
-        senderId: context.senderId,
+        senderId: context.senderId || context.data?.senderId,
         senderName,
         sladeshId,
-        channelId: context.channelId,
-        url: context.data?.url || '/home',
+        channelId,
+        url: context.data?.url || (channelId ? `/home?channel=${channelId}` : '/home'),
+        ...context.data
+      }
+    }
+  },
+  sladesh_completed: (context = {}) => {
+    const receiverName = context.receiverName || context.data?.receiverName || 'En ven'
+    const sladeshId = context.sladeshId || context.data?.sladeshId
+    const channelId = context.channelId || context.data?.channelId
+    return {
+      title: context.title || `${receiverName} fuldførte din Sladesh`,
+      body: context.body || 'Klar til næste udfordring? 🚀',
+      tag: context.tag || `sladesh_completed_${sladeshId || 'challenge'}`,
+      data: {
+        type: 'sladesh_completed',
+        receiverId: context.receiverId || context.data?.receiverId,
+        receiverName,
+        sladeshId,
+        channelId,
+        url: context.data?.url || (channelId ? `/home?channel=${channelId}` : '/home'),
         ...context.data
       }
     }

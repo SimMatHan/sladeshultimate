@@ -796,15 +796,20 @@ exports.onSladeshSent = functions
             const senderName = challenge.senderName || "En ven";
             const channelId = challenge.channelId || null;
 
+            if (channelId === DEN_AABNE_CHANNEL_ID) {
+                console.log("[sladesh] Skipping notification for Den Åbne Kanal", {
+                    challengeId,
+                    channelId
+                });
+                return null;
+            }
+
             // Build notification payload
             const payload = buildNotificationPayload("sladesh_received", {
                 senderId: challenge.senderId,
                 senderName,
                 sladeshId: challengeId,
-                channelId,
-                data: {
-                    url: "/home"
-                }
+                channelId
             });
 
             // Send notification to receiver
@@ -826,6 +831,82 @@ exports.onSladeshSent = functions
             return null;
         } catch (error) {
             console.error("[sladesh] Error sending notification", {
+                challengeId,
+                error: error.message
+            });
+            return null;
+        }
+    });
+
+/**
+ * Sends a notification to the sender when a Sladesh challenge is completed.
+ * Triggered when a document in sladeshChallenges transitions to status "completed".
+ */
+exports.onSladeshCompleted = functions
+    .region(DEFAULT_REGION)
+    .firestore.document("sladeshChallenges/{challengeId}")
+    .onUpdate(async (change, context) => {
+        const before = change.before.data() || {};
+        const after = change.after.data() || {};
+        const challengeId = context.params.challengeId;
+
+        const beforeStatus = (before.status || "").toString().toLowerCase();
+        const afterStatus = (after.status || "").toString().toLowerCase();
+
+        if (afterStatus !== "completed" || beforeStatus === "completed") {
+            return null;
+        }
+
+        const senderId = after.senderId;
+        const receiverId = after.receiverId;
+        const receiverName = after.recipientName || after.receiverName || "En ven";
+        const channelId = after.channelId || null;
+
+        if (!senderId) {
+            console.warn("[sladesh] Missing senderId on completion", { challengeId });
+            return null;
+        }
+
+        if (channelId === DEN_AABNE_CHANNEL_ID) {
+            console.log("[sladesh] Skipping completion notification for Den Åbne Kanal", {
+                challengeId,
+                channelId
+            });
+            return null;
+        }
+
+        try {
+            const senderDoc = await db.collection("users").doc(senderId).get();
+            if (!senderDoc.exists) {
+                console.warn("[sladesh] Sender not found on completion", { senderId, challengeId });
+                return null;
+            }
+
+            const payload = buildNotificationPayload("sladesh_completed", {
+                receiverId,
+                receiverName,
+                sladeshId: challengeId,
+                channelId
+            });
+
+            const result = await deliverNotificationToUserDoc(senderDoc, payload, {
+                channelId,
+                receiverId,
+                type: "sladesh_completed",
+                sladeshId: challengeId
+            });
+
+            console.log("[sladesh] Completion notification delivered", {
+                challengeId,
+                senderId,
+                sent: result.sent,
+                failed: result.failed,
+                skipped: result.skipped
+            });
+
+            return null;
+        } catch (error) {
+            console.error("[sladesh] Error sending completion notification", {
                 challengeId,
                 error: error.message
             });
