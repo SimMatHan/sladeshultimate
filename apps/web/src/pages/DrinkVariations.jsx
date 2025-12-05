@@ -18,7 +18,7 @@ export default function DrinkVariations() {
     direction: null,
     active: false,
   });
-  const carouselRef = useRef(null);
+  const categoryRailRef = useRef(null);
 
   const category = useMemo(
     () => CATEGORIES.find((cat) => cat.id === categoryId),
@@ -135,14 +135,23 @@ export default function DrinkVariations() {
   }, [categoryId, resetScrollPosition]);
 
   useEffect(() => {
-    const activePill = carouselRef.current?.querySelector(
-      "[data-active-pill='true']"
-    );
-    if (activePill) {
-      activePill.scrollIntoView({
+    const rail = categoryRailRef.current;
+    if (!rail) {
+      return;
+    }
+
+    const activeChip = rail.querySelector(`[data-category-id='${categoryId}']`);
+    if (activeChip) {
+      const railRect = rail.getBoundingClientRect();
+      const chipRect = activeChip.getBoundingClientRect();
+      const offset =
+        chipRect.left -
+        railRect.left -
+        (railRect.width / 2 - chipRect.width / 2);
+
+      rail.scrollTo({
+        left: rail.scrollLeft + offset,
         behavior: "smooth",
-        inline: "center",
-        block: "nearest",
       });
     }
   }, [categoryId]);
@@ -169,43 +178,6 @@ export default function DrinkVariations() {
           WebkitBackdropFilter: "blur(12px)",
         }}
       >
-        <div
-          ref={carouselRef}
-          className="flex gap-3 overflow-x-auto pb-4 pt-2 scroll-smooth snap-x snap-mandatory"
-          style={{
-            scrollbarWidth: "none",
-            WebkitOverflowScrolling: "touch",
-            maskImage:
-              "linear-gradient(90deg, transparent, black 32px, black calc(100% - 32px), transparent)",
-            WebkitMaskImage:
-              "linear-gradient(90deg, transparent, black 32px, black calc(100% - 32px), transparent)",
-            paddingInline: "clamp(1rem, 6vw, 2.5rem)",
-            gap: "clamp(0.5rem, 2vw, 1rem)",
-          }}
-        >
-          {CATEGORIES.map((cat) => {
-            const isActive = cat.id === categoryId;
-            return (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => navigateToCategory(cat.id)}
-                data-active-pill={isActive}
-                className={`flex-shrink-0 rounded-full font-semibold transition-all duration-300 scroll-snap-align-center ${
-                  isActive
-                    ? "bg-[color:var(--brand,#FF385C)] text-[color:var(--brand-ink,#ffffff)] shadow-lg scale-100"
-                    : "border border-[color:var(--line)] bg-[color:var(--surface)] text-[color:var(--muted)] opacity-70 scale-95"
-                } ${isActive ? "px-6 py-2.5 text-base" : "px-4 py-1.5 text-sm"}`}
-                style={{
-                  minWidth: isActive ? "min(65vw, 260px)" : "min(38vw, 150px)",
-                }}
-                aria-pressed={isActive}
-              >
-                {cat.name}
-              </button>
-            );
-          })}
-        </div>
         <div className="px-1">
           <div className="flex items-center gap-3">
             <div
@@ -227,11 +199,118 @@ export default function DrinkVariations() {
             Log hver drinkvariation præcis som i overlayet. Tryk på plus og minus for at justere dit nuværende løb.
           </p>
         </div>
+        <div className="mt-3 px-1">
+          <div className="relative -mx-4 px-4">
+            <div
+              className="pointer-events-none absolute inset-y-0 left-0 w-10"
+              style={{
+                background:
+                  "linear-gradient(90deg, var(--background, var(--surface,#ffffff)) 0%, rgba(255,255,255,0) 100%)",
+              }}
+            />
+            <div
+              className="pointer-events-none absolute inset-y-0 right-0 w-10"
+              style={{
+                background:
+                  "linear-gradient(270deg, var(--background, var(--surface,#ffffff)) 0%, rgba(255,255,255,0) 100%)",
+              }}
+            />
+
+            <div
+              ref={categoryRailRef}
+              className="flex gap-4 overflow-x-auto py-3 scroll-smooth snap-x snap-mandatory"
+              style={{
+                scrollbarWidth: "none",
+                WebkitOverflowScrolling: "touch",
+                maskImage:
+                  "linear-gradient(90deg, transparent, black 32px, black calc(100% - 32px), transparent)",
+                WebkitMaskImage:
+                  "linear-gradient(90deg, transparent, black 32px, black calc(100% - 32px), transparent)",
+                paddingInline: "clamp(0.75rem, 6vw, 2rem)",
+              }}
+            >
+              {CATEGORIES.map((cat) => {
+                const isActive = cat.id === categoryId;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    data-category-id={cat.id}
+                    onClick={() => {
+                      const rail = categoryRailRef.current;
+                      const chip = rail?.querySelector(
+                        `[data-category-id='${cat.id}']`
+                      );
+                      if (rail && chip) {
+                        const railRect = rail.getBoundingClientRect();
+                        const chipRect = chip.getBoundingClientRect();
+                        const offset =
+                          chipRect.left -
+                          railRect.left -
+                          (railRect.width / 2 - chipRect.width / 2);
+
+                        rail.scrollTo({
+                          left: rail.scrollLeft + offset,
+                          behavior: "smooth",
+                        });
+                      }
+                      navigateToCategory(cat.id);
+                    }}
+                    aria-pressed={isActive}
+                    className="flex min-w-[88px] flex-shrink-0 flex-col items-center gap-2 scroll-snap-align-center transition-transform duration-200 ease-out"
+                    style={{ color: "var(--muted)" }}
+                  >
+                    <div
+                      className="grid h-16 w-16 place-items-center rounded-full border transition-all duration-200 ease-out shadow-sm"
+                      style={{
+                        backgroundColor: isActive
+                          ? "var(--brand, #FF385C)"
+                          : "var(--surface)",
+                        borderColor: isActive
+                          ? "transparent"
+                          : "color-mix(in srgb, var(--line) 85%, transparent)",
+                        color: isActive
+                          ? "var(--brand-ink, #ffffff)"
+                          : "var(--ink)",
+                        boxShadow: isActive
+                          ? "0 12px 30px rgba(255, 56, 92, 0.24)"
+                          : "0 10px 30px rgba(0,0,0,0.06)",
+                        transform: isActive ? "scale(1.1)" : "scale(1)",
+                      }}
+                    >
+                      <span className="text-2xl">{cat.icon}</span>
+                    </div>
+                    <span
+                      className="text-[13px] font-semibold tracking-tight"
+                      style={{
+                        color: isActive ? "var(--ink)" : "var(--muted)",
+                        opacity: isActive ? 1 : 0.7,
+                      }}
+                    >
+                      {cat.name}
+                    </span>
+                    <span
+                      className="h-1 w-8 rounded-full transition-colors duration-200"
+                      style={{
+                        backgroundColor: isActive
+                          ? "var(--brand, #FF385C)"
+                          : "color-mix(in srgb, var(--line) 60%, transparent)",
+                      }}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* FIXED: Removed nested overflow-y-auto container. Content now flows naturally in .scroll-region.
           This eliminates double-scroll conflicts and scroll lock issues on iOS. */}
-      <div className="mt-4 pb-8 pr-1">
+      <div
+        className="mt-4 pb-8 pr-1"
+        style={{ minHeight: "50vh" }} // Keep content region from collapsing between category switches to avoid perceived jumps.
+      >
         <div className="grid gap-3">
           {items.map((item) => {
             const count = variantCounts[categoryId]?.[item.name] ?? 0;

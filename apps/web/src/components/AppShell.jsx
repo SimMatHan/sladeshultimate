@@ -382,11 +382,11 @@ export default function AppShell() {
             </header>
 
             <main className="scroll-region">
-              <div className="mx-auto max-w-[480px] px-4 py-3">
-                {/* Avoid rendering two full pages at once (popLayout kept both mounted) */}
-                <Outlet key={location.pathname} />
-              </div>
-            </main>
+                <div className="mx-auto max-w-[480px] px-4 py-3">
+                  {/* Removing the location key keeps page components (e.g. DrinkVariations) mounted between category changes, avoiding full remount flicker. */}
+                  <Outlet />
+                </div>
+              </main>
 
             <nav className="bottombar">
               <TabBar />
