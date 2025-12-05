@@ -5,6 +5,31 @@ import { getUser } from '../services/userService';
 import { ACHIEVEMENTS } from '../config/achievements';
 import { USE_MOCK_DATA } from '../config/env';
 
+function buildVariationBreakdown(variations, fallback = []) {
+  const breakdown = [];
+
+  Object.entries(variations || {}).forEach(([type, typeVariations]) => {
+    if (typeVariations && typeof typeVariations === 'object') {
+      Object.entries(typeVariations).forEach(([variation, count]) => {
+        if (count > 0) {
+          breakdown.push({
+            id: `${type}-${variation}`,
+            label: variation,
+            type,
+            count,
+          });
+        }
+      });
+    }
+  });
+
+  if (breakdown.length > 0) {
+    return breakdown.sort((a, b) => b.count - a.count);
+  }
+
+  return fallback || [];
+}
+
 export default function ProfileDetails() {
   const { userId } = useParams();
   const location = useLocation();
@@ -13,6 +38,7 @@ export default function ProfileDetails() {
   const [loading, setLoading] = useState(!profile);
   const [error, setError] = useState(null);
   const [activeAchievement, setActiveAchievement] = useState(null);
+  const [breakdownScope, setBreakdownScope] = useState('current');
 
   // Lock body scroll when modal is open
   useEffect(() => {
@@ -65,43 +91,44 @@ export default function ProfileDetails() {
   }, [userId]);
 
   // Build drink breakdown
-  const currentRun = profile.currentRunDrinkCount || 0;
+  const currentRun = profile?.currentRunDrinkCount || 0;
 
-  const drinkBreakdown = useMemo(() => {
-    if (!profile) return [];
+  const currentRunVariations = profile?.currentRunDrinkVariations || profile?.drinkVariations || {};
+  const allTimeVariations =
+    profile?.allTimeDrinkVariations ||
+    profile?.lifetimeDrinkVariations ||
+    profile?.drinkVariationsAllTime ||
+    profile?.drinkVariations ||
+    {};
 
-    const variations = profile.currentRunDrinkVariations || profile.drinkVariations || {};
-    const breakdown = [];
+  const currentRunBreakdown = useMemo(
+    () => buildVariationBreakdown(currentRunVariations, profile?.drinkBreakdown),
+    [currentRunVariations, profile?.drinkBreakdown]
+  );
 
-    Object.entries(variations).forEach(([type, typeVariations]) => {
-      if (typeVariations && typeof typeVariations === 'object') {
-        Object.entries(typeVariations).forEach(([variation, count]) => {
-          if (count > 0) {
-            breakdown.push({
-              id: `${type}-${variation}`,
-              label: variation,
-              type,
-              count,
-            });
-          }
-        });
-      }
-    });
+  const allTimeBreakdown = useMemo(
+    () => buildVariationBreakdown(allTimeVariations, profile?.drinkBreakdown),
+    [allTimeVariations, profile?.drinkBreakdown]
+  );
 
-    if (breakdown.length > 0) {
-      return breakdown.sort((a, b) => b.count - a.count);
+  const getTotalCount = (items) => items.reduce((sum, item) => sum + item.count, 0);
+
+  const breakdownByScope = {
+    current: currentRunBreakdown,
+    'all-time': allTimeBreakdown,
+  };
+
+  const selectedBreakdown = breakdownByScope[breakdownScope] || currentRunBreakdown;
+
+  const percentageBase = useMemo(() => {
+    if (breakdownScope === 'current') {
+      return currentRun || getTotalCount(currentRunBreakdown);
     }
-
-    // Fallback to any precomputed breakdown if available
-    if (profile.drinkBreakdown) return profile.drinkBreakdown;
-
-    return [];
-  }, [profile]);
-
-  const percentageBase = currentRun || drinkBreakdown.reduce((sum, item) => sum + item.count, 0);
+    return profile?.totalDrinks || getTotalCount(allTimeBreakdown);
+  }, [breakdownScope, currentRun, currentRunBreakdown, allTimeBreakdown, profile?.totalDrinks]);
 
   const favoriteType = useMemo(() => {
-    const variations = profile?.currentRunDrinkVariations || profile?.drinkVariations || {};
+    const variations = breakdownScope === 'current' ? currentRunVariations : allTimeVariations;
     let topType = null;
     let topCount = 0;
 
@@ -122,9 +149,9 @@ export default function ProfileDetails() {
           percentage: percentageBase ? Math.round((topCount / percentageBase) * 100) : 0,
         }
       : null;
-  }, [percentageBase, profile]);
+  }, [percentageBase, breakdownScope, currentRunVariations, allTimeVariations]);
 
-  const favoriteVariation = drinkBreakdown[0] || null;
+  const favoriteVariation = selectedBreakdown[0] || null;
 
   // Get unlocked achievements
   const unlockedAchievements = useMemo(() => {
@@ -170,6 +197,9 @@ export default function ProfileDetails() {
   const displayName = profile.name || profile.username || 'Ukendt';
   const displayUsername = profile.username;
   const totalDrinks = profile.totalDrinks || 0;
+  const sladeshSent = profile?.sladeshSent || 0;
+  const sladeshReceived = profile?.sladeshReceived || 0;
+  const scopeLabel = breakdownScope === 'current' ? 'nuværende run' : 'hele Sladesh-historikken';
 
   return (
     <motion.div
@@ -252,22 +282,51 @@ export default function ProfileDetails() {
           )}
         </div>
       </div>
-
-      {/* Drink Breakdown */}
+      {/* Sladesh Stats */}
       <div className="space-y-3 pt-4">
         <div className="space-y-1 pl-1">
           <h2 className="text-xs font-bold uppercase tracking-widest text-left" style={{ color: 'var(--muted)' }}>
-            Favorit i nuv&#230;rende run
+            Sladesh
           </h2>
-          <p className="text-[11px] text-left" style={{ color: 'var(--muted)' }}>
-            {favoriteVariation
-              ? `${favoriteVariation.label} (${favoriteType?.type || 'mix'}) er mest logget i dette run${favoriteType?.percentage != null ? ` \u2014 ${favoriteType.percentage}% af dine nuv\u00e6rende drinks` : ''}.`
-              : 'Ingen favorit endnu \u2014 log en drink i dette run for at se din favorit.'}
+          <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
+            Se hvor mange Sladesh du har sendt og modtaget.
           </p>
         </div>
-        {drinkBreakdown.length > 0 ? (
+        <div className="grid grid-cols-2 gap-3 w-full">
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--subtle)] p-4 flex flex-col items-center justify-center gap-1">
+            <span className="text-3xl font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
+              {sladeshReceived.toLocaleString('da-DK')}
+            </span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-center" style={{ color: 'var(--muted)' }}>
+              Sladesh modtaget
+            </span>
+          </div>
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--subtle)] p-4 flex flex-col items-center justify-center gap-1">
+            <span className="text-3xl font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
+              {sladeshSent.toLocaleString('da-DK')}
+            </span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-center" style={{ color: 'var(--muted)' }}>
+              Sladesh sendt
+            </span>
+          </div>
+        </div>
+      </div>
+      {/* Drink Breakdown */}
+      <div className="space-y-3 pt-4">
+        <div className="flex flex-col gap-2 pl-1">
+          <h2 className="text-xs font-bold uppercase tracking-widest text-left" style={{ color: 'var(--muted)' }}>
+            Favorit i {scopeLabel}
+          </h2>
+          <BreakdownScopeToggle value={breakdownScope} onChange={setBreakdownScope} />
+          <p className="text-[11px] text-left" style={{ color: 'var(--muted)' }}>
+            {favoriteVariation
+              ? `${favoriteVariation.label} (${favoriteType?.type || 'mix'}) er mest logget i ${scopeLabel}${favoriteType?.percentage != null ? ` \u2014 ${favoriteType.percentage}% af dine valgte drinks` : ''}.`
+              : `Ingen favorit endnu \u2014 log en drink i ${breakdownScope === 'current' ? 'dette run' : 'Sladesh'} for at se din favorit.`}
+          </p>
+        </div>
+        {selectedBreakdown.length > 0 ? (
           <div className="space-y-4">
-            {drinkBreakdown.map((item) => {
+            {selectedBreakdown.map((item) => {
               const percentage = percentageBase ? Math.round((item.count / percentageBase) * 100) : 0;
               return (
                 <div key={item.id} className="flex flex-col gap-1">
@@ -295,7 +354,9 @@ export default function ProfileDetails() {
       ) : (
         <div className="flex items-center justify-center rounded-2xl border border-dashed border-[var(--line)] p-8">
           <p className="text-sm font-medium" style={{ color: 'var(--muted)' }}>
-            Ingen drinks registreret i dette run endnu
+            {breakdownScope === 'current'
+              ? 'Ingen drinks registreret i dette run endnu'
+              : 'Ingen drinks registreret endnu i din Sladesh-historik'}
           </p>
         </div>
       )}
@@ -305,6 +366,48 @@ export default function ProfileDetails() {
         <AchievementModal achievement={activeAchievement} onClose={() => setActiveAchievement(null)} />
       )}
     </motion.div>
+  );
+}
+
+function BreakdownScopeToggle({ value, onChange }) {
+  const options = [
+    { id: 'current', label: 'Nuværende run' },
+    { id: 'all-time', label: 'All-time' },
+  ];
+
+  return (
+    <div className="w-full rounded-2xl border border-[var(--line)] bg-[var(--subtle)] p-1">
+      <div className="grid grid-cols-2 gap-1 w-full">
+        {options.map((option) => {
+          const isActive = option.id === value;
+          return (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => onChange(option.id)}
+              className={`rounded-xl px-3 py-2 text-[11px] font-semibold transition ${isActive ? 'shadow-sm' : ''}`}
+              style={
+                isActive
+                  ? { backgroundColor: 'var(--surface)', color: 'var(--brand)' }
+                  : { color: 'var(--muted)' }
+              }
+              onMouseEnter={(e) => {
+                if (!isActive) {
+                  e.target.style.color = 'var(--ink)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) {
+                  e.target.style.color = 'var(--muted)';
+                }
+              }}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

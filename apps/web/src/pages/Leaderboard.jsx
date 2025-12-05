@@ -257,7 +257,7 @@ const leaderboardProfiles = [
 
 const sortOptions = [
   { id: 'current-run-most', label: 'Topslugere' },
-  { id: 'current-run-least', label: 'Letv├ªgtere' },
+  { id: 'current-run-least', label: 'Letvægtere' },
 ];
 
 const sortComparators = {
