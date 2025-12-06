@@ -436,7 +436,7 @@ function ChannelOverlay({ open, onClose, channels, selectedChannelId, onSelectCh
               color: "var(--ink)"
             }}
           >
-            Join kanal
+            Håndter kanal
           </button>
         </div>
       </motion.div>
