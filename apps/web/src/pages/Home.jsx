@@ -122,7 +122,7 @@ export default function Home() {
   const { currentUser } = useAuth();
   const { checkedIn, checkIn: globalCheckIn, checkOut: handleCheckOut } = useCheckInGate();
   const { userData } = useUserData();
-  const { currentRunDrinkCount, resetRun, isResetting, variantCounts } = useDrinkLog();
+  const { currentRunDrinkCount, resetRun, isResetting, isLoading, variantCounts } = useDrinkLog();
   const [expiresAt, setExpiresAt] = useState(() => getNextResetBoundary(new Date()));
   const [isCheckInBusy, setIsCheckInBusy] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -354,14 +354,22 @@ export default function Home() {
                 Loggede drinks
               </div>
               <div className="mt-2 flex items-end gap-2">
-                <span className="text-3xl font-semibold" style={{ color: 'var(--ink)' }}>
-                  {currentRunDrinkCount}
-                </span>
-                <span className="pb-1 text-xs uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-                  i dag
-                </span>
+                {isLoading ? (
+                  <div className="h-9 w-12 animate-pulse rounded bg-zinc-200 dark:bg-zinc-700" />
+                ) : (
+                  <>
+                    <span className="text-3xl font-semibold" style={{ color: 'var(--ink)' }}>
+                      {currentRunDrinkCount}
+                    </span>
+                    <span className="pb-1 text-xs uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+                      i dag
+                    </span>
+                  </>
+                )}
               </div>
-              {promilleEnabled && promilleValue !== null ? (
+              {isLoading ? (
+                <div className="mt-3 h-4 w-32 animate-pulse rounded bg-zinc-200 dark:bg-zinc-700" />
+              ) : promilleEnabled && promilleValue !== null ? (
                 <div className="mt-3">
                   <p className="text-xs leading-relaxed font-semibold" style={{ color: 'var(--ink)' }}>
                     {Number(promilleValue).toFixed(2)} ‰
@@ -608,17 +616,25 @@ export default function Home() {
                     <p className="text-xs uppercase font-semibold tracking-wide" style={{ color: "var(--muted)" }}>
                       I dag
                     </p>
-                    <p className="text-2xl font-semibold" style={{ color: "var(--ink)" }}>
-                      {currentRunDrinkCount}
-                    </p>
+                    {isLoading ? (
+                      <div className="mt-1 h-8 w-16 animate-pulse rounded bg-zinc-200 dark:bg-zinc-700" />
+                    ) : (
+                      <p className="text-2xl font-semibold" style={{ color: "var(--ink)" }}>
+                        {currentRunDrinkCount}
+                      </p>
+                    )}
                   </div>
                   <div className="rounded-xl border px-4 py-3" style={{ borderColor: "var(--line)", backgroundColor: "var(--subtle)" }}>
                     <p className="text-xs uppercase font-semibold tracking-wide" style={{ color: "var(--muted)" }}>
                       Total
                     </p>
-                    <p className="text-2xl font-semibold" style={{ color: "var(--ink)" }}>
-                      {userTotalDrinks}
-                    </p>
+                    {isLoading ? (
+                      <div className="mt-1 h-8 w-16 animate-pulse rounded bg-zinc-200 dark:bg-zinc-700" />
+                    ) : (
+                      <p className="text-2xl font-semibold" style={{ color: "var(--ink)" }}>
+                        {userTotalDrinks}
+                      </p>
+                    )}
                   </div>
                   {promilleEnabled && promilleValue !== null && (
                     <div className="col-span-2 rounded-xl border px-4 py-3 space-y-2" style={{ borderColor: "var(--line)", backgroundColor: "var(--surface)" }}>

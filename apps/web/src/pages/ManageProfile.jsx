@@ -5,6 +5,7 @@ import Page from "../components/Page";
 import Sheet from "../components/Sheet";
 import { useTheme } from "../contexts/ThemeContext";
 import { useAuth } from "../hooks/useAuth";
+import { useUserData } from "../contexts/UserDataContext";
 import { getUser, updateUser } from "../services/userService";
 import { ensurePushSubscription, getNotificationPermission, isPushSupported } from "../push";
 
@@ -33,6 +34,7 @@ export default function ManageProfile() {
   const navigate = useNavigate();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const { currentUser } = useAuth();
+  const { refreshUserData } = useUserData();
   const [userData, setUserData] = useState({
     username: "",
     fullName: "",
@@ -158,6 +160,9 @@ export default function ManageProfile() {
           profileGradient: userData.profileGradient,
         }));
 
+        // Refresh user data context silently so Home.jsx updates immediately
+        await refreshUserData(true);
+
         setSaving(false);
         setSaved(true);
         // Hide saved indicator after 2 seconds
@@ -183,7 +188,8 @@ export default function ManageProfile() {
     userData.promilleHeightCm,
     userData.promilleWeightKg,
     userData.promilleGender,
-    currentUser
+    currentUser,
+    refreshUserData
   ]);
 
   useEffect(() => {

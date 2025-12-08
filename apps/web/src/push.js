@@ -1,5 +1,5 @@
 import { initServiceWorkerUpdates } from './utils/serviceWorkerUpdates'
-import { upsertPushSubscription, removePushSubscription } from './services/pushSubscriptionService'
+import { upsertPushSubscription, removePushSubscription, getFirstPushSubscription } from './services/pushSubscriptionService'
 
 /**
  * Frontend env requirements:
@@ -139,6 +139,31 @@ export const requestBrowserPermission = async () => {
   return Notification.requestPermission()
 }
 
+export async function hasValidSubscription(currentUser) {
+  if (!isPushSupported()) return false
+  if (getNotificationPermission() !== 'granted') return false
+  if (!currentUser?.uid) return false
+
+  try {
+    // Check if browser has a subscription
+    const registration = await getServiceWorkerRegistration()
+    if (!registration) return false
+
+    const browserSubscription = await registration.pushManager.getSubscription()
+    if (!browserSubscription) return false
+
+    // Check if Firestore has a subscription for this user
+    const firestoreSubscription = await getFirstPushSubscription(currentUser.uid)
+    if (!firestoreSubscription) return false
+
+    // Both exist - we have a valid subscription
+    return true
+  } catch (error) {
+    console.warn('[push] Error checking for valid subscription', error)
+    return false
+  }
+}
+
 export async function ensurePushSubscription({ currentUser, forceRefresh = false } = {}) {
   if (!isPushSupported()) {
     return { ok: false, reason: 'unsupported' }
@@ -147,6 +172,16 @@ export async function ensurePushSubscription({ currentUser, forceRefresh = false
   const permission = getNotificationPermission()
   if (permission !== 'granted') {
     return { ok: false, reason: permission }
+  }
+
+  // If not forcing refresh, check if we already have a valid subscription
+  if (!forceRefresh) {
+    const hasValid = await hasValidSubscription(currentUser)
+    if (hasValid) {
+      const registration = await getServiceWorkerRegistration()
+      const existingSubscription = await registration?.pushManager?.getSubscription()
+      return { ok: true, subscription: existingSubscription, alreadyExists: true }
+    }
   }
 
   const registration = await getServiceWorkerRegistration()
@@ -159,7 +194,7 @@ export async function ensurePushSubscription({ currentUser, forceRefresh = false
   if (!existingSubscription || forceRefresh) {
     try {
       if (existingSubscription) {
-        await existingSubscription.unsubscribe().catch(() => {})
+        await existingSubscription.unsubscribe().catch(() => { })
       }
       existingSubscription = await subscribeWithRegistration(registration)
     } catch (error) {

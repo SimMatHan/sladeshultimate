@@ -85,3 +85,15 @@ export async function listPushSubscriptions(userId) {
   }))
 }
 
+export async function getFirstPushSubscription(userId) {
+  if (!userId) return null
+  const subsRef = collection(doc(db, 'users', userId), SUB_COLLECTION)
+  const snapshot = await getDocs(subsRef)
+  if (snapshot.empty) return null
+  const firstDoc = snapshot.docs[0]
+  return {
+    id: firstDoc.id,
+    ...firstDoc.data()
+  }
+}
+

@@ -33,7 +33,9 @@ export function DrinkLogProvider({ children }) {
   const { selectedChannel } = useChannel();
   const [variantCounts, setVariantCounts] = useState(() => createZeroCounts(variantsByCategory));
   const [isResetting, setIsResetting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const prevVariantsRef = useRef(null);
+  const hasLoadedOnce = useRef(false);
 
   useEffect(() => {
     if (!variantsByCategory) return;
@@ -51,6 +53,13 @@ export function DrinkLogProvider({ children }) {
       prevVariantsRef.current = next;
       return next;
     });
+
+    // Mark as loaded once we have userData (even if it's empty)
+    // This prevents showing "0" before Firebase data arrives
+    if (userData !== null && !hasLoadedOnce.current) {
+      hasLoadedOnce.current = true;
+      setIsLoading(false);
+    }
   }, [variantsByCategory, userData]);
 
   useEffect(() => {
@@ -84,24 +93,24 @@ export function DrinkLogProvider({ children }) {
       try {
         if (delta > 0) {
           await addDrink(currentUser.uid, catId, variantName);
-          
+
           // Invalidate leaderboard cache so it shows fresh currentRunDrinkCount
           // This ensures Leaderboard updates immediately when drinks are logged
           // Note: With real-time subscriptions, this is a backup - subscriptions handle most updates
           if (selectedChannel?.id) {
             clearLeaderboardCache(selectedChannel.id);
           }
-          
+
           // Update location when logging a drink (so user appears on map)
           // This runs asynchronously and doesn't block the drink log
           (async () => {
             try {
               // Update location in context
               updateLocation();
-              
+
               // Get current location (either from state or fetch fresh)
               let locationToSave = userLocation;
-              
+
               // If no location in state, try to get it directly
               if (!locationToSave && 'geolocation' in navigator) {
                 try {
@@ -120,7 +129,7 @@ export function DrinkLogProvider({ children }) {
                   console.warn("[drink-log] Could not get fresh location:", geoError);
                 }
               }
-              
+
               // Use fallback location if still no location available
               if (!locationToSave) {
                 locationToSave = {
@@ -128,13 +137,13 @@ export function DrinkLogProvider({ children }) {
                   lng: 12.5683,
                 };
               }
-              
-              const venue = 
+
+              const venue =
                 userData?.lastCheckInVenue ||
                 userData?.currentLocation?.venue ||
                 selectedChannel?.name ||
                 'Ukendt sted';
-              
+
               await updateUserLocation(currentUser.uid, {
                 lat: locationToSave.lat,
                 lng: locationToSave.lng,
@@ -147,7 +156,7 @@ export function DrinkLogProvider({ children }) {
           })();
         } else if (delta < 0) {
           await removeDrink(currentUser.uid, catId, variantName);
-          
+
           // Invalidate leaderboard cache when removing drinks too
           if (selectedChannel?.id) {
             clearLeaderboardCache(selectedChannel.id);
@@ -215,6 +224,7 @@ export function DrinkLogProvider({ children }) {
     adjustVariantCount,
     resetRun,
     isResetting,
+    isLoading,
     categoryTotals,
     currentRunDrinkCount,
   };

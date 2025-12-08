@@ -14,6 +14,7 @@ import {
   ensurePushSubscription,
   getNotificationPermission,
   hasShownPermissionPrompt,
+  hasValidSubscription,
   isPushSupported,
   markPermissionPromptShown,
   requestBrowserPermission
@@ -174,9 +175,20 @@ export default function AppShell() {
     if (!currentUser?.uid || !isPushSupported()) return
     if (getNotificationPermission() !== 'granted') return
     if (!areNotificationsEnabled()) return // Don't set up push subscription if notifications are disabled
-    ensurePushSubscription({ currentUser }).catch((error) => {
-      console.warn('[push] Unable to sync subscription', error)
-    })
+
+    // Only ensure subscription if we don't already have a valid one
+    const syncSubscription = async () => {
+      try {
+        const hasValid = await hasValidSubscription(currentUser)
+        if (!hasValid) {
+          await ensurePushSubscription({ currentUser })
+        }
+      } catch (error) {
+        console.warn('[push] Unable to sync subscription', error)
+      }
+    }
+
+    syncSubscription()
   }, [currentUser])
 
   useEffect(() => {
@@ -382,11 +394,11 @@ export default function AppShell() {
             </header>
 
             <main className="scroll-region">
-                <div className="mx-auto max-w-[480px] px-4 py-3">
-                  {/* Removing the location key keeps page components (e.g. DrinkVariations) mounted between category changes, avoiding full remount flicker. */}
-                  <Outlet />
-                </div>
-              </main>
+              <div className="mx-auto max-w-[480px] px-4 py-3">
+                {/* Removing the location key keeps page components (e.g. DrinkVariations) mounted between category changes, avoiding full remount flicker. */}
+                <Outlet />
+              </div>
+            </main>
 
             <nav className="bottombar">
               <TabBar />

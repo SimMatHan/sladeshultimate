@@ -67,7 +67,7 @@ export function getPromilleStatus(value) {
   if (value === null || value === undefined) return null
 
   if (value < 0.2) {
-    return { label: "Næsten ikke påvirket", color: "var(--muted)" }
+    return { label: "Kom igang", color: "var(--muted)" }
   }
   if (value < 0.8) {
     return { label: "Let påvirket", color: "var(--ink)" } // or a specific color like emerald
