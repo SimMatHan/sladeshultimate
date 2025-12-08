@@ -30,6 +30,37 @@ function buildVariationBreakdown(variations, fallback = []) {
   return fallback || [];
 }
 
+function buildTypeBreakdown(drinkTypes) {
+  const breakdown = [];
+
+  Object.entries(drinkTypes || {}).forEach(([type, count]) => {
+    if (count > 0) {
+      breakdown.push({
+        id: type,
+        label: formatDrinkTypeLabel(type),
+        type,
+        count,
+      });
+    }
+  });
+
+  return breakdown.sort((a, b) => b.count - a.count);
+}
+
+function formatDrinkTypeLabel(type) {
+  const labels = {
+    beer: 'Øl',
+    cider: 'Cider',
+    wine: 'Vin',
+    cocktail: 'Cocktails',
+    shot: 'Shots',
+    spritz: 'Spritz',
+    soda: 'Sodavand',
+    other: 'Andet'
+  };
+  return labels[type] || type.charAt(0).toUpperCase() + type.slice(1);
+}
+
 export default function ProfileDetails() {
   const { userId } = useParams();
   const location = useLocation();
@@ -107,9 +138,11 @@ export default function ProfileDetails() {
     [currentRunVariations, profile?.drinkBreakdown]
   );
 
+  // For all-time view, use drinkTypes (type-level aggregation) instead of allTimeDrinkVariations
+  // This shows drink type percentages (Beer: 60%, Wine: 40%) instead of variation percentages
   const allTimeBreakdown = useMemo(
-    () => buildVariationBreakdown(allTimeVariations, profile?.drinkBreakdown),
-    [allTimeVariations, profile?.drinkBreakdown]
+    () => buildTypeBreakdown(profile?.drinkTypes),
+    [profile?.drinkTypes]
   );
 
   const getTotalCount = (items) => items.reduce((sum, item) => sum + item.count, 0);
@@ -129,28 +162,51 @@ export default function ProfileDetails() {
   }, [breakdownScope, currentRun, currentRunBreakdown, allTimeBreakdown, profile?.totalDrinks]);
 
   const favoriteType = useMemo(() => {
-    const variations = breakdownScope === 'current' ? currentRunVariations : allTimeVariations;
-    let topType = null;
-    let topCount = 0;
+    // For current run, use variations; for all-time, use drinkTypes
+    if (breakdownScope === 'current') {
+      const variations = currentRunVariations;
+      let topType = null;
+      let topCount = 0;
 
-    Object.entries(variations).forEach(([type, typeVariations]) => {
-      if (typeVariations && typeof typeVariations === 'object') {
-        const typeTotal = Object.values(typeVariations).reduce((sum, value) => sum + (value || 0), 0);
-        if (typeTotal > topCount) {
-          topType = type;
-          topCount = typeTotal;
+      Object.entries(variations).forEach(([type, typeVariations]) => {
+        if (typeVariations && typeof typeVariations === 'object') {
+          const typeTotal = Object.values(typeVariations).reduce((sum, value) => sum + (value || 0), 0);
+          if (typeTotal > topCount) {
+            topType = type;
+            topCount = typeTotal;
+          }
         }
-      }
-    });
+      });
 
-    return topType
-      ? {
-        type: topType,
-        count: topCount,
-        percentage: percentageBase ? Math.round((topCount / percentageBase) * 100) : 0,
-      }
-      : null;
-  }, [percentageBase, breakdownScope, currentRunVariations, allTimeVariations]);
+      return topType
+        ? {
+          type: topType,
+          count: topCount,
+          percentage: percentageBase ? Math.round((topCount / percentageBase) * 100) : 0,
+        }
+        : null;
+    } else {
+      // All-time: use drinkTypes directly
+      const drinkTypes = profile?.drinkTypes || {};
+      let topType = null;
+      let topCount = 0;
+
+      Object.entries(drinkTypes).forEach(([type, count]) => {
+        if (count > topCount) {
+          topType = type;
+          topCount = count;
+        }
+      });
+
+      return topType
+        ? {
+          type: topType,
+          count: topCount,
+          percentage: percentageBase ? Math.round((topCount / percentageBase) * 100) : 0,
+        }
+        : null;
+    }
+  }, [percentageBase, breakdownScope, currentRunVariations, profile?.drinkTypes]);
 
   const favoriteVariation = selectedBreakdown[0] || null;
 

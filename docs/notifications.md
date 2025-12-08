@@ -1,386 +1,416 @@
-## SladeshUltimate Push + Messaging Reference
+# Notifikationssystem - Komplet Oversigt
 
-This document summarizes every moving part in the notification stack so future notification types (or maintenance tasks such as message cleanup) can be implemented quickly.
+Dette dokument beskriver alle notifikationstyper i SladeshUltimate applikationen, hvordan de bliver trigget, og hvilke data de indeholder.
 
----
+## Arkitektur
 
-### 1. Components at a Glance
+Notifikationssystemet består af tre hovedkomponenter:
 
-| Layer | Files | Responsibility |
-| --- | --- | --- |
-| **Frontend (Vite PWA)** | `apps/web/src/push.js`, `apps/web/src/components/AppShell.jsx`, `apps/web/src/pages/NotificationsDebug.jsx`, `apps/web/public/sw.js` | Permission UX, subscription management, debug tooling, service worker display logic |
-| **API (Vercel)** | `apps/api/api/sendPush.js`, `apps/api/lib/notificationTemplates.js` | Authenticated push endpoint with CORS + notification payload builder |
-| **Firebase Functions** | `functions/index.js`, `functions/notifications.js` | Trigger on new messages, per-user subscription fan-out, scheduled cleanup routines |
-| **Data storage** | Firestore `users/{uid}/pushSubscriptions/{hash}` | Stores each user’s Web Push subscription JSON + metadata |
+1. **Notification Templates** ([`apps/api/lib/notificationTemplates.js`](file:///c:/Users/SMH/sladeshultimate/apps/api/lib/notificationTemplates.js) og [`functions/notifications.js`](file:///c:/Users/SMH/sladeshultimate/functions/notifications.js))
+   - Definerer strukturen for hver notifikationstype
+   - Bygger payload med titel, body, tag og data
 
----
+2. **Firebase Functions** ([`functions/index.js`](file:///c:/Users/SMH/sladeshultimate/functions/index.js))
+   - Lytter til Firestore events (onCreate, onUpdate)
+   - Sender push notifikationer via web-push
+   - Gemmer notifikationer i Firestore (`notifications/{userId}/items`)
 
-### 2. Environment & Secrets
-
-| Context | Variables | Notes |
-| --- | --- | --- |
-| **Frontend** (`.env.local`, `.env`) | `VITE_VAPID_PUBLIC_KEY`, `VITE_VAPID_PRIVATE_KEY`, `VITE_API_BASE` | Public key is bundled. Private key is only needed locally when generating future key pairs; do *not* expose it in production builds. `VITE_API_BASE` must point at Vercel API origin. |
-| **Vercel API** | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Same key pair as frontend. Configured via Vercel project settings. |
-| **Firebase Functions** | `functions:config:set vapid.public="…" vapid.private="…"` | Run via Firebase CLI. Required for `notifications.js` to send push notifications. |
-
-> **Key rotation:** If you ever change the VAPID key pair, update all three contexts and redeploy. Users must re-run “Opret/opdater subscription” afterwards so the new key is stored on their devices.
+3. **Client-side Service** ([`apps/web/src/services/notificationService.js`](file:///c:/Users/SMH/sladeshultimate/apps/web/src/services/notificationService.js))
+   - Henter og viser notifikationer i UI
+   - Real-time subscription til notifikationer
+   - Håndterer sletning af notifikationer
 
 ---
 
-### 3. Firestore Data Model
+## Notifikationstyper
 
-```
-users/{uid}
-  pushSubscriptions/{subscriptionHash}
-    endpoint: string
-    keys: { p256dh, auth }
-    expirationTime: number|null
-    metadata: { userAgent, platform, ... }
-    createdAt / updatedAt / lastUsedAt (timestamps)
-  activeChannelId: string|null
-  currentRunDrinkCount: number
-  lastUsageReminderAt: timestamp|null   // updated by usage reminder scheduler
-```
+### 1. Test Notifikation
 
-- Documents are keyed by `SHA-256(endpoint)` so repeated refreshes overwrite the same device instead of duplicating entries.
-- Security rules (in `firestore.rules`) allow users to read/write only their own `pushSubscriptions`.
+**Type:** `test`
 
-Notifications shown inside the UI are mirrored under `notifications/{userId}/items` so Firestore listeners stay in sync:
+**Beskrivelse:** Bruges til at teste notifikationssystemet.
 
-```
-notifications/{userId}/items/{notificationId}
-  type: string                     // e.g. "check_in"
-  title: string
-  body: string
-  data: { channelId, channelName, userId, milestone, ... }
-  channelId: string|null
-  read: boolean
-  timestamp: server timestamp      // cleaned up by deleteOldNotifications
-```
+**Trigger:**
+- Manuelt trigget til test-formål
+- Ingen automatisk trigger
 
-- The Den Åbne Kanal (`RFYoEHhScYOkDaIbGSYA`) never receives backend generated notifications. Every trigger below short-circuits if the active channel matches this ID.
-
----
-
-### 4. Frontend Flow
-
-1. **Permission prompt** (`AppShell.jsx`):
-   - Shows a custom modal on first run. Once accepted, it calls `Notification.requestPermission()` and immediately runs `ensurePushSubscription`.
-   - The prompt is only shown once per device (`localStorage.sladesh:notificationsPromptShown`).
-
-2. **Subscription lifecycle** (`src/push.js`, `pushSubscriptionService.js`):
-   - Ensures the service worker is registered, then subscribes with `VITE_VAPID_PUBLIC_KEY`.
-   - Serializes the `PushSubscription` (via `toJSON`) and stores it locally + in Firestore.
-   - `removeSubscriptionForCurrentUser` is available if needed for sign-out scenarios.
-
-3. **Service worker** (`public/sw.js`):
-   - Displays notifications using payloads `{ title, body, tag, data.url, data.channelId, ... }`.
-   - `notificationclick` opens or focuses `/home?channel=<id>` so the channel auto-loads.
-
-4. **Debug/Test screen** (`pages/NotificationsDebug.jsx`):
-   - Shows permission state, cached subscription summary, list of stored Firestore entries.
-   - Buttons allow re-requesting permission, refreshing the subscription, sending a self-test (calls Vercel API), resetting the prompt flag, and reloading Firestore entries.
-
-5. **TopBar notifications overlay** (`components/TopBar.jsx`, `services/notificationService.js`):
-   - Displays all notifications for the logged-in user from `notifications/{userId}/items`, sorted by timestamp (newest first).
-   - Shows notifications across all channels (not filtered by active channel).
-   - Real-time updates via Firestore `onSnapshot` listener.
-   - Badge indicator shows unread count across all channels (red dot on bell icon).
-   - "Ryd alle" (Clear all) button deletes all notifications for the user from Firestore.
-   - When "Ryd alle" is clicked, all documents in `notifications/{userId}/items` are deleted in batches (Firestore batch limit is 500). The UI updates immediately via the subscription.
-
----
-
-### 5. Vercel Push API
-
-- **Endpoint:** `POST /api/sendPush`
-- **Body:**
-
-  ```json
-  {
-    "subscription": {...},   // Web Push subscription object
-    "type": "test" | "new_message" | ...,
-    "title": "override title",
-    "body": "override body",
-    "tag": "stable-tag",
-    "data": { "url": "/", "channelId": "...", "type": "..." },
-    "channelName": "...",
-    "senderName": "...",
-    "preview": "...",
-    "messageId": "..."
-  }
-  ```
-
-- **Behavior:**
-  - Validates incoming JSON and ensures env keys exist.
-  - Uses `buildNotificationPayload` in `apps/api/lib/notificationTemplates.js` to build consistent payloads for supported `type`s (`test`, `new_message`, future types).
-  - Returns `{ ok: true, payload }` or `{ ok: false, error }`.
-  - CORS allows `http://localhost:5173`, `https://sladeshultimate-1.web.app`, `https://sladeshultimate-1.firebaseapp.com`.
-
----
-
-### 6. Firebase Functions
-
-#### `functions/notifications.js`
-Reusable helpers for Functions:
-- Loads VAPID keys from `process.env` or `functions.config().vapid`.
-- `buildNotificationPayload(type, context)` mirrors the Vercel builder.
-- `sendWebPush(subscription, payload)` sends via `web-push`.
-- `isUnrecoverablePushError` (410/404/401) is used to prune dead subscriptions.
-
-#### `onChannelMessageCreated`
-- Trigger: `channels/{channelId}/messages/{messageId}` on create.
-- Flow:
-  1. Load message + channel metadata.
-  2. Fetch users with `joinedChannelIds` containing the channel; skip the sender.
-  3. For each recipient, read `pushSubscriptions` and attempt delivery.
-  4. Delete dead subscriptions and log totals (`sent`, `failed`, `skipped`).
-  5. Payload uses type `new_message` with channel/sender info and a link to `/home?channel=<id>`.
-
-#### `onUserActivityUpdated`
-- Trigger: `users/{userId}` on update (region `europe-west1`).
-- Responsibilities:
-  1. Detects a `checkInStatus` transition (`false → true`) and sends a `check_in` notification to every member of the user's active channel (except the user and Den Åbne Kanal). Payload contains `channelId`, `channelName`, `userId`, and `userName`.
-  2. Tracks `currentRunDrinkCount` and emits a `drink_milestone` notification whenever the count crosses 5/10/15/20/25/30. Only the highest milestone crossed per write is emitted, and the user's own notification is always delivered even if the active channel is Den Åbne Kanal.
-- Side effects:
-  - Persists each notification to `notifications/{userId}/items`.
-  - Uses the shared `notifySubscriptions` helper to fan out pushes defensively (bad subscriptions are pruned).
-
-#### `sendUsageReminders`
-- Trigger: Pub/Sub schedule `*/15 * * * *` (every 15 minutes, time zone Europe/Copenhagen).
-- Guards:
-  - Skips executions outside the 10:00–02:00 local window.
-  - Only considers users with `checkInStatus == true` and an active channel that is not Den Åbne Kanal.
-  - Requires at least 2 hours since `max(lastUsageReminderAt, lastCheckIn)`.
-- Actions:
-  - Sends a `usage_reminder` notification to the user.
-  - Updates `users/{userId}.lastUsageReminderAt` for throttling.
-  - Writes the reminder into `notifications/{userId}/items`.
-
-#### Scheduled & Manual maintenance
-- `resetCheckInStatus`, `deleteOldMessages`, `deleteOldNotifications`, and their manual equivalents live in `functions/index.js`.
-  - `deleteOldMessages` removes channel messages older than 24h (runs daily at 12:00 Europe/Copenhagen).
-  - `deleteOldNotifications` prunes `notifications/{userId}/items` entries with `timestamp < now - 24h` (also daily at 12:00 Europe/Copenhagen) so each user only keeps recent items. A manual HTTPS trigger is available for spot checks.
-  - If you add new cleanup routines, follow the same pattern and document them here.
-
----
-
-### 7. Adding a New Notification Type
-
-1. **Design the payload**  
-   - Decide on `type`, `title`, `body`, `tag`, and `data` requirements (e.g., deep-link URLs, entity IDs).
-
-2. **Update builders**  
-   - `apps/api/lib/notificationTemplates.js` — add a new `builders[key]` entry.
-   - `functions/notifications.js` — mirror the same builder so both API and backend use identical logic.
-
-3. **Emit the event**  
-   - If it stems from a Firebase trigger, add a new Cloud Function or extend an existing one.
-   - If it’s initiated from the client, call the Vercel API with `type` set to your new notification type.
-
-4. **Client handling (optional)**  
-   - Adjust the service worker if the new notification requires custom icons or click behavior.
-   - Ensure the app route referred to in `data.url` can handle the deep link (e.g., parse `type` / IDs).
-
-5. **Test**  
-   - Use the debug screen for manual sends (`type: "test"`). For new types, temporarily expose a button or script. Always verify the Function logs for `sent`/`failed` counts.
-
----
-
-### 8. Production Notification Types
-
-##### `check_in`
-- **Trigger:** `onUserActivityUpdated` when a user's `checkInStatus` flips from `false` to `true`.
-- **Audience:** Every member of the user's active channel except the user themself. Channels with ID `RFYoEHhScYOkDaIbGSYA` (Den Åbne Kanal) are always skipped.
-- **Data:** `channelId`, `channelName`, `userId`, `userName`, deep link to `/home?channel=<id>`.
-- **Persistence:** Each recipient gets a document under `notifications/{recipientId}/items` with `type: "check_in"`.
-
-Example push payload:
-
-```json
+**Payload:**
+```javascript
 {
-  "title": "Mia er checket ind",
-  "body": "Kom og sig hej i Fredagsbaren",
-  "tag": "checkin_a1b2c3",
-  "data": {
-    "type": "check_in",
-    "channelId": "a1b2c3",
-    "channelName": "Fredagsbaren",
-    "userId": "uid123",
-    "userName": "Mia",
-    "url": "/home?channel=a1b2c3"
+  title: "Sladesh test",
+  body: "Det virker! 🎉",
+  tag: "test",
+  data: {
+    type: "test",
+    url: "/"
   }
 }
 ```
 
-##### `drink_milestone`
-- **Trigger:** `onUserActivityUpdated` whenever `currentRunDrinkCount` crosses 5, 10, 15, 20, 25 or 30. Only the highest milestone crossed in a single write is emitted, so overshooting (e.g. jumping from 4 → 12) sends a single `milestone=10`.
-- **Audience:** The user always receives the notification. Members of the active channel also receive it unless the channel is Den Åbne Kanal (or `activeChannelId` is missing).
-- **Data:** Includes `milestone`, `channelId`, `channelName`, `userId`, `userName`, plus a `summary` string so the UI can show a short preview.
-- **State:** Relies on `currentRunDrinkCount` resets at 10:00 and the user's `activeChannelId`.
+**Filer involveret:**
+- [`apps/api/lib/notificationTemplates.js:4-13`](file:///c:/Users/SMH/sladeshultimate/apps/api/lib/notificationTemplates.js#L4-L13)
+- [`functions/notifications.js:7-16`](file:///c:/Users/SMH/sladeshultimate/functions/notifications.js#L7-L16)
 
-Channel-facing payload example:
+---
 
-```json
+### 2. Ny Besked (New Message)
+
+**Type:** `new_message`
+
+**Beskrivelse:** Sendes når en bruger modtager en ny besked i en kanal.
+
+**Trigger:**
+- **Firebase Function:** `onChannelMessageCreated`
+- **Event:** `onCreate` på `channels/{channelId}/messages/{messageId}`
+- **Betingelse:** Sendes til alle medlemmer af kanalen undtagen afsenderen
+
+**Hvordan det virker:**
+1. En bruger sender en besked i en kanal
+2. Firestore onCreate event trigges
+3. Firebase Function henter alle kanalmedlemmer (undtagen afsenderen)
+4. Notifikation sendes til hver modtager via deres push subscriptions
+
+**Payload:**
+```javascript
 {
-  "title": "Jonas ramte 15 drinks",
-  "body": "Hold dampen oppe i Klubben",
-  "tag": "milestone_15_klubben",
-  "data": {
-    "type": "drink_milestone",
-    "milestone": 15,
-    "channelId": "klubben",
-    "channelName": "Klubben",
-    "userId": "uid456",
-    "userName": "Jonas",
-    "summary": "Jonas har nået 15 drinks",
-    "url": "/home?channel=klubben"
+  title: "Ny besked i [kanal navn]",
+  body: "[afsender navn]: [besked preview]",
+  tag: "channel_[channelId]",
+  data: {
+    type: "new_message",
+    channelId: "...",
+    messageId: "...",
+    url: "/home?channel=[channelId]"
   }
 }
 ```
 
-##### `usage_reminder`
-- **Trigger:** `sendUsageReminders` scheduled function (every 15 minutes, Europe/Copenhagen). Runs only when the local time is between 10:00 and 02:00 and at least 2 hours have passed since the user's last reminder or check-in.
-- **Eligibility:** Users become eligible for reminders after checking in (when `checkInStatus` becomes `true` and `lastCheckIn` is set).
-- **Audience:** The checked-in user (active channel must not be Den Åbne Kanal).
-- **Data:** `userId`, `channelId`, a short encouragement message, and a deep link back into the active channel.
-- **State:** Updates `users/{uid}.lastUsageReminderAt` after each send to enforce the 2-hour cooldown. Uses `max(lastUsageReminderAt, lastCheckIn)` as the anchor timestamp for the 2-hour interval check.
+**Filer involveret:**
+- Template: [`apps/api/lib/notificationTemplates.js:14-32`](file:///c:/Users/SMH/sladeshultimate/apps/api/lib/notificationTemplates.js#L14-L32)
+- Function: [`functions/index.js:483-541`](file:///c:/Users/SMH/sladeshultimate/functions/index.js#L483-L541)
 
-Example payload:
+---
 
-```json
+### 3. Check-In Notifikation
+
+**Type:** `check_in`
+
+**Beskrivelse:** Sendes når en bruger checker ind på et sted.
+
+**Trigger:**
+- **Firebase Function:** `onUserActivityUpdated` → `maybeSendCheckInNotification`
+- **Event:** `onUpdate` på `users/{userId}`
+- **Betingelse:** 
+  - Brugerens `checkInStatus` ændres fra `false` til `true`
+  - Brugeren er i en gyldig kanal (ikke "Den Åbne Kanal")
+
+**Hvordan det virker:**
+1. Bruger checker ind via [`addCheckIn`](file:///c:/Users/SMH/sladeshultimate/apps/web/src/services/userService.js#L627-L641) i `userService.js`
+2. User document opdateres med `checkInStatus: true`
+3. Firestore onUpdate event trigges
+4. Function tjekker om check-in status ændrede sig
+5. Notifikation sendes til alle andre medlemmer i samme kanal
+
+**Payload:**
+```javascript
 {
-  "title": "Tid til en Sladesh-update?",
-  "body": "Log næste drink eller check ind igen for holdet 🍹",
-  "tag": "usage_reminder",
-  "data": {
-    "type": "usage_reminder",
-    "channelId": "fredagsbaren",
-    "userId": "uid789",
-    "message": "Hop tilbage i Sladesh og log næste drink",
-    "url": "/home?channel=fredagsbaren"
+  title: "[bruger navn] er checket ind",
+  body: "Kom forbi [kanal navn]",
+  tag: "checkin_[channelId]",
+  data: {
+    type: "check_in",
+    channelId: "...",
+    channelName: "...",
+    userId: "...",
+    userName: "...",
+    url: "/home?channel=[channelId]"
   }
 }
 ```
 
-##### `sladesh_received`
-- **Trigger:** `onSladeshSent` when a new `sladeshChallenges/{id}` document is created (a user sends a Sladesh).
-- **Audience:** The receiver of the Sladesh. Skips delivery if `channelId` is `RFYoEHhScYOkDaIbGSYA` (Den Åbne Kanal).
-- **Data:** `senderId`, `senderName`, `sladeshId`, optional `channelId`, deep link to the channel (`/home?channel=<id>` when present).
-- **Persistence:** A document is written under `notifications/{receiverId}/items` with `type: "sladesh_received"`. Cleanup uses the existing `deleteOldNotifications` job.
+**Filer involveret:**
+- Template: [`apps/api/lib/notificationTemplates.js:33-51`](file:///c:/Users/SMH/sladeshultimate/apps/api/lib/notificationTemplates.js#L33-L51)
+- Function: [`functions/index.js:543-591`](file:///c:/Users/SMH/sladeshultimate/functions/index.js#L543-L591)
+- Client trigger: [`apps/web/src/services/userService.js:627-641`](file:///c:/Users/SMH/sladeshultimate/apps/web/src/services/userService.js#L627-L641)
 
-Example payload:
+---
 
-```json
+### 4. Drink Milestone Notifikation
+
+**Type:** `drink_milestone`
+
+**Beskrivelse:** Sendes når en bruger når en drink milepæl (5, 10, 15, 20, 25, 30 drinks).
+
+**Trigger:**
+- **Firebase Function:** `onUserActivityUpdated` → `maybeSendDrinkMilestoneNotification`
+- **Event:** `onUpdate` på `users/{userId}`
+- **Betingelse:**
+  - Brugerens `currentRunDrinkCount` øges og krydser en milepæl
+  - Brugeren er i en gyldig kanal (ikke "Den Åbne Kanal")
+  - Modtagere må ikke være medlemmer af "Den Åbne Kanal"
+
+**Hvordan det virker:**
+1. Bruger logger en drink via [`addDrink`](file:///c:/Users/SMH/sladeshultimate/apps/web/src/services/userService.js#L473-L535) i `userService.js`
+2. User document opdateres med øget `currentRunDrinkCount`
+3. Firestore onUpdate event trigges
+4. Function beregner om en milepæl blev nået
+5. Notifikation sendes til andre kanalmedlemmer
+
+**Milepæle:** 5, 10, 15, 20, 25, 30 drinks
+
+**Payload:**
+```javascript
 {
-  "title": "Mia har sendt dig en Sladesh!",
-  "body": "Åbn appen og gennemfør udfordringen 🍺",
-  "tag": "sladesh_abc123",
-  "data": {
-    "type": "sladesh_received",
-    "senderId": "uid123",
-    "senderName": "Mia",
-    "sladeshId": "abc123",
-    "channelId": "fredagsbaren",
-    "url": "/home?channel=fredagsbaren"
+  title: "[bruger navn] ramte [milestone] drinks",
+  body: "Hold festen kørende i [kanal navn]",
+  tag: "milestone_[milestone]_[channelId]",
+  data: {
+    type: "drink_milestone",
+    milestone: 10,
+    channelId: "...",
+    channelName: "...",
+    userId: "...",
+    summary: "[bruger navn] har nået [milestone] drinks",
+    url: "/home?channel=[channelId]"
   }
 }
 ```
 
-##### `sladesh_completed`
-- **Trigger:** `onSladeshCompleted` when a `sladeshChallenges/{id}` document transitions to `status: "completed"`.
-- **Audience:** The sender of the Sladesh. Skips delivery if `channelId` is `RFYoEHhScYOkDaIbGSYA` (Den Åbne Kanal).
-- **Data:** `receiverId`, `receiverName`, `sladeshId`, optional `channelId`, deep link to `/home?channel=<id>` when present.
-- **Persistence:** A document is written under `notifications/{senderId}/items` with `type: "sladesh_completed"`. Cleaned by `deleteOldNotifications`.
+**Filer involveret:**
+- Template: [`apps/api/lib/notificationTemplates.js:52-71`](file:///c:/Users/SMH/sladeshultimate/apps/api/lib/notificationTemplates.js#L52-L71)
+- Function: [`functions/index.js:593-660`](file:///c:/Users/SMH/sladeshultimate/functions/index.js#L593-L660)
+- Client trigger: [`apps/web/src/services/userService.js:473-535`](file:///c:/Users/SMH/sladeshultimate/apps/web/src/services/userService.js#L473-L535)
 
-Example payload:
+---
 
-```json
+### 5. Usage Reminder Notifikation
+
+**Type:** `usage_reminder`
+
+**Beskrivelse:** Påmindelse til brugere der er checket ind om at logge drinks eller opdatere deres status.
+
+**Trigger:**
+- **Firebase Function:** `sendUsageReminders`
+- **Event:** Scheduled (cron job)
+- **Tidspunkter:** Kl. 14:00, 16:00, 18:00, 20:00, 22:00, 00:00 og 02:00 (Europe/Copenhagen tid)
+- **Betingelse:**
+  - Brugeren har `checkInStatus: true`
+  - Brugeren er i en gyldig kanal (ikke "Den Åbne Kanal")
+  - Brugeren har ikke modtaget reminder i det aktuelle tidsvindue
+
+**Hvordan det virker:**
+1. Cron job kører tre gange dagligt (20:00, 23:00, 02:00)
+2. Function finder alle brugere med `checkInStatus: true`
+3. Tjekker om bruger allerede har modtaget reminder i dette tidsvindue
+4. Sender notifikation til berettigede brugere
+5. Opdaterer `lastUsageReminderSlot` og `lastUsageReminderAt` på user document
+
+**Payload:**
+```javascript
 {
-  "title": "Mia fuldførte din Sladesh",
-  "body": "Klar til næste udfordring? 🚀",
-  "tag": "sladesh_completed_abc123",
-  "data": {
-    "type": "sladesh_completed",
-    "receiverId": "uid123",
-    "receiverName": "Mia",
-    "sladeshId": "abc123",
-    "channelId": "fredagsbaren",
-    "url": "/home?channel=fredagsbaren"
+  title: "Tid til en Sladesh-update?",
+  body: "Log næste drink eller check ind igen for holdet 🍹",
+  tag: "usage_reminder",
+  data: {
+    type: "usage_reminder",
+    channelId: "...",
+    userId: "...",
+    message: "Hop tilbage i Sladesh og log næste drink",
+    url: "/home?channel=[channelId]"
   }
 }
 ```
 
----
-
-### 9. Debugging & Monitoring
-
-1. **Frontend**  
-   - Use the notifications debug page for permission/subscription state.
-   - `localStorage.sladesh:pushSubscription` holds the cached subscription JSON for quick inspection.
-
-2. **Cloud Functions logs**  
-   - Look for `[push] new_message completed` entries.
-   - `failed: N` combined with `[push] send error` lines tells you which subscriptions were invalid (missing VAPID keys, 410 gone, etc.).
-
-3. **Vercel API logs**  
-   - Check Vercel’s function logs if `/api/sendPush` returns `{ ok: false }`.
-
-4. **Firestore**  
-   - Subscriptions are deleted automatically when they fail due to 404/410. If a user stops getting pushes, ask them to refresh their subscription via the debug page.
+**Filer involveret:**
+- Template: [`apps/api/lib/notificationTemplates.js:72-86`](file:///c:/Users/SMH/sladeshultimate/apps/api/lib/notificationTemplates.js#L72-L86)
+- Function: [`functions/index.js:676-763`](file:///c:/Users/SMH/sladeshultimate/functions/index.js#L676-L763)
 
 ---
 
-### 10. Housekeeping
+### 6. Sladesh Modtaget (Sladesh Received)
 
-- **Rotate VAPID keys** sparingly. If you must, update `.env*`, Vercel, Firebase config, redeploy all layers, then prompt users to refresh subscriptions.
-- **Message cleanup** is already scheduled (`deleteOldMessages`). If you add new heavy collections, reuse the same pattern (helper + scheduled + manual HTTP trigger) so the maintenance story stays consistent.
-- **Documentation** — Update this file whenever you add notification types or change env expectations so future contributors have a single source of truth.
+**Type:** `sladesh_received`
+
+**Beskrivelse:** Sendes når en bruger modtager en Sladesh udfordring.
+
+**Trigger:**
+- **Firebase Function:** `onSladeshSent`
+- **Event:** `onCreate` på `sladeshChallenges/{challengeId}`
+- **Betingelse:**
+  - Challenge document oprettes i Firestore
+  - Kanalen er ikke "Den Åbne Kanal"
+
+**Hvordan det virker:**
+1. Bruger sender en Sladesh via [`addSladesh`](file:///c:/Users/SMH/sladeshultimate/apps/web/src/services/userService.js#L657-L712) i `userService.js`
+2. Challenge document oprettes i `sladeshChallenges` collection
+3. Firestore onCreate event trigges
+4. Function henter modtagerens user document
+5. Notifikation sendes til modtageren
+
+**Payload:**
+```javascript
+{
+  title: "[afsender navn] har sendt dig en Sladesh!",
+  body: "Åbn appen og gennemfør udfordringen 🍺",
+  tag: "sladesh_[sladeshId]",
+  data: {
+    type: "sladesh_received",
+    senderId: "...",
+    senderName: "...",
+    sladeshId: "...",
+    channelId: "...",
+    url: "/home?channel=[channelId]"
+  }
+}
+```
+
+**Filer involveret:**
+- Template: [`apps/api/lib/notificationTemplates.js:87-105`](file:///c:/Users/SMH/sladeshultimate/apps/api/lib/notificationTemplates.js#L87-L105)
+- Function: [`functions/index.js:769-839`](file:///c:/Users/SMH/sladeshultimate/functions/index.js#L769-L839)
+- Client trigger: [`apps/web/src/services/userService.js:657-712`](file:///c:/Users/SMH/sladeshultimate/apps/web/src/services/userService.js#L657-L712)
 
 ---
 
-### 11. Implementation Summary & Manual Testing
+### 7. Sladesh Fuldført (Sladesh Completed)
 
-**Functions & triggers**
-- `onUserActivityUpdated` (`users/{userId}` on update, region `europe-west1`)  
-  Reads `users`, `channels`, and `users/{uid}/pushSubscriptions`; writes to `notifications/{uid}/items` for every recipient.
-- `sendUsageReminders` (Pub/Sub `*/15 * * * *`, Europe/Copenhagen)  
-  Reads `users` (filtered by `checkInStatus`), writes `notifications/{uid}/items`, and updates `users/{uid}.lastUsageReminderAt`.
+**Type:** `sladesh_completed`
 
-**Firestore touch-points**
-- Reads: `users`, `channels`, `users/{uid}/pushSubscriptions`, `notifications/{uid}/items`.
-- Writes: `notifications/{uid}/items`, `users/{uid}.lastUsageReminderAt`.
+**Beskrivelse:** Sendes til afsenderen når modtageren fuldender en Sladesh udfordring.
 
-**Frontend UI components**
-- `TopBar.jsx` displays all notifications from `notifications/{userId}/items` (across all channels, sorted by time).
-- `notificationService.js` provides `subscribeToNotifications`, `getUnreadNotificationCount`, and `deleteAllNotifications`.
-- Badge shows unread count across all channels. "Ryd alle" button deletes all user notifications.
+**Trigger:**
+- **Firebase Function:** `onSladeshCompleted`
+- **Event:** `onUpdate` på `sladeshChallenges/{challengeId}`
+- **Betingelse:**
+  - Challenge `status` ændres til `"completed"`
+  - Kanalen er ikke "Den Åbne Kanal"
 
-**Manual testing checklist**
-- `check_in`  
-  1. Log in two test users that share a channel other than Den Åbne Kanal.  
-  2. Check in user A via the app (or update `checkInStatus` through the check-in UI).  
-  3. Confirm user B receives a push + new document under `notifications/{userB}/items` with `type: "check_in"`.
-- `drink_milestone`  
-  1. Reset user A's `currentRunDrinkCount` via the existing reset tooling if needed.  
-  2. Log drinks until the next milestone (5/10/15/20/25/30) is crossed in one increment.  
-  3. Verify user A and any non-Den channel members get exactly one `drink_milestone` notification, and that `notifications/{userId}/items` contains the matching entry.
-- `usage_reminder`  
-  1. Check in a user assigned to a non-Den channel.  
-  2. Ensure `lastUsageReminderAt` is older than 2 hours (clear it or set it manually).  
-  3. Run `sendUsageReminders` via `firebase functions:shell` or wait for the next cron window between 10:00–02:00.  
-  4. Confirm the user receives the reminder and `lastUsageReminderAt` updates.
+**Hvordan det virker:**
+1. Modtager fuldender Sladesh (opdaterer challenge document status til "completed")
+2. Firestore onUpdate event trigges
+3. Function tjekker om status ændrede sig til "completed"
+4. Notifikation sendes til den oprindelige afsender
+
+**Payload:**
+```javascript
+{
+  title: "[modtager navn] fuldførte din Sladesh",
+  body: "Klar til næste udfordring? 🚀",
+  tag: "sladesh_completed_[sladeshId]",
+  data: {
+    type: "sladesh_completed",
+    receiverId: "...",
+    receiverName: "...",
+    sladeshId: "...",
+    channelId: "...",
+    url: "/home?channel=[channelId]"
+  }
+}
+```
+
+**Filer involveret:**
+- Template: [`apps/api/lib/notificationTemplates.js:106-124`](file:///c:/Users/SMH/sladeshultimate/apps/api/lib/notificationTemplates.js#L106-L124)
+- Function: [`functions/index.js:845-915`](file:///c:/Users/SMH/sladeshultimate/functions/index.js#L845-L915)
 
 ---
 
-### Quick Reference Checklist
+## Notifikations Levering
 
-- [ ] Frontend env: `VITE_VAPID_PUBLIC_KEY`, `VITE_API_BASE`
-- [ ] Vercel env: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`
-- [ ] Firebase Functions config: `vapid.public`, `vapid.private`
-- [ ] Firestore rules allow `/users/{uid}/pushSubscriptions/{id}`
-- [ ] Service worker deployed with latest click-handling logic
-- [ ] Debug screen verified in both dev & prod
-- [ ] Cloud Function logs show `sent: N`, `failed: 0`
+### Push Notification Flow
 
-Keep this doc handy whenever you need to ship a new notification or revisit backend fan-out logic. Updates welcome!***
+1. **Oprettelse af Payload:** Template builder konstruerer notifikation payload
+2. **Firestore Persistering:** Notifikation gemmes i `notifications/{userId}/items` collection
+3. **Push Subscription Lookup:** Henter brugerens push subscriptions fra `users/{userId}/pushSubscriptions`
+4. **Web Push Send:** Sender notifikation via web-push til hver subscription
+5. **Error Handling:** Sletter ugyldige subscriptions (404, 410, 401 errors)
+
+### Notifikations Opbevaring
+
+**Firestore Path:** `notifications/{userId}/items/{itemId}`
+
+**Document Structure:**
+```javascript
+{
+  type: "check_in",           // Notifikationstype
+  title: "...",               // Titel
+  body: "...",                // Besked
+  data: { ... },              // Ekstra data
+  channelId: "...",           // Kanal ID (hvis relevant)
+  read: false,                // Læst status
+  timestamp: Timestamp        // Oprettelsestidspunkt
+}
+```
+
+**Retention:** Notifikationer slettes automatisk efter 24 timer via scheduled function `deleteOldNotifications` (kører dagligt kl. 10:00).
+
+---
+
+## Cleanup Jobs
+
+### 1. Delete Old Notifications
+- **Function:** `deleteOldNotifications`
+- **Schedule:** Dagligt kl. 10:00 (Europe/Copenhagen)
+- **Handling:** Sletter notifikationer ældre end 24 timer
+
+### 2. Weekly Firestore Cleanup
+- **Function:** `weeklyFirestoreCleanup`
+- **Schedule:** Hver mandag kl. 08:00 (Europe/Copenhagen)
+- **Handling:** Sletter alle dokumenter i `sladeshChallenges` og `notifications` collections
+
+---
+
+## Samlet Oversigt
+
+| Type | Trigger Event | Frekvens | Modtagere | Ekskluderet Kanal |
+|------|--------------|----------|-----------|-------------------|
+| `test` | Manuel | On-demand | N/A | Nej |
+| `new_message` | Ny besked i kanal | Real-time | Alle kanalmedlemmer (undtagen afsender) | Nej |
+| `check_in` | Bruger checker ind | Real-time | Alle kanalmedlemmer (undtagen bruger) | Ja (Den Åbne Kanal) |
+| `drink_milestone` | Bruger når milepæl | Real-time | Kanalmedlemmer (ikke i Den Åbne Kanal) | Ja (Den Åbne Kanal) |
+| `usage_reminder` | Scheduled cron | 7x dagligt (14:00, 16:00, 18:00, 20:00, 22:00, 00:00, 02:00) | Checkede-ind brugere | Ja (Den Åbne Kanal) |
+| `sladesh_received` | Sladesh sendt | Real-time | Modtager | Ja (Den Åbne Kanal) |
+| `sladesh_completed` | Sladesh fuldført | Real-time | Afsender | Ja (Den Åbne Kanal) |
+
+---
+
+## Vigtige Konstanter
+
+```javascript
+// Notification retention
+NOTIFICATION_RETENTION_HOURS = 24
+
+// Den Åbne Kanal (ekskluderet fra notifikationer)
+DEN_AABNE_CHANNEL_ID = "RFYoEHhScYOkDaIbGSYA"
+
+// Drink milestones
+DRINK_MILESTONES = [5, 10, 15, 20, 25, 30]
+
+// Reminder times (Copenhagen time)
+REMINDER_TIMES = [14, 16, 18, 20, 22, 0, 2]  // 14:00, 16:00, 18:00, 20:00, 22:00, 00:00, 02:00
+```
+
+---
+
+## Fejlhåndtering
+
+### Push Subscription Errors
+
+**Unrecoverable Errors (subscription slettes automatisk):**
+- `404` - Subscription ikke fundet
+- `410` - Subscription udløbet
+- `401` - Unauthorized
+
+**Handling:**
+- Subscription document slettes fra Firestore
+- Error logges til console
+- Fortsætter med næste subscription
+
+### Notification Delivery Stats
+
+Hver notification delivery returnerer:
+```javascript
+{
+  sent: 5,      // Antal succesfuldt sendte
+  failed: 1,    // Antal fejlede
+  skipped: 2    // Antal sprunget over
+}
+```

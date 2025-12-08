@@ -13,9 +13,9 @@ const DEFAULT_REGION = "europe-west1";
 const CPH_TIMEZONE = "Europe/Copenhagen";
 const DEN_AABNE_CHANNEL_ID = "RFYoEHhScYOkDaIbGSYA";
 const DRINK_MILESTONES = [5, 10, 15, 20, 25, 30];
-// Fixed reminder times: 20:00, 23:00, and 02:00 local time
-const REMINDER_TIMES = [20, 23, 2];
-const USAGE_REMINDER_CRON = "0 20,23,2 * * *"; // Run at 20:00, 23:00, and 02:00
+// Fixed reminder times: 14:00, 16:00, 18:00, 20:00, 22:00, 00:00, and 02:00 local time
+const REMINDER_TIMES = [14, 16, 18, 20, 22, 0, 2];
+const USAGE_REMINDER_CRON = "0 14,16,18,20,22,0,2 * * *"; // Run at 14:00, 16:00, 18:00, 20:00, 22:00, 00:00, and 02:00
 
 /**
  * Resets the checkInStatus field for all users to false and clears currentLocation.
