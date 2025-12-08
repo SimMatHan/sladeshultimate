@@ -8,26 +8,8 @@ import { useAuth } from "../hooks/useAuth";
 import { getUser, updateUser } from "../services/userService";
 import { ensurePushSubscription, getNotificationPermission, isPushSupported } from "../push";
 
-// Emoji options for profile pictures
-const EMOJI_OPTIONS = [
-  "🍹", "🍺", "🍷", "🍸", "🥃", "🍾",
-  "🎉", "🔥", "🌙", "🌟", "✨", "💫",
-  "🎭", "🎪", "🎨", "🎵", "🎸", "🎤",
-  "🏖️", "🌴", "🌊", "☀️", "🌙", "⭐",
-  "🚀", "💎", "🎯", "🏆", "👑", "💪",
-];
 
-// Color gradient options (matching the app's style)
-const GRADIENT_OPTIONS = [
-  { id: "rose-orange", name: "Rose Orange", gradient: "from-rose-400 to-orange-500" },
-  { id: "sky-indigo", name: "Sky Indigo", gradient: "from-sky-400 to-indigo-500" },
-  { id: "purple-fuchsia", name: "Purple Fuchsia", gradient: "from-purple-400 to-fuchsia-500" },
-  { id: "emerald-teal", name: "Emerald Teal", gradient: "from-emerald-400 to-teal-500" },
-  { id: "amber-red", name: "Amber Red", gradient: "from-amber-400 to-red-500" },
-  { id: "pink-rose", name: "Pink Rose", gradient: "from-pink-400 to-rose-500" },
-  { id: "cyan-blue", name: "Cyan Blue", gradient: "from-cyan-400 to-blue-500" },
-  { id: "brand", name: "Brand", gradient: "from-[color:var(--brand,#FF385C)]/90 to-[color:var(--brand,#FF385C)]/70" },
-];
+import { EMOJI_OPTIONS, GRADIENT_OPTIONS } from "../config/profileOptions";
 
 function ToggleSwitch({ checked, onChange, ariaLabel }) {
   return (
@@ -61,6 +43,7 @@ export default function ManageProfile() {
     promilleHeightCm: "",
     promilleWeightKg: "",
     promilleGender: "",
+    profileImageUrl: null,
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -102,6 +85,7 @@ export default function ManageProfile() {
             email: firestoreUser.email || currentUser.email || "",
             profileEmoji: firestoreUser.profileEmoji || "🍹",
             profileGradient: firestoreUser.profileGradient || "from-rose-400 to-orange-500",
+            profileImageUrl: firestoreUser.profileImageUrl || null,
             promilleEnabled: !!promille.enabled,
             promilleHeightCm: promille.heightCm ? String(promille.heightCm) : "",
             promilleWeightKg: promille.weightKg ? String(promille.weightKg) : "",
@@ -239,6 +223,10 @@ export default function ManageProfile() {
     }));
   };
 
+
+
+
+
   const handleProfileSheetSave = () => {
     setUserData((prev) => ({
       ...prev,
@@ -263,7 +251,7 @@ export default function ManageProfile() {
     } catch (error) {
       console.error('Error saving notifications preference:', error);
     }
-    
+
     // If enabling notifications and user has permission, set up push subscription
     if (newValue && currentUser && isPushSupported() && getNotificationPermission() === 'granted') {
       try {
@@ -272,7 +260,7 @@ export default function ManageProfile() {
         console.warn('[push] Unable to set up subscription when enabling notifications', error);
       }
     }
-    
+
     setFeedback(newValue ? "Notifikationer aktiveret" : "Notifikationer deaktiveret");
   };
 
@@ -324,11 +312,19 @@ export default function ManageProfile() {
 
           <div className="flex items-center gap-4">
             <div className="relative">
-              <div
-                className={`flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br ${userData.profileGradient} text-3xl shadow-[0_16px_30px_rgba(15,23,42,0.12)]`}
-              >
-                {userData.profileEmoji}
-              </div>
+              {userData.profileImageUrl ? (
+                <img
+                  src={userData.profileImageUrl}
+                  alt="Profil"
+                  className="h-20 w-20 rounded-full object-cover shadow-[0_16px_30px_rgba(15,23,42,0.12)]"
+                />
+              ) : (
+                <div
+                  className={`flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br ${userData.profileGradient} text-3xl shadow-[0_16px_30px_rgba(15,23,42,0.12)]`}
+                >
+                  {userData.profileEmoji}
+                </div>
+              )}
             </div>
             <div className="flex-1">
               <button
@@ -351,6 +347,7 @@ export default function ManageProfile() {
               >
                 Skift billede
               </button>
+
             </div>
           </div>
         </Card>
@@ -536,8 +533,8 @@ export default function ManageProfile() {
             </span>
             <span
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${isDarkMode
-                  ? "bg-[color:var(--brand,#FF385C)]/90"
-                  : "bg-neutral-200 text-neutral-400"
+                ? "bg-[color:var(--brand,#FF385C)]/90"
+                : "bg-neutral-200 text-neutral-400"
                 }`}
             >
               <span
@@ -631,10 +628,10 @@ export default function ManageProfile() {
       <Sheet
         open={profileSheetOpen}
         onClose={() => setProfileSheetOpen(false)}
-        position="bottom"
+        position="center"
         title="Tilpas profilbillede"
         description="Vælg en emoji og farvekombination"
-        height="min(85vh, 700px)"
+        height="auto"
       >
         <div className="space-y-6">
           {/* Preview */}
@@ -660,8 +657,8 @@ export default function ManageProfile() {
                     type="button"
                     onClick={() => handleEmojiSelect(emoji)}
                     className={`flex h-12 w-12 items-center justify-center rounded-2xl border text-2xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white ${isSelected
-                        ? "border-[color:var(--brand,#FF385C)] bg-[color:var(--brand,#FF385C)]/10 scale-110"
-                        : "border-neutral-200 bg-white hover:border-neutral-300 hover:scale-105"
+                      ? "border-[color:var(--brand,#FF385C)] bg-[color:var(--brand,#FF385C)]/10 scale-110"
+                      : "border-neutral-200 bg-white hover:border-neutral-300 hover:scale-105"
                       }`}
                     aria-pressed={isSelected}
                   >
@@ -686,8 +683,8 @@ export default function ManageProfile() {
                     type="button"
                     onClick={() => handleGradientSelect(option.gradient)}
                     className={`relative flex h-14 w-full items-center justify-center rounded-2xl border-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white ${isSelected
-                        ? "border-[color:var(--brand,#FF385C)] ring-2 ring-[color:var(--brand,#FF385C)]/20 scale-105"
-                        : "border-neutral-200 hover:border-neutral-300 hover:scale-105"
+                      ? "border-[color:var(--brand,#FF385C)] ring-2 ring-[color:var(--brand,#FF385C)]/20 scale-105"
+                      : "border-neutral-200 hover:border-neutral-300 hover:scale-105"
                       }`}
                     aria-pressed={isSelected}
                     title={option.name}

@@ -75,6 +75,7 @@ export default function ProfileDetails() {
             initials: userData.initials,
             profileEmoji: userData.profileEmoji,
             profileGradient: userData.avatarGradient || userData.profileGradient,
+            profileImageUrl: userData.profileImageUrl,
           }));
         } else {
           setError('Bruger ikke fundet');
@@ -219,6 +220,7 @@ export default function ProfileDetails() {
       <div className="flex flex-col items-center gap-6 text-center py-6">
         <div className="flex flex-col items-center gap-3">
           <Avatar
+            image={profile.profileImageUrl}
             emoji={profile.profileEmoji}
             gradient={profile.profileGradient || profile.avatarGradient}
             initials={profile.initials}
@@ -389,7 +391,17 @@ function StatTile({ value = 0, label }) {
   );
 }
 
-function Avatar({ emoji, gradient, initials, className = 'h-12 w-12 text-xl' }) {
+function Avatar({ image, emoji, gradient, initials, className = 'h-12 w-12 text-xl' }) {
+  if (image) {
+    return (
+      <img
+        src={image}
+        alt="Profil"
+        className={`rounded-full object-cover shadow-sm ${className}`}
+      />
+    );
+  }
+
   if (emoji && gradient) {
     return (
       <div className={`flex items-center justify-center rounded-full bg-gradient-to-br ${gradient} shadow-sm ${className}`}>

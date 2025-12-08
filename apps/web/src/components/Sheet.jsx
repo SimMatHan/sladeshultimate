@@ -102,26 +102,34 @@ export default function Sheet({
   if (!shouldRender || typeof document === "undefined") return null;
 
   const isTop = position === "top";
+  const isCenter = position === "center";
   const backdropOpacity = isVisible ? "opacity-100" : "opacity-0";
-  const sheetTransform = isTop
-    ? isVisible
-      ? "translate-y-0 opacity-100"
-      : "-translate-y-full opacity-0"
-    : isVisible
-    ? "translate-y-0 opacity-100"
-    : "translate-y-full opacity-0";
 
-  const borderRadius = isTop
-    ? {
-        borderBottomLeftRadius: "32px",
-        borderBottomRightRadius: "32px",
-      }
-    : {
-        borderTopLeftRadius: "32px",
-        borderTopRightRadius: "32px",
-      };
+  let sheetTransform = "";
+  if (isCenter) {
+    sheetTransform = isVisible ? "scale-100 opacity-100" : "scale-95 opacity-0";
+  } else if (isTop) {
+    sheetTransform = isVisible ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0";
+  } else {
+    sheetTransform = isVisible ? "translate-y-0 opacity-100" : "translate-y-full opacity-0";
+  }
 
-  const justifyContent = isTop ? "justify-start" : "justify-end";
+  let borderRadius = {};
+  if (isCenter) {
+    borderRadius = { borderRadius: "24px" };
+  } else if (isTop) {
+    borderRadius = {
+      borderBottomLeftRadius: "32px",
+      borderBottomRightRadius: "32px",
+    };
+  } else {
+    borderRadius = {
+      borderTopLeftRadius: "32px",
+      borderTopRightRadius: "32px",
+    };
+  }
+
+  const justifyContent = isCenter ? "justify-center items-center p-4" : (isTop ? "justify-start" : "justify-end");
 
   const topInset = isTop ? topOffset : 0;
   const bottomInset = isTop ? 0 : TABBAR_OFFSET;
@@ -134,8 +142,8 @@ export default function Sheet({
         pointerEvents: "none",
         left: 0,
         right: 0,
-        top: topInset,
-        bottom: bottomInset,
+        top: isCenter ? 0 : topInset,
+        bottom: isCenter ? 0 : bottomInset,
       }}
       role="dialog"
       aria-modal="true"
@@ -146,12 +154,14 @@ export default function Sheet({
       <div
         className={`sheet-backdrop absolute transition-opacity ease-out ${backdropOpacity}`}
         style={{
-          top: topInset,
-          bottom: TABBAR_OFFSET,
+          top: isCenter ? 0 : topInset,
+          bottom: isCenter ? 0 : TABBAR_OFFSET,
           left: 0,
           right: 0,
           transitionDuration: `${animationDuration}ms`,
           pointerEvents: "auto",
+          backgroundColor: "rgba(0,0,0,0.5)",
+          backdropFilter: "blur(4px)",
         }}
         onClick={onClose}
         aria-hidden="true"
@@ -159,10 +169,12 @@ export default function Sheet({
 
       {/* Sheet Content */}
       <div
-        className={`sheet-panel relative z-10 w-full transition-all ease-out ${sheetTransform} ${className}`}
+        className={`sheet-panel relative z-10 w-full flex flex-col transition-all ease-out ${sheetTransform} ${className}`}
         style={{
           ...borderRadius,
-          height: typeof height === "string" ? height : `${height}px`,
+          height: isCenter ? (typeof height === "string" ? height : `${height}px`) : (typeof height === "string" ? height : `${height}px`),
+          maxHeight: isCenter ? "85vh" : undefined,
+          maxWidth: isCenter ? "400px" : undefined,
           transitionDuration: `${animationDuration}ms`,
           pointerEvents: 'auto'
         }}
@@ -171,7 +183,7 @@ export default function Sheet({
         {/* Header (if title or description provided) */}
         {(title || description) && (
           <div
-            className="px-6 pb-4"
+            className="px-6 pb-4 flex-none"
             style={{
               paddingTop: isTop ? "10px" : "24px",
             }}
@@ -201,11 +213,7 @@ export default function Sheet({
 
         {/* Content */}
         <div
-          className={`${
-            title || description
-              ? "h-[calc(100%-66px)] overflow-y-auto px-6"
-              : "h-full overflow-y-auto px-6"
-          } pb-[calc(env(safe-area-inset-bottom,0px)+16px)]`}
+          className="flex-1 min-h-0 overflow-y-auto px-6 overscroll-y-contain pb-[calc(env(safe-area-inset-bottom,0px)+16px)]"
         >
           {children}
         </div>

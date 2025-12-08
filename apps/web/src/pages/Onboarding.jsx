@@ -1,9 +1,11 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { updateUser } from '../services/userService'
 import { useUserData } from '../contexts/UserDataContext'
+import { EMOJI_OPTIONS, GRADIENT_OPTIONS } from '../config/profileOptions'
+import Sheet from '../components/Sheet'
 
 // Slide transition variants (slide + fade)
 const slideVariants = {
@@ -55,6 +57,15 @@ const SLIDES = [
     emojiLabel: 'Stigende graf',
     accentBg: 'bg-[rgba(0,166,153,0.15)] dark:bg-[rgba(0,166,153,0.25)]',
   },
+
+  {
+    id: 'profile',
+    title: 'Vælg profilbillede',
+    description: 'Vælg en emoji og farve, så dine venner kan kende dig.',
+    emoji: '📸',
+    emojiLabel: 'Kamera',
+    accentBg: 'bg-[rgba(100,100,100,0.1)] dark:bg-[rgba(255,255,255,0.1)]',
+  },
 ]
 
 export default function Onboarding() {
@@ -65,6 +76,13 @@ export default function Onboarding() {
   const [direction, setDirection] = useState(0)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+
+  // Profile selection state
+  const [selectedEmoji, setSelectedEmoji] = useState('🍹')
+  const [selectedGradient, setSelectedGradient] = useState('from-rose-400 to-orange-500')
+  const [isSheetOpen, setIsSheetOpen] = useState(false)
+
+
 
   const totalSlides = SLIDES.length
   const activeSlide = SLIDES[index]
@@ -112,11 +130,27 @@ export default function Onboarding() {
 
   const handleNext = useCallback(async () => {
     if (isLastSlide) {
-      await completeOnboarding()
+      setSaving(true)
+      try {
+        // Save profile customization if on profile slide (or if it was set)
+        await updateUser(currentUser.uid, {
+          profileEmoji: selectedEmoji,
+          profileGradient: selectedGradient,
+          onboardingCompleted: true
+        })
+        await refreshUserData()
+        navigate('/home', { replace: true })
+      } catch (err) {
+        console.error('Failed to complete onboarding', err)
+        setError('Kunne ikke gemme onboarding. Prøv igen.')
+        setSaving(false)
+      }
       return
     }
     goTo(index + 1)
-  }, [completeOnboarding, goTo, index, isLastSlide])
+  }, [completeOnboarding, goTo, index, isLastSlide, currentUser, selectedEmoji, selectedGradient, refreshUserData, navigate])
+
+
 
   const handleSkip = useCallback(async () => {
     await completeOnboarding()
@@ -173,15 +207,24 @@ export default function Onboarding() {
               className="flex flex-1 flex-col items-center justify-center gap-10 px-6 text-center"
             >
               <div
-                className={`flex h-[220px] w-[220px] items-center justify-center rounded-[16px] shadow-[0_16px_48px_rgba(0,0,0,0.08)] ${accentBg}`}
+                className={`flex h-[220px] w-[220px] items-center justify-center rounded-full shadow-[0_16px_48px_rgba(0,0,0,0.08)] relative cursor-pointer transition-transform active:scale-95`}
+                onClick={() => id === 'profile' && setIsSheetOpen(true)}
               >
+                <div className={`absolute inset-0 rounded-full bg-gradient-to-br ${id === 'profile' ? selectedGradient : ''} ${id !== 'profile' ? accentBg : ''} opacity-100`} />
                 <span
                   role="img"
                   aria-label={emojiLabel}
-                  className="text-7xl leading-none"
+                  className="text-7xl leading-none relative z-10"
                 >
-                  {emoji}
+                  {id === 'profile' ? selectedEmoji : emoji}
                 </span>
+                {id === 'profile' && (
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
+                    <span className="bg-black/20 text-white text-xs font-medium px-3 py-1 rounded-full backdrop-blur-sm">
+                      Skift
+                    </span>
+                  </div>
+                )}
               </div>
               <div className="space-y-3">
                 <h1 className="text-3xl font-semibold text-[color:var(--text)]">
@@ -206,11 +249,10 @@ export default function Onboarding() {
               return (
                 <span
                   key={slide.id}
-                  className={`h-2 w-2 rounded-full transition-all duration-200 ${
-                    isActive
-                      ? 'bg-[color:var(--brand)] scale-125'
-                      : 'bg-[color:var(--text-muted)] opacity-30'
-                  }`}
+                  className={`h-2 w-2 rounded-full transition-all duration-200 ${isActive
+                    ? 'bg-[color:var(--brand)] scale-125'
+                    : 'bg-[color:var(--text-muted)] opacity-30'
+                    }`}
                 />
               )
             })}
@@ -236,6 +278,108 @@ export default function Onboarding() {
           </span>
         </footer>
       </div>
+      <Sheet
+        open={isSheetOpen}
+        onClose={() => setIsSheetOpen(false)}
+        position="center"
+        title="Tilpas profilbillede"
+        description="Vælg en emoji og farvekombination"
+        height="auto"
+      >
+        <div className="space-y-6">
+          {/* Preview */}
+          <div className="flex items-center justify-center py-6">
+            <div
+              className={`flex h-32 w-32 items-center justify-center rounded-full bg-gradient-to-br ${selectedGradient} text-5xl shadow-[0_20px_40px_rgba(15,23,42,0.15)]`}
+            >
+              {selectedEmoji}
+            </div>
+          </div>
+
+          {/* Emoji Picker */}
+          <div className="space-y-3">
+            <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+              Vælg emoji
+            </div>
+            <div className="grid grid-cols-6 gap-2">
+              {EMOJI_OPTIONS.map((emoji) => {
+                const isSelected = selectedEmoji === emoji;
+                return (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => setSelectedEmoji(emoji)}
+                    className={`flex h-12 w-12 items-center justify-center rounded-2xl border text-2xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white ${isSelected
+                      ? "border-[color:var(--brand,#FF385C)] bg-[color:var(--brand,#FF385C)]/10 scale-110"
+                      : "border-neutral-200 bg-white hover:border-neutral-300 hover:scale-105"
+                      }`}
+                    aria-pressed={isSelected}
+                  >
+                    {emoji}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Gradient Picker */}
+          <div className="space-y-3">
+            <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+              Vælg farve
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {GRADIENT_OPTIONS.map((option) => {
+                const isSelected = selectedGradient === option.gradient;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setSelectedGradient(option.gradient)}
+                    className={`relative flex h-14 w-full items-center justify-center rounded-2xl border-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-white ${isSelected
+                      ? "border-[color:var(--brand,#FF385C)] ring-2 ring-[color:var(--brand,#FF385C)]/20 scale-105"
+                      : "border-neutral-200 hover:border-neutral-300 hover:scale-105"
+                      }`}
+                    aria-pressed={isSelected}
+                    title={option.name}
+                  >
+                    <div
+                      className={`h-full w-full rounded-xl bg-gradient-to-br ${option.gradient}`}
+                    />
+                    {isSelected && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <svg
+                          className="h-5 w-5 text-white drop-shadow-lg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth="3"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Save Button */}
+          <div className="pt-6 pb-8">
+            <button
+              type="button"
+              onClick={() => setIsSheetOpen(false)}
+              className="w-full inline-flex items-center justify-center rounded-full bg-[color:var(--brand)] px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(255,56,92,0.2)] transition hover:-translate-y-[1px] hover:shadow-[0_18px_32px_rgba(255,56,92,0.24)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand)] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+            >
+              Færdig
+            </button>
+          </div>
+        </div>
+      </Sheet>
     </div>
   )
 }
