@@ -39,7 +39,6 @@ export const DEFAULT_VARIANTS = {
     { name: "Stout", description: "Mørke ristede malte med strejf af chokolade." },
     { name: "Guinness", description: "Ikonisk irsk stout med cremet skum." },
     { name: "Sour", description: "Syrlig ale med livlig syre." },
-    { name: "Julebryg", description: "Julens nektar." },
   ],
   cider: [
     { name: "Apple", description: "Klassisk æblecider med frisk syrlighed." },

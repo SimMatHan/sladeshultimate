@@ -94,12 +94,18 @@ export default function ProfileDetails() {
   const currentRun = profile?.currentRunDrinkCount || 0;
 
   const currentRunVariations = profile?.currentRunDrinkVariations || profile?.drinkVariations || {};
-  const allTimeVariations =
-    profile?.allTimeDrinkVariations ||
-    profile?.lifetimeDrinkVariations ||
-    profile?.drinkVariationsAllTime ||
-    profile?.drinkVariations ||
-    {};
+  const allTimeVariations = useMemo(() => {
+    const types = profile?.drinkTypes || {};
+    // Transform flat drinkTypes ({ Beer: 10 }) into nested structure expected by builder ({ Beer: { Beer: 10 } })
+    // This allows us to show the breakdown by main types for all-time stats
+    const variations = {};
+    Object.entries(types).forEach(([type, count]) => {
+      if (count > 0) {
+        variations[type] = { [type]: count };
+      }
+    });
+    return variations;
+  }, [profile?.drinkTypes]);
 
   const currentRunBreakdown = useMemo(
     () => buildVariationBreakdown(currentRunVariations, profile?.drinkBreakdown),
@@ -144,10 +150,10 @@ export default function ProfileDetails() {
 
     return topType
       ? {
-          type: topType,
-          count: topCount,
-          percentage: percentageBase ? Math.round((topCount / percentageBase) * 100) : 0,
-        }
+        type: topType,
+        count: topCount,
+        percentage: percentageBase ? Math.round((topCount / percentageBase) * 100) : 0,
+      }
       : null;
   }, [percentageBase, breakdownScope, currentRunVariations, allTimeVariations]);
 
@@ -307,18 +313,18 @@ export default function ProfileDetails() {
                     />
                   </div>
                 </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="flex items-center justify-center rounded-2xl border border-dashed border-[var(--line)] p-8">
-          <p className="text-sm font-medium" style={{ color: 'var(--muted)' }}>
-            {breakdownScope === 'current'
-              ? 'Ingen drinks registreret i dette run endnu'
-              : 'Ingen drinks registreret endnu i din Sladesh-historik'}
-          </p>
-        </div>
-      )}
+              );
+            })}
+          </div>
+        ) : (
+          <div className="flex items-center justify-center rounded-2xl border border-dashed border-[var(--line)] p-8">
+            <p className="text-sm font-medium" style={{ color: 'var(--muted)' }}>
+              {breakdownScope === 'current'
+                ? 'Ingen drinks registreret i dette run endnu'
+                : 'Ingen drinks registreret endnu i din Sladesh-historik'}
+            </p>
+          </div>
+        )}
       </div>
 
       {activeAchievement && (
@@ -394,9 +400,8 @@ function Avatar({ emoji, gradient, initials, className = 'h-12 w-12 text-xl' }) 
 
   return (
     <div
-      className={`flex items-center justify-center rounded-full bg-gradient-to-br ${
-        gradient || 'from-gray-400 to-gray-600'
-      } font-semibold uppercase text-white shadow-sm ${className}`}
+      className={`flex items-center justify-center rounded-full bg-gradient-to-br ${gradient || 'from-gray-400 to-gray-600'
+        } font-semibold uppercase text-white shadow-sm ${className}`}
     >
       {initials || '??'}
     </div>

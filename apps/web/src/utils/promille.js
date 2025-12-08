@@ -55,12 +55,27 @@ export function estimatePromille({ heightCm, weightKg, gender, drinkCount }) {
   // Convert body water to a Widmark-style distribution ratio
   const distributionRatio = clamp(bodyWaterLiters / weight, 0.45, 0.75)
 
-  // Widmark approximation: %BAC = A / (r * weight) * 100
-  const bacPercent = (gramsAlcohol / (distributionRatio * weight)) * 0.01
-  const promille = bacPercent * 10
+  // Widmark approximation: %BAC = A / (r * weight)
+  // Result is in permille (g/kg) directly if A is in grams and weight in kg
+  const promille = gramsAlcohol / (distributionRatio * weight)
 
   // Keep a sensible ceiling for display
   return Number(promille.toFixed(3))
+}
+
+export function getPromilleStatus(value) {
+  if (value === null || value === undefined) return null
+
+  if (value < 0.2) {
+    return { label: "Næsten ikke påvirket", color: "var(--muted)" }
+  }
+  if (value < 0.8) {
+    return { label: "Let påvirket", color: "var(--ink)" } // or a specific color like emerald
+  }
+  if (value < 1.5) {
+    return { label: "Tydeligt beruset", color: "orange" }
+  }
+  return { label: "Kraftigt beruset", color: "red" }
 }
 
 export function normalizePromilleInput({ heightCm, weightKg, gender, enabled }) {

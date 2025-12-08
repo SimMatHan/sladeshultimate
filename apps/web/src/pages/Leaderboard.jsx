@@ -399,7 +399,7 @@ export default function Leaderboard() {
         <div className="flex flex-col gap-4">
           <div ref={topSectionRef} className="shrink-0 space-y-4 pt-1">
             <p className="text-sm" style={{ color: 'var(--muted)' }}>
-              Følg med i hvem der har tracket flest drinks i Sladesh Crew. Tryk på en bruger for at se deres
+              Følg med i hvem der har tracket flest drinks. Tryk på en bruger for at se deres
               seneste aktivitet.
             </p>
 
@@ -588,7 +588,7 @@ function ProfileCard({ profile, rank, onSelect, isActive, sortMode, achievements
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="block truncate text-sm font-semibold" style={{ color: 'var(--ink)' }}>{displayName}</span>
-            </div>
+          </div>
         </div>
 
         <div className="row-span-2 self-stretch text-right leading-tight flex flex-col items-end justify-center">

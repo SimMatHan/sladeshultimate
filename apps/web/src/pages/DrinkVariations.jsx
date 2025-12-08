@@ -91,7 +91,7 @@ export default function DrinkVariations() {
         data.direction = absX > absY ? "horizontal" : "vertical";
       }
     }
-    
+
     // FIXED: Never prevent default or interfere with vertical scrolling.
     // Only handle horizontal swipes for category navigation.
     // Vertical scrolling is handled by the native .scroll-region container.
@@ -178,27 +178,7 @@ export default function DrinkVariations() {
           WebkitBackdropFilter: "blur(12px)",
         }}
       >
-        <div className="px-1">
-          <div className="flex items-center gap-3">
-            <div
-              className="grid h-12 w-12 place-items-center rounded-2xl border text-2xl"
-              style={{ borderColor: "var(--line)", backgroundColor: "var(--surface)" }}
-            >
-              {category.icon}
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>
-                Vælg variation
-              </p>
-              <h1 className="text-2xl font-semibold" style={{ color: "var(--ink)" }}>
-                {category.name}
-              </h1>
-            </div>
-          </div>
-          <p className="mt-4 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
-            Log hver drinkvariation præcis som i overlayet. Tryk på plus og minus for at justere dit nuværende løb.
-          </p>
-        </div>
+
         <div className="mt-3 px-1">
           <div className="relative -mx-4 px-4">
             <div

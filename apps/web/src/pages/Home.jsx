@@ -13,7 +13,7 @@ import { CATEGORIES } from "../constants/drinks";
 import { useDrinkLog } from "../contexts/DrinkLogContext";
 import { MAP_TILE_LAYER_PROPS } from "../utils/mapTiles";
 import { ACHIEVEMENTS } from "../config/achievements";
-import { estimatePromille } from "../utils/promille";
+import { estimatePromille, getPromilleStatus } from "../utils/promille";
 import "leaflet/dist/leaflet.css";
 
 const DEFAULT_MAP_CENTER = [55.6761, 12.5683];
@@ -89,7 +89,7 @@ function formatTimestamp(date) {
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
-  
+
   if (diffMins < 1) {
     return "Lige nu";
   } else if (diffMins < 60) {
@@ -147,14 +147,14 @@ export default function Home() {
   // Extract and expand drinks from variantCounts
   const currentRunDrinks = useMemo(() => {
     if (!variantCounts) return [];
-    
+
     const drinks = [];
     const lastDrinkAt = normalizeToDate(userData?.lastDrinkAt);
-    
+
     Object.entries(variantCounts).forEach(([catId, variants]) => {
       const category = CATEGORIES.find(cat => cat.id === catId);
       const categoryName = category?.name || catId;
-      
+
       Object.entries(variants || {}).forEach(([variantName, count]) => {
         // Expand count into individual entries
         for (let i = 0; i < count; i++) {
@@ -168,7 +168,7 @@ export default function Home() {
         }
       });
     });
-    
+
     // Sort by timestamp (newest first)
     return drinks.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }, [variantCounts, userData?.lastDrinkAt]);
@@ -188,6 +188,8 @@ export default function Home() {
     promilleSettings.gender,
     currentRunDrinkCount
   ]);
+
+  const promilleStatus = useMemo(() => getPromilleStatus(promilleValue), [promilleValue]);
 
   const handleCheckInClick = useCallback(async () => {
     if (!currentUser) {
@@ -263,11 +265,11 @@ export default function Home() {
   useEffect(() => {
     const scrollRegion = document.querySelector(".scroll-region");
     const originalScrollRegionOverflow = scrollRegion ? scrollRegion.style.overflow : null;
-    
+
     if (showCurrentRunModal && scrollRegion) {
       scrollRegion.style.overflow = "hidden";
     }
-    
+
     return () => {
       if (scrollRegion) {
         scrollRegion.style.overflow = originalScrollRegionOverflow || "";
@@ -334,8 +336,8 @@ export default function Home() {
               )}
             </Card>
 
-            <Card 
-              bare 
+            <Card
+              bare
               className="px-5 py-4 cursor-pointer transition hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
               onClick={() => setShowCurrentRunModal(true)}
               onKeyDown={(event) => {
@@ -360,9 +362,16 @@ export default function Home() {
                 </span>
               </div>
               {promilleEnabled && promilleValue !== null ? (
-                <p className="mt-3 text-xs leading-relaxed font-semibold" style={{ color: 'var(--ink)' }}>
-                  Din promille er {Number(promilleValue).toFixed(3)}
-                </p>
+                <div className="mt-3">
+                  <p className="text-xs leading-relaxed font-semibold" style={{ color: 'var(--ink)' }}>
+                    {Number(promilleValue).toFixed(2)} ‰
+                  </p>
+                  {promilleStatus && (
+                    <p className="text-[11px] font-medium" style={{ color: promilleStatus.color }}>
+                      {promilleStatus.label}
+                    </p>
+                  )}
+                </div>
               ) : (
                 <p className="mt-3 text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
                   {userTotalDrinks > 0
@@ -589,7 +598,7 @@ export default function Home() {
             exit={{ opacity: 0, scale: 0.95 }}
             style={{ backgroundColor: "var(--surface)" }}
           >
-            
+
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6 -webkit-overflow-scrolling-touch">
@@ -619,8 +628,13 @@ export default function Home() {
                             Din promille
                           </p>
                           <p className="text-2xl font-semibold" style={{ color: "var(--ink)" }}>
-                            {Number(promilleValue).toFixed(3)}
+                            {Number(promilleValue).toFixed(2)} ‰
                           </p>
+                          {promilleStatus && (
+                            <p className="text-sm font-medium mt-1" style={{ color: promilleStatus.color }}>
+                              {promilleStatus.label}
+                            </p>
+                          )}
                         </div>
                         <span className="text-[11px] font-semibold rounded-full px-3 py-1" style={{ backgroundColor: "var(--subtle)", color: "var(--muted)" }}>
                           Estimat
@@ -633,52 +647,11 @@ export default function Home() {
                   )}
                 </div>
               </div>
-
-              {currentRunDrinkCount === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <p 
-                    className="text-lg font-medium text-zinc-900 dark:text-zinc-100"
-                    style={{ color: "var(--ink)" }}
-                  >
-                    Hvaaaa, kom dog i gang
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-0">
-                                    <p 
-                    className="text-sm font-medium text-zinc-900 dark:text-zinc-100"
-                    style={{ color: "var(--ink)" }}
-                  >
-                    Din Aktivitet
-                  </p>
-                  {currentRunDrinks.map((drink, index) => (
-                    <div
-                      key={drink.id}
-                      className="flex items-center justify-between py-3 border-b last:border-0"
-                      style={{ borderColor: "var(--line)" }}
-                    >
-                      <div className="flex-1 min-w-0 pr-3">
-                        <div 
-                          className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate"
-                          style={{ color: "var(--ink)" }}
-                        >
-                          {drink.variantName}
-                        </div>
-                        <div 
-                          className="text-xs mt-0.5 text-zinc-500 dark:text-zinc-400"
-                          style={{ color: "var(--muted)" }}
-                        >
-                          {drink.categoryName}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
-          </motion.div>
-        </div>
-      )}
+          </motion.div >
+        </div >
+      )
+      }
 
     </>
   );
