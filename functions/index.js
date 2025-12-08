@@ -913,3 +913,188 @@ exports.onSladeshCompleted = functions
             return null;
         }
     });
+
+/**
+ * Helper function to recursively delete a collection and all its subcollections.
+ * Deletes in batches to avoid exceeding Firestore write limits.
+ * 
+ * @param {string} collectionPath - Path to the collection to delete
+ * @returns {Promise<number>} - Total number of documents deleted
+ */
+async function deleteCollectionRecursively(collectionPath) {
+    const MAX_BATCH_SIZE = 300;
+    let totalDeleted = 0;
+    let batchCount = 0;
+
+    console.log(`[cleanup] Starting deletion of collection: ${collectionPath}`);
+
+    try {
+        const collectionRef = db.collection(collectionPath);
+
+        // Continue deleting until no more documents are found
+        while (true) {
+            batchCount++;
+
+            // Get a batch of documents
+            const snapshot = await collectionRef.limit(MAX_BATCH_SIZE).get();
+
+            if (snapshot.empty) {
+                console.log(`[cleanup] ${collectionPath}: No more documents found after ${batchCount - 1} batches.`);
+                break;
+            }
+
+            console.log(`[cleanup] ${collectionPath}: Batch ${batchCount} - Processing ${snapshot.size} documents.`);
+
+            // Use bulkWriter for efficient batch operations
+            const bulkWriter = db.bulkWriter();
+
+            // Add error handling for bulkWriter operations
+            bulkWriter.onWriteError((error) => {
+                console.error(`[cleanup] BulkWriter error for ${collectionPath}:`, error);
+                return false; // Don't retry on error
+            });
+
+            // Process each document
+            for (const doc of snapshot.docs) {
+                // Check if document has subcollections
+                const subcollections = await doc.ref.listCollections();
+
+                // Recursively delete subcollections first
+                for (const subcollection of subcollections) {
+                    const subcollectionPath = `${collectionPath}/${doc.id}/${subcollection.id}`;
+                    const subDeleted = await deleteCollectionRecursively(subcollectionPath);
+                    totalDeleted += subDeleted;
+                }
+
+                // Delete the document itself
+                bulkWriter.delete(doc.ref);
+                totalDeleted++;
+            }
+
+            // Flush and close the bulkWriter for this batch
+            await bulkWriter.flush();
+            await bulkWriter.close();
+
+            console.log(`[cleanup] ${collectionPath}: Batch ${batchCount} - Deleted ${snapshot.size} documents.`);
+
+            // If we got fewer documents than the limit, we've reached the end
+            if (snapshot.size < MAX_BATCH_SIZE) {
+                console.log(`[cleanup] ${collectionPath}: Reached end (got ${snapshot.size} < ${MAX_BATCH_SIZE}).`);
+                break;
+            }
+        }
+
+        console.log(`[cleanup] ${collectionPath}: Completed. Total deleted: ${totalDeleted} documents across ${batchCount} batches.`);
+        return totalDeleted;
+
+    } catch (error) {
+        console.error(`[cleanup] Error deleting collection ${collectionPath}:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Performs weekly cleanup of Firestore collections.
+ * Deletes all documents in sladeshChallenges and notifications collections.
+ */
+async function performWeeklyCleanup() {
+    console.log("[cleanup] Starting weekly Firestore cleanup...");
+
+    const startTime = Date.now();
+    const results = {
+        sladeshChallenges: 0,
+        notifications: 0,
+        totalDeleted: 0,
+        errors: []
+    };
+
+    try {
+        // Delete sladeshChallenges collection
+        console.log("[cleanup] Deleting sladeshChallenges collection...");
+        try {
+            results.sladeshChallenges = await deleteCollectionRecursively("sladeshChallenges");
+            console.log(`[cleanup] sladeshChallenges: Deleted ${results.sladeshChallenges} documents.`);
+        } catch (error) {
+            console.error("[cleanup] Error deleting sladeshChallenges:", error);
+            results.errors.push({ collection: "sladeshChallenges", error: error.message });
+        }
+
+        // Delete notifications collection (including all subcollections)
+        console.log("[cleanup] Deleting notifications collection...");
+        try {
+            results.notifications = await deleteCollectionRecursively("notifications");
+            console.log(`[cleanup] notifications: Deleted ${results.notifications} documents.`);
+        } catch (error) {
+            console.error("[cleanup] Error deleting notifications:", error);
+            results.errors.push({ collection: "notifications", error: error.message });
+        }
+
+        results.totalDeleted = results.sladeshChallenges + results.notifications;
+        const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+
+        console.log("[cleanup] Weekly cleanup completed:", {
+            sladeshChallenges: results.sladeshChallenges,
+            notifications: results.notifications,
+            totalDeleted: results.totalDeleted,
+            durationSeconds: duration,
+            errors: results.errors.length
+        });
+
+        return results;
+
+    } catch (error) {
+        console.error("[cleanup] Fatal error during weekly cleanup:", error);
+        throw error;
+    }
+}
+
+/**
+ * Scheduled function that runs every Monday at 08:00 Europe/Copenhagen time.
+ * Deletes all documents in sladeshChallenges and notifications collections.
+ */
+exports.weeklyFirestoreCleanup = functions
+    .region(DEFAULT_REGION)
+    .pubsub.schedule("0 8 * * 1") // Every Monday at 08:00
+    .timeZone(CPH_TIMEZONE)
+    .onRun(async () => {
+        console.log("[cleanup] Running scheduled weekly Firestore cleanup...");
+        try {
+            const results = await performWeeklyCleanup();
+            console.log("[cleanup] Scheduled cleanup completed successfully:", results);
+            return null;
+        } catch (error) {
+            console.error("[cleanup] Scheduled cleanup failed:", error);
+            throw error;
+        }
+    });
+
+/**
+ * Manual trigger for development and testing purposes.
+ * Can be called via HTTP to manually trigger the weekly cleanup.
+ */
+exports.manualWeeklyCleanup = functions
+    .region(DEFAULT_REGION)
+    .https.onRequest(async (req, res) => {
+        try {
+            console.log("[cleanup] Running manual weekly Firestore cleanup...");
+            const results = await performWeeklyCleanup();
+
+            res.status(200).json({
+                success: true,
+                message: "Weekly cleanup completed successfully",
+                results: {
+                    sladeshChallenges: results.sladeshChallenges,
+                    notifications: results.notifications,
+                    totalDeleted: results.totalDeleted,
+                    errors: results.errors
+                }
+            });
+        } catch (error) {
+            console.error("[cleanup] Manual cleanup failed:", error);
+            res.status(500).json({
+                success: false,
+                error: error.message || "Error performing weekly cleanup"
+            });
+        }
+    });
+
