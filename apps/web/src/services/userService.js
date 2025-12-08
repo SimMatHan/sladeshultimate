@@ -361,6 +361,7 @@ export async function createUser({ uid, email, fullName, username, displayName =
     totalDrinks: 0,
     drinkTypes: {},
     drinkVariations: {},
+    allTimeDrinkVariations: {},
     currentRunDrinkCount: 0,
     currentRunDrinkTypes: {},
     achievements: {},
@@ -483,6 +484,7 @@ export async function addDrink(userId, type, variation) {
 
   // Read current drinkVariations to handle nested path initialization
   const currentDrinkVariations = refreshedData.drinkVariations || {}
+  const currentAllTimeVariations = refreshedData.allTimeDrinkVariations || {}
 
   // Build updates using increment for atomic operations
   // DATA FLOW: currentRunDrinkCount is computed here using Firestore increment
@@ -498,7 +500,7 @@ export async function addDrink(userId, type, variation) {
     lastActiveAt: serverTimestamp()
   }
 
-  // Handle nested drinkVariations path
+  // Handle nested drinkVariations path (current run - resets daily)
   // Firestore increment will create nested paths if parent structure exists
   // Ensure parent structure exists first if needed
   const typeVariations = currentDrinkVariations[type] || {}
@@ -513,6 +515,20 @@ export async function addDrink(userId, type, variation) {
     // Type exists, can use increment on the nested path
     // Firestore will create the variation key if it doesn't exist
     updates[`drinkVariations.${type}.${variation}`] = increment(1)
+  }
+
+  // Handle all-time drink variations (never resets)
+  // This is used for the ProfileDetails "All-time" percentage view
+  const allTimeTypeVariations = currentAllTimeVariations[type] || {}
+
+  if (!currentAllTimeVariations.hasOwnProperty(type)) {
+    // Initialize the all-time type structure first
+    const newAllTimeVariations = { ...currentAllTimeVariations }
+    newAllTimeVariations[type] = { [variation]: 1 }
+    updates.allTimeDrinkVariations = newAllTimeVariations
+  } else {
+    // Type exists, can use increment on the nested path
+    updates[`allTimeDrinkVariations.${type}.${variation}`] = increment(1)
   }
 
   await updateDoc(userRef, updates)
@@ -548,6 +564,11 @@ export async function removeDrink(userId, type, variation) {
     return
   }
 
+  // Check all-time variations
+  const allTimeVariations = refreshedData.allTimeDrinkVariations || {}
+  const allTimeTypeVariations = allTimeVariations[type] || {}
+  const currentAllTimeCount = allTimeTypeVariations[variation] || 0
+
   // Use increment(-1) for all fields
   const updates = {
     totalDrinks: increment(-1),
@@ -556,6 +577,11 @@ export async function removeDrink(userId, type, variation) {
     currentRunDrinkCount: increment(-1),
     updatedAt: serverTimestamp(),
     lastActiveAt: serverTimestamp()
+  }
+
+  // Only decrement all-time variations if count is > 0
+  if (currentAllTimeCount > 0) {
+    updates[`allTimeDrinkVariations.${type}.${variation}`] = increment(-1)
   }
 
   // Note: Do NOT update lastDrinkAt when removing (keep most recent timestamp)

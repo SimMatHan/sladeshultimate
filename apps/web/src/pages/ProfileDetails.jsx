@@ -96,17 +96,11 @@ export default function ProfileDetails() {
 
   const currentRunVariations = profile?.currentRunDrinkVariations || profile?.drinkVariations || {};
   const allTimeVariations = useMemo(() => {
-    const types = profile?.drinkTypes || {};
-    // Transform flat drinkTypes ({ Beer: 10 }) into nested structure expected by builder ({ Beer: { Beer: 10 } })
-    // This allows us to show the breakdown by main types for all-time stats
-    const variations = {};
-    Object.entries(types).forEach(([type, count]) => {
-      if (count > 0) {
-        variations[type] = { [type]: count };
-      }
-    });
-    return variations;
-  }, [profile?.drinkTypes]);
+    // Use the new allTimeDrinkVariations field which tracks lifetime variations
+    // This field is never reset and accumulates all drink variations over time
+    // Format: { "beer": { "Lager": 50, "IPA": 30 }, "cocktail": { "Mojito": 20 } }
+    return profile?.allTimeDrinkVariations || {};
+  }, [profile?.allTimeDrinkVariations]);
 
   const currentRunBreakdown = useMemo(
     () => buildVariationBreakdown(currentRunVariations, profile?.drinkBreakdown),

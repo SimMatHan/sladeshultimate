@@ -26,11 +26,12 @@ export const USER_SCHEMA = {
     weightKg: 'number | null',
     gender: '"male" | "female" | "other" | null'
   },
-  
+
   // Activity Tracking
   totalDrinks: 'number',      // Lifetime aggregated count (never resets)
   drinkTypes: 'object',       // Lifetime cumulative { "beer": 10, "shot": 5, "cocktail": 3 } (never resets)
   drinkVariations: 'object',  // Per-run variations { "beer": { "Lager": 5, "IPA": 3 }, "cocktail": { "Mojito": 2 } } (resets at 10:00)
+  allTimeDrinkVariations: 'object', // Lifetime variations { "beer": { "Lager": 50, "IPA": 30 }, "cocktail": { "Mojito": 20 } } (never resets)
   currentRunDrinkCount: 'number', // Per-run counter (resets at 10:00)
   achievements: 'map',        // { [achievementId]: { count: number, firstUnlockedAt: timestamp, lastUnlockedAt: timestamp } }
   totalRunResets: 'number',   // Total times the user has hit the run reset button
@@ -38,16 +39,16 @@ export const USER_SCHEMA = {
   checkInStatus: 'boolean',   // Current check-in state
   lastCheckIn: 'timestamp',   // Last check-in timestamp
   lastCheckInVenue: 'string', // Venue name from last check-in
-  
+
   // Sladesh Activity
   sladeshSent: 'number',      // Count of sladesh sent
   sladeshReceived: 'number',  // Count of sladesh received
   lastSladeshSentAt: 'timestamp | null', // Last time user sent a sladesh (12h cooldown)
-  
+
   // Channels
   joinedChannelIds: 'array',    // Array of channel IDs the user has joined
   activeChannelId: 'string | null', // Currently selected channel used for filtering
-  
+
   // Location
   currentLocation: {
     lat: 'number',
@@ -55,7 +56,7 @@ export const USER_SCHEMA = {
     venue: 'string',
     timestamp: 'timestamp'
   },
-  
+
   // Metadata
   createdAt: 'timestamp',
   updatedAt: 'timestamp',
@@ -157,7 +158,7 @@ export const STATS_SCHEMA = {
   totalDrinks: 'number',
   totalCheckIns: 'number',
   totalSladesh: 'number',
-  
+
   // Drink Types Breakdown
   drinkTypes: {
     'beer': 'number',
@@ -166,7 +167,7 @@ export const STATS_SCHEMA = {
     'wine': 'number',
     // ... other types
   },
-  
+
   // Drink Variations Breakdown (nested by type)
   drinkVariations: {
     'beer': {
@@ -181,7 +182,7 @@ export const STATS_SCHEMA = {
     },
     // ... other types with their variations
   },
-  
+
   // Time-based (optional - can be computed)
   lastUpdated: 'timestamp'
 }
@@ -220,12 +221,12 @@ export function generateAvatarGradient(userId) {
     'from-pink-400 to-rose-500',
     'from-cyan-400 to-blue-500'
   ]
-  
+
   // Simple hash to get consistent gradient for user
   let hash = 0
   for (let i = 0; i < userId.length; i++) {
     hash = userId.charCodeAt(i) + ((hash << 5) - hash)
   }
-  
+
   return gradients[Math.abs(hash) % gradients.length]
 }
