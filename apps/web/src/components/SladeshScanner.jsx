@@ -9,13 +9,6 @@ export default function SladeshScanner() {
     const [timeLeft, setTimeLeft] = useState(null);
     const fileInputRef = useRef(null);
 
-    // Mark this challenge as seen when scanner first appears
-    useEffect(() => {
-        if (activeChallenge?.id) {
-            markScannerSeen(activeChallenge.id);
-        }
-    }, [activeChallenge?.id, markScannerSeen]);
-
     useEffect(() => {
         if (!activeChallenge) return;
 
@@ -37,14 +30,7 @@ export default function SladeshScanner() {
         return () => clearInterval(interval);
     }, [activeChallenge, failChallenge]);
 
-    // Auto-dismiss scanner when challenge is completed or failed
-    useEffect(() => {
-        if (!activeChallenge) return;
-        if (activeChallenge.status === SLADESH_STATUS.COMPLETED || activeChallenge.status === SLADESH_STATUS.FAILED) {
-            // Scanner will automatically unmount when activeChallenge becomes null
-            // This is handled by the parent component (AppShell)
-        }
-    }, [activeChallenge]);
+
 
     if (!activeChallenge) return null;
 
