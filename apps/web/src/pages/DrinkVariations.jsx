@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { CATEGORIES } from "../constants/drinks";
+import { CATEGORIES, DRINK_CATEGORY_ID_SET } from "../constants/drinks";
 import { useDrinkVariants } from "../hooks/useDrinkVariants";
 import { useDrinkLog } from "../contexts/DrinkLogContext";
 
@@ -9,7 +9,7 @@ export default function DrinkVariations() {
   const { categoryId } = useParams();
   const navigate = useNavigate();
   const { variantsByCategory } = useDrinkVariants();
-  const { variantCounts, adjustVariantCount } = useDrinkLog();
+  const { variantCounts, adjustVariantCount, spamStatus } = useDrinkLog();
   const touchDataRef = useRef({
     startX: 0,
     startY: 0,
@@ -30,6 +30,10 @@ export default function DrinkVariations() {
   );
 
   const items = variantsByCategory?.[categoryId] ?? [];
+  const isDrinkCategory = DRINK_CATEGORY_ID_SET.has(categoryId);
+  const spamRemainingSeconds = spamStatus?.remainingMs
+    ? Math.max(1, Math.ceil(spamStatus.remainingMs / 1000))
+    : 0;
 
   const resetScrollPosition = useCallback(() => {
     const scrollRegion = document.querySelector(".scroll-region");
@@ -170,6 +174,31 @@ export default function DrinkVariations() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
+      {isDrinkCategory && spamStatus?.isBlocked && (
+        <div
+          className="mb-3 rounded-xl border px-4 py-3 text-sm shadow-sm"
+          style={{
+            borderColor: "var(--brand)",
+            backgroundColor: "color-mix(in srgb, var(--brand,#FF385C) 12%, var(--surface) 88%)",
+            color: "var(--ink)",
+          }}
+          role="status"
+          aria-live="polite"
+        >
+          <div className="font-semibold text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+            Midlertidig pause
+          </div>
+          <div className="mt-1">
+            {spamStatus?.message || "Du logger meget hurtigt. Vent et øjeblik, så er du tilbage."}
+          </div>
+          {spamRemainingSeconds > 0 && (
+            <div className="mt-1 text-xs font-semibold" style={{ color: "var(--muted)" }}>
+              Klar igen om ca. {spamRemainingSeconds}s
+            </div>
+          )}
+        </div>
+      )}
+
       <div
         className="sticky top-0 z-10 -mx-4 space-y-6 px-4 pb-4 py-4"
         style={{
@@ -326,8 +355,9 @@ export default function DrinkVariations() {
                     <button
                       type="button"
                       onClick={() => adjustVariantCount(categoryId, item.name, 1)}
+                      disabled={isDrinkCategory && spamStatus?.isBlocked}
                       className="flex h-9 w-9 items-center justify-center rounded-full text-base font-semibold"
-                      style={{ backgroundColor: 'var(--brand)', color: 'var(--brand-ink)' }}
+                      style={{ backgroundColor: 'var(--brand)', color: 'var(--brand-ink)', opacity: isDrinkCategory && spamStatus?.isBlocked ? 0.55 : 1 }}
                       aria-label={`Tilføj en ${item.name}`}
                     >
                       +

@@ -9,6 +9,9 @@ import { clearLeaderboardCache } from "../services/leaderboardService";
 import { DRINK_CATEGORY_ID_SET, NON_DRINK_CATEGORY_ID_SET } from "../constants/drinks";
 
 const DrinkLogContext = createContext(null);
+const SPAM_WINDOW_MS = 6000; // Time window for spam detection
+const SPAM_THRESHOLD = 3; // Allow up to 3 quick logs before blocking
+const SPAM_COOLDOWN_MS = 20000; // 20s cooldown when spam is detected
 
 const createZeroCounts = (variantsMap) => {
   if (!variantsMap) return {};
@@ -32,6 +35,10 @@ export function DrinkLogProvider({ children }) {
   const { variantsByCategory } = useDrinkVariants();
   const { userLocation, updateLocation } = useLocation();
   const { selectedChannel } = useChannel();
+  const spamEventsRef = useRef([]);
+  const [spamCooldownUntil, setSpamCooldownUntil] = useState(null);
+  const [spamMessage, setSpamMessage] = useState(null);
+  const [spamCooldownRemainingMs, setSpamCooldownRemainingMs] = useState(0);
   const [variantCounts, setVariantCounts] = useState(() => createZeroCounts(variantsByCategory));
   const [isResetting, setIsResetting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -67,6 +74,36 @@ export function DrinkLogProvider({ children }) {
     prevVariantsRef.current = variantCounts;
   }, [variantCounts]);
 
+  const clearSpamCooldown = useCallback(() => {
+    setSpamCooldownUntil(null);
+    setSpamCooldownRemainingMs(0);
+    setSpamMessage(null);
+    spamEventsRef.current = [];
+  }, []);
+
+  useEffect(() => {
+    if (!spamCooldownUntil) return undefined;
+
+    const tick = () => {
+      const remaining = Math.max(0, spamCooldownUntil - Date.now());
+      setSpamCooldownRemainingMs(remaining);
+      if (remaining <= 0) {
+        clearSpamCooldown();
+      }
+    };
+
+    tick();
+    const intervalId = setInterval(tick, 500);
+    return () => clearInterval(intervalId);
+  }, [spamCooldownUntil, clearSpamCooldown]);
+
+  const startSpamCooldown = useCallback((now = Date.now()) => {
+    const endsAt = now + SPAM_COOLDOWN_MS;
+    setSpamCooldownUntil(endsAt);
+    setSpamMessage("Rolig nu Cowboy! Du logger meget hurtigt lige nu. Vent et øjeblik, så er du tilbage.");
+    spamEventsRef.current = [];
+  }, []);
+
   const adjustVariantCount = useCallback(
     async (catId, variantName, delta) => {
       if (!currentUser) {
@@ -74,6 +111,28 @@ export function DrinkLogProvider({ children }) {
         return;
       }
       const isNonDrinkCategory = NON_DRINK_CATEGORY_ID_SET.has(catId);
+
+      let previousSpamEventsSnapshot = null;
+      const isDrinkCategory = !isNonDrinkCategory && DRINK_CATEGORY_ID_SET.has(catId);
+      if (delta > 0 && isDrinkCategory) {
+        const now = Date.now();
+        const cooldownActive = spamCooldownUntil && spamCooldownUntil > now;
+        if (cooldownActive) {
+          setSpamMessage("Du er midlertidigt blokeret for at logge nye drinks. Vent et øjeblik, så er du klar igen.");
+          return;
+        }
+
+        const recentEvents = (spamEventsRef.current || []).filter((ts) => now - ts < SPAM_WINDOW_MS);
+        spamEventsRef.current = recentEvents;
+
+        if (recentEvents.length >= SPAM_THRESHOLD) {
+          startSpamCooldown(now);
+          return;
+        }
+
+        previousSpamEventsSnapshot = [...recentEvents];
+        spamEventsRef.current = [...recentEvents, now];
+      }
 
       setVariantCounts((prev) => {
         const category = prev[catId] ?? {};
@@ -167,6 +226,9 @@ export function DrinkLogProvider({ children }) {
         await refreshUserData(true);
       } catch (error) {
         console.error("[drink-log] adjustVariantCount: Error updating drink in Firestore:", error);
+        if (delta > 0 && previousSpamEventsSnapshot) {
+          spamEventsRef.current = previousSpamEventsSnapshot;
+        }
         setVariantCounts((prev) => {
           const category = prev[catId] ?? {};
           const current = category[variantName] ?? 0;
@@ -180,7 +242,7 @@ export function DrinkLogProvider({ children }) {
         });
       }
     },
-    [currentUser, updateLocation, userLocation, userData, selectedChannel]
+    [currentUser, updateLocation, userLocation, userData, selectedChannel, spamCooldownUntil, startSpamCooldown, refreshUserData]
   );
 
   const resetRun = useCallback(async () => {
@@ -224,6 +286,16 @@ export function DrinkLogProvider({ children }) {
     }, 0);
   }, [variantCounts]);
 
+  const spamStatus = useMemo(() => {
+    const isBlocked = Boolean(spamCooldownUntil && spamCooldownUntil > Date.now());
+    return {
+      isBlocked,
+      cooldownEndsAt: spamCooldownUntil ? new Date(spamCooldownUntil) : null,
+      remainingMs: spamCooldownRemainingMs,
+      message: spamMessage,
+    };
+  }, [spamCooldownUntil, spamCooldownRemainingMs, spamMessage]);
+
   const value = {
     variantCounts,
     adjustVariantCount,
@@ -232,6 +304,7 @@ export function DrinkLogProvider({ children }) {
     isLoading,
     categoryTotals,
     currentRunDrinkCount,
+    spamStatus,
   };
 
   return <DrinkLogContext.Provider value={value}>{children}</DrinkLogContext.Provider>;

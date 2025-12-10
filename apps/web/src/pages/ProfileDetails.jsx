@@ -80,6 +80,14 @@ function filterDrinkTypes(drinkTypes = {}) {
   );
 }
 
+function getOtherVariations(allTimeDrinkVariations = {}) {
+  return allTimeDrinkVariations?.other || {};
+}
+
+function getOtherTotals(otherVariations = {}) {
+  return Object.values(otherVariations || {}).reduce((sum, count) => sum + (count || 0), 0);
+}
+
 export default function ProfileDetails() {
   const { userId } = useParams();
   const location = useLocation();
@@ -166,6 +174,19 @@ export default function ProfileDetails() {
     () => buildTypeBreakdown(filterDrinkTypes(profile?.drinkTypes)),
     [profile?.drinkTypes]
   );
+
+  // “Andet” (non-drink) stats
+  const otherVariations = useMemo(
+    () => getOtherVariations(profile?.allTimeDrinkVariations),
+    [profile?.allTimeDrinkVariations]
+  );
+  const otherTotal = useMemo(() => getOtherTotals(otherVariations), [otherVariations]);
+  const otherBreakdown = useMemo(() => {
+    return Object.entries(otherVariations || {})
+      .filter(([, count]) => count > 0)
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [otherVariations]);
 
   const getTotalCount = (items) => items.reduce((sum, item) => sum + item.count, 0);
 
@@ -399,6 +420,62 @@ export default function ProfileDetails() {
             </p>
           </div>
         )}
+      </div>
+
+      {/* “Andet” (non-drink) overview */}
+      <div className="space-y-2 pt-6">
+        <h2 className="text-xs font-bold uppercase tracking-widest text-left pl-1" style={{ color: 'var(--muted)' }}>
+          Andet (all-time)
+        </h2>
+        <div className="rounded-2xl border border-[var(--line)] bg-[var(--subtle)] p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase font-semibold tracking-wide" style={{ color: "var(--muted)" }}>
+                Total Andet
+              </p>
+              <p className="text-2xl font-semibold" style={{ color: "var(--ink)" }}>
+                {Number(otherTotal).toLocaleString('da-DK')}
+              </p>
+            </div>
+            <span className="text-[11px] font-semibold rounded-full px-3 py-1" style={{ backgroundColor: "var(--surface)", color: "var(--muted)" }}>
+              Logget events
+            </span>
+          </div>
+
+          {otherBreakdown.length > 0 ? (
+            <div className="space-y-2">
+              {otherBreakdown.map((item) => {
+                const percentageBase = otherTotal || 0;
+                const percentage = percentageBase ? Math.round((item.count / percentageBase) * 100) : 0;
+                return (
+                  <div key={item.label} className="flex flex-col gap-1">
+                    <div className="flex items-end justify-between text-sm">
+                      <span className="font-medium text-[var(--ink)] break-words">{item.label}</span>
+                      <div className="flex items-center gap-1.5 tabular-nums">
+                        <span className="text-xs font-medium text-[var(--muted)]">{percentage}%</span>
+                        <span className="font-bold text-[var(--ink)]">{item.count}</span>
+                      </div>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--surface)]">
+                      <div
+                        className="h-full rounded-full transition-all duration-500 ease-out"
+                        style={{
+                          width: `${percentage}%`,
+                          backgroundColor: 'var(--brand)',
+                          opacity: 0.8 + (percentage / 100) * 0.2,
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm" style={{ color: 'var(--muted)' }}>
+              Ingen “Andet”-events endnu.
+            </p>
+          )}
+        </div>
       </div>
 
       {activeAchievement && (
