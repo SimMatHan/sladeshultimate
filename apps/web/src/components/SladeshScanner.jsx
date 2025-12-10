@@ -40,14 +40,36 @@ export default function SladeshScanner() {
 
     const [timeLeft, setTimeLeft] = useState(null);
 
+    // Phase order for forward-only progression
+    const PHASE_ORDER = {
+        'intro': 0,
+        'awaiting_filled': 1,
+        'filled_captured': 2,
+        'awaiting_empty': 3,
+        'empty_captured': 4,
+        'completed': 5,
+        'failed': 5
+    };
+
     // Sync phase from Firestore updates (for multi-device support)
+    // CRITICAL: Protect against stale Firestore snapshots overwriting optimistic local state
     useEffect(() => {
         if (!activeChallenge?.phase) return;
+
+        const currentPhaseIdx = PHASE_ORDER[phase] || 0;
+        const remotePhaseIdx = PHASE_ORDER[activeChallenge.phase] || 0;
+
+        // Only sync if remote phase is different AND implies progress (or same level)
+        // Never allow going backwards (e.g. filled_captured -> awaiting_filled) because of race conditions
         if (activeChallenge.phase !== phase) {
-            console.log('[Scanner] Syncing phase from Firestore:', activeChallenge.phase, '(current:', phase + ')');
-            setPhase(activeChallenge.phase);
+            if (remotePhaseIdx > currentPhaseIdx) {
+                console.log('[Scanner] Fast-forwarding phase from Firestore:', activeChallenge.phase);
+                setPhase(activeChallenge.phase);
+            } else if (remotePhaseIdx < currentPhaseIdx) {
+                console.warn('[Scanner] Ignoring stale phase from Firestore:', activeChallenge.phase, '(current:', phase + ')');
+            }
         }
-    }, [activeChallenge?.phase]);
+    }, [activeChallenge?.phase, phase]);
 
     // Handle iOS PWA lifecycle - re-sync when app becomes visible
     useEffect(() => {
