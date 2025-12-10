@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSladesh, SLADESH_STATUS } from '../contexts/SladeshContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -7,46 +7,65 @@ export default function SladeshScanner() {
     const { activeChallenge, updateChallenge, completeChallenge, failChallenge } = useSladesh();
     const { isDarkMode } = useTheme();
     const navigate = useNavigate();
-    // Initialize step from Firestore or default to 'intro'
-    const [step, setStep] = useState(() => activeChallenge?.scannerStep || 'intro');
-    const [timeLeft, setTimeLeft] = useState(null);
     const fileInputRef = useRef(null);
-    const hasInitialized = useRef(false);
 
-    // Initialize step ONCE when scanner first mounts
-    useEffect(() => {
-        if (!activeChallenge || hasInitialized.current) return;
+    // Derive initial phase from Firestore (for state recovery)
+    const [phase, setPhase] = useState(() => {
+        if (!activeChallenge) return 'intro';
 
-        const savedStep = activeChallenge.scannerStep || 'intro';
-        setStep(savedStep);
-        hasInitialized.current = true;
-
-        console.log('[SladeshScanner] Initialized with step:', savedStep);
-    }, [activeChallenge]);
-
-    // Sync step from Firestore updates WITHOUT re-initializing
-    useEffect(() => {
-        if (!activeChallenge || !hasInitialized.current) return;
-
-        // Only update if Firestore has a different step than local state
-        if (activeChallenge.scannerStep && activeChallenge.scannerStep !== step) {
-            console.log('[SladeshScanner] Syncing step from Firestore:', activeChallenge.scannerStep);
-            setStep(activeChallenge.scannerStep);
+        // Resume from Firestore phase if available
+        if (activeChallenge.phase) {
+            console.log('[Scanner] Recovering from Firestore phase:', activeChallenge.phase);
+            return activeChallenge.phase;
         }
-    }, [activeChallenge?.scannerStep]);
 
-    // Sync step state to Firestore when it changes locally
+        // Fallback: derive from photos (backwards compatibility)
+        if (activeChallenge.proofAfterImage) return 'empty_captured';
+        if (activeChallenge.proofBeforeImage) return 'filled_captured';
+
+        // Fallback: use old scannerStep if available
+        if (activeChallenge.scannerStep) {
+            const stepToPhaseMap = {
+                'intro': 'intro',
+                'before': 'awaiting_filled',
+                'drinking': 'filled_captured',
+                'after': 'awaiting_empty',
+                'success': 'completed'
+            };
+            return stepToPhaseMap[activeChallenge.scannerStep] || 'intro';
+        }
+
+        return 'intro';
+    });
+
+    const [timeLeft, setTimeLeft] = useState(null);
+
+    // Sync phase from Firestore updates (for multi-device support)
     useEffect(() => {
-        if (!activeChallenge || !hasInitialized.current) return;
+        if (!activeChallenge?.phase) return;
+        if (activeChallenge.phase !== phase) {
+            console.log('[Scanner] Syncing phase from Firestore:', activeChallenge.phase, '(current:', phase + ')');
+            setPhase(activeChallenge.phase);
+        }
+    }, [activeChallenge?.phase]);
 
-        console.log('[SladeshScanner] Updating Firestore with step:', step);
-        updateChallenge(activeChallenge.id, {
-            scannerStep: step,
-            scannerLastUpdated: Date.now()
-        });
-    }, [step, activeChallenge?.id, updateChallenge]);
+    // Handle iOS PWA lifecycle - re-sync when app becomes visible
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                console.log('[Scanner] App became visible, re-syncing from Firestore');
+                if (activeChallenge?.phase && activeChallenge.phase !== phase) {
+                    console.log('[Scanner] Phase mismatch after visibility change, syncing:', activeChallenge.phase);
+                    setPhase(activeChallenge.phase);
+                }
+            }
+        };
 
-    // Handle timer countdown
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }, [activeChallenge, phase]);
+
+    // Timer countdown
     useEffect(() => {
         if (!activeChallenge) return;
 
@@ -68,23 +87,76 @@ export default function SladeshScanner() {
         return () => clearInterval(interval);
     }, [activeChallenge, failChallenge]);
 
-    // Auto-complete and navigate after success
+    // Auto-navigate after completion
     useEffect(() => {
-        if (step === 'success' && activeChallenge) {
-            console.log('[SladeshScanner] Success! Completing challenge and navigating to home in 5s');
-
-            // Mark challenge as completed immediately
-            completeChallenge(activeChallenge.id, activeChallenge.proofAfterImage);
-
-            // Navigate to home after 5 seconds
+        if (phase === 'completed' && activeChallenge) {
+            console.log('[Scanner] Challenge completed, navigating to home in 5s');
             const timeout = setTimeout(() => {
-                console.log('[SladeshScanner] Navigating to /home');
+                console.log('[Scanner] Navigating to /home');
                 navigate('/home');
             }, 5000);
 
             return () => clearTimeout(timeout);
         }
-    }, [step, activeChallenge?.id, completeChallenge, navigate]);
+    }, [phase, activeChallenge?.id, navigate]);
+
+    // Handle photo capture
+    const handlePhotoCapture = useCallback(async (file) => {
+        if (!file || !activeChallenge) {
+            console.warn('[Scanner] No file or no active challenge');
+            return;
+        }
+
+        console.log('[Scanner] Photo captured in phase:', phase);
+
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+            const imageData = reader.result;
+
+            if (phase === 'awaiting_filled') {
+                // First photo (filled drink)
+                console.log('[Scanner] Saving first photo (filled drink)');
+                await updateChallenge(activeChallenge.id, {
+                    proofBeforeImage: imageData,
+                    phase: 'filled_captured',
+                    filledCapturedAt: Date.now()
+                });
+                setPhase('filled_captured');
+
+            } else if (phase === 'awaiting_empty') {
+                // Second photo (empty drink)
+                const now = Date.now();
+                const startTime = activeChallenge.filledCapturedAt || activeChallenge.createdAt;
+                const elapsed = now - startTime;
+                const tenMinutes = 10 * 60 * 1000;
+
+                console.log('[Scanner] Saving second photo (empty drink)');
+                console.log('[Scanner] Time elapsed:', Math.floor(elapsed / 1000), 'seconds');
+
+                if (elapsed > tenMinutes) {
+                    // Too slow!
+                    console.warn('[Scanner] Challenge failed: exceeded 10 minutes');
+                    await updateChallenge(activeChallenge.id, {
+                        phase: 'failed',
+                        proofAfterImage: imageData
+                    });
+                    await failChallenge(activeChallenge.id);
+                    setPhase('failed');
+                } else {
+                    // Success!
+                    console.log('[Scanner] Challenge completed successfully!');
+                    await updateChallenge(activeChallenge.id, {
+                        proofAfterImage: imageData,
+                        phase: 'empty_captured',
+                        emptyCapturedAt: now
+                    });
+                    await completeChallenge(activeChallenge.id, imageData);
+                    setPhase('completed');
+                }
+            }
+        };
+        reader.readAsDataURL(file);
+    }, [phase, activeChallenge, updateChallenge, completeChallenge, failChallenge]);
 
     if (!activeChallenge) return null;
 
@@ -96,25 +168,8 @@ export default function SladeshScanner() {
         return `${minutes}:${seconds.toString().padStart(2, '0')}`;
     };
 
-    const handleFileChange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            const imageUrl = reader.result;
-            if (step === 'before') {
-                updateChallenge(activeChallenge.id, { proofBeforeImage: imageUrl });
-                setStep('drinking');
-            } else if (step === 'after') {
-                updateChallenge(activeChallenge.id, { proofAfterImage: imageUrl });
-                setStep('success');
-            }
-        };
-        reader.readAsDataURL(file);
-    };
-
     const triggerCamera = () => {
+        console.log('[Scanner] Triggering camera in phase:', phase);
         fileInputRef.current?.click();
     };
 
@@ -132,17 +187,18 @@ export default function SladeshScanner() {
                 capture="environment"
                 className="hidden"
                 ref={fileInputRef}
-                onChange={handleFileChange}
+                onChange={(e) => handlePhotoCapture(e.target.files[0])}
             />
 
-            {/* Timer Display (always visible if running) */}
-            {timeLeft !== null && step !== 'success' && (
+            {/* Timer Display */}
+            {timeLeft !== null && phase !== 'completed' && phase !== 'failed' && (
                 <div className="absolute top-12 right-6 rounded-full px-4 py-2 text-lg font-bold font-mono" style={{ backgroundColor: 'var(--subtle)', color: timeLeft < 60000 ? 'var(--brand)' : 'var(--ink)' }}>
                     {formatTime(timeLeft)}
                 </div>
             )}
 
-            {step === 'intro' && (
+            {/* Intro */}
+            {phase === 'intro' && (
                 <div className="text-center space-y-6 max-w-sm animate-in fade-in zoom-in duration-300">
                     <div className="text-6xl mb-4">🚨</div>
                     <h1 className="text-3xl font-bold" style={{ color: 'var(--brand)' }}>Du er blevet Sladeshed!</h1>
@@ -156,7 +212,11 @@ export default function SladeshScanner() {
                         <p className="font-bold mt-2" style={{ color: 'var(--brand)' }}>Du har 10 minutter!</p>
                     </div>
                     <button
-                        onClick={() => setStep('before')}
+                        onClick={() => {
+                            console.log('[Scanner] Starting challenge');
+                            setPhase('awaiting_filled');
+                            updateChallenge(activeChallenge.id, { phase: 'awaiting_filled' });
+                        }}
                         className="w-full py-4 rounded-2xl text-lg font-bold shadow-lg transform transition active:scale-95"
                         style={{ backgroundColor: 'var(--brand)', color: 'white' }}
                     >
@@ -165,7 +225,8 @@ export default function SladeshScanner() {
                 </div>
             )}
 
-            {step === 'before' && (
+            {/* Awaiting First Photo */}
+            {phase === 'awaiting_filled' && (
                 <div className="text-center space-y-6 max-w-sm animate-in slide-in-from-right duration-300">
                     <h2 className="text-2xl font-bold">Step 1: Før-billede</h2>
                     <p style={{ color: 'var(--muted)' }}>Vis os hvad du skal til at nedlægge.</p>
@@ -186,7 +247,8 @@ export default function SladeshScanner() {
                 </div>
             )}
 
-            {step === 'drinking' && (
+            {/* Drinking Phase */}
+            {phase === 'filled_captured' && (
                 <div className="text-center space-y-8 max-w-sm animate-in fade-in duration-300">
                     <div className="relative">
                         <div className="text-8xl animate-pulse">🍻</div>
@@ -197,7 +259,11 @@ export default function SladeshScanner() {
                     </div>
 
                     <button
-                        onClick={() => setStep('after')}
+                        onClick={() => {
+                            console.log('[Scanner] User finished drinking');
+                            setPhase('awaiting_empty');
+                            updateChallenge(activeChallenge.id, { phase: 'awaiting_empty' });
+                        }}
                         className="w-full py-4 rounded-2xl text-lg font-bold shadow-lg transform transition active:scale-95"
                         style={{ backgroundColor: 'var(--brand)', color: 'white' }}
                     >
@@ -206,7 +272,8 @@ export default function SladeshScanner() {
                 </div>
             )}
 
-            {step === 'after' && (
+            {/* Awaiting Second Photo */}
+            {phase === 'awaiting_empty' && (
                 <div className="text-center space-y-6 max-w-sm animate-in slide-in-from-right duration-300">
                     <h2 className="text-2xl font-bold">Step 2: Efter-billede</h2>
                     <p style={{ color: 'var(--muted)' }}>Bevis det! Vis os det tomme glas.</p>
@@ -227,14 +294,21 @@ export default function SladeshScanner() {
                 </div>
             )}
 
-            {step === 'success' && (
+            {/* Success */}
+            {phase === 'completed' && (
                 <div className="text-center space-y-6 max-w-sm animate-in zoom-in duration-500">
                     <div className="text-8xl">🏆</div>
                     <h1 className="text-3xl font-bold" style={{ color: 'var(--brand)' }}>Godt klaret!</h1>
-                    <p style={{ color: 'var(--muted)' }}>Du overlevede Sladesh'en. Scanneren lukker automatisk...</p>
-                    <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                        Hvis scanneren ikke lukker, kan du genstarte appen.
-                    </p>
+                    <p style={{ color: 'var(--muted)' }}>Du overlevede Sladesh'en. Navigerer til home om 5 sekunder...</p>
+                </div>
+            )}
+
+            {/* Failed */}
+            {phase === 'failed' && (
+                <div className="text-center space-y-6 max-w-sm animate-in fade-in duration-300">
+                    <div className="text-8xl">😢</div>
+                    <h1 className="text-3xl font-bold" style={{ color: 'var(--brand)' }}>For langsomt!</h1>
+                    <p style={{ color: 'var(--muted)' }}>Du brugte mere end 10 minutter. Bedre held næste gang!</p>
                 </div>
             )}
         </div>

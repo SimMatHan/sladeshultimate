@@ -131,6 +131,10 @@ export function SladeshProvider({ children }) {
             proofAfterImage: data.proofAfterImage || null,
             scannerStep: data.scannerStep || null,
             scannerLastUpdated: data.scannerLastUpdated || null,
+            // Phase-based state for cross-platform reliability
+            phase: data.phase || null,
+            filledCapturedAt: data.filledCapturedAt || null,
+            emptyCapturedAt: data.emptyCapturedAt || null,
         };
     }, [resolveUserName]);
 
