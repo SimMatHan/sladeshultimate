@@ -1,36 +1,50 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSladesh, SLADESH_STATUS } from '../contexts/SladeshContext';
 import { useTheme } from '../contexts/ThemeContext';
 
 export default function SladeshScanner() {
     const { activeChallenge, updateChallenge, completeChallenge, failChallenge } = useSladesh();
     const { isDarkMode } = useTheme();
+    const navigate = useNavigate();
     // Initialize step from Firestore or default to 'intro'
     const [step, setStep] = useState(() => activeChallenge?.scannerStep || 'intro');
     const [timeLeft, setTimeLeft] = useState(null);
     const fileInputRef = useRef(null);
     const hasInitialized = useRef(false);
 
-    // Sync step state with Firestore when it changes
+    // Initialize step ONCE when scanner first mounts
+    useEffect(() => {
+        if (!activeChallenge || hasInitialized.current) return;
+
+        const savedStep = activeChallenge.scannerStep || 'intro';
+        setStep(savedStep);
+        hasInitialized.current = true;
+
+        console.log('[SladeshScanner] Initialized with step:', savedStep);
+    }, [activeChallenge]);
+
+    // Sync step from Firestore updates WITHOUT re-initializing
     useEffect(() => {
         if (!activeChallenge || !hasInitialized.current) return;
 
-        // Update Firestore with current scanner step
+        // Only update if Firestore has a different step than local state
+        if (activeChallenge.scannerStep && activeChallenge.scannerStep !== step) {
+            console.log('[SladeshScanner] Syncing step from Firestore:', activeChallenge.scannerStep);
+            setStep(activeChallenge.scannerStep);
+        }
+    }, [activeChallenge?.scannerStep]);
+
+    // Sync step state to Firestore when it changes locally
+    useEffect(() => {
+        if (!activeChallenge || !hasInitialized.current) return;
+
+        console.log('[SladeshScanner] Updating Firestore with step:', step);
         updateChallenge(activeChallenge.id, {
             scannerStep: step,
             scannerLastUpdated: Date.now()
         });
-    }, [step, activeChallenge, updateChallenge]);
-
-    // Initialize step from activeChallenge on mount or when challenge changes
-    useEffect(() => {
-        if (!activeChallenge) return;
-
-        // Resume from saved step or start from intro
-        const savedStep = activeChallenge.scannerStep || 'intro';
-        setStep(savedStep);
-        hasInitialized.current = true;
-    }, [activeChallenge?.id]);
+    }, [step, activeChallenge?.id, updateChallenge]);
 
     // Handle timer countdown
     useEffect(() => {
@@ -54,16 +68,23 @@ export default function SladeshScanner() {
         return () => clearInterval(interval);
     }, [activeChallenge, failChallenge]);
 
-    // Auto-close scanner after success
+    // Auto-complete and navigate after success
     useEffect(() => {
-        if (step === 'success') {
+        if (step === 'success' && activeChallenge) {
+            console.log('[SladeshScanner] Success! Completing challenge and navigating to home in 5s');
+
+            // Mark challenge as completed immediately
+            completeChallenge(activeChallenge.id, activeChallenge.proofAfterImage);
+
+            // Navigate to home after 5 seconds
             const timeout = setTimeout(() => {
-                // Mark challenge as completed, which will cause scanner to unmount
-                completeChallenge(activeChallenge.id, activeChallenge.proofAfterImage);
-            }, 2000);
+                console.log('[SladeshScanner] Navigating to /home');
+                navigate('/home');
+            }, 5000);
+
             return () => clearTimeout(timeout);
         }
-    }, [step, activeChallenge, completeChallenge]);
+    }, [step, activeChallenge?.id, completeChallenge, navigate]);
 
     if (!activeChallenge) return null;
 

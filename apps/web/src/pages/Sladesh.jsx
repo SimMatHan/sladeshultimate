@@ -750,9 +750,9 @@ function SenderLockOverlay({ recipient, fallbackName, timeLeftMs, status, nextRe
   const resetClock = nextResetAt ? TIME_FORMATTER.format(nextResetAt) : "--:--";
   const heading =
     derivedStatus === SLADESH_STATUS.COMPLETED
-      ? `${displayName} fuldførte`
+      ? `${displayName} har gennemført`
       : derivedStatus === SLADESH_STATUS.FAILED
-        ? `${displayName} fejlede`
+        ? `${displayName} har fejlet`
         : `Venter på ${displayName}`;
   const statusCopy =
     derivedStatus === SLADESH_STATUS.COMPLETED
