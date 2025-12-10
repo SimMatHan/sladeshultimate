@@ -349,6 +349,9 @@ export default function Sladesh() {
     return createdAtMs >= blockStart ? latestSenderChallenge : null;
   }, [latestSenderChallenge]);
 
+  /* REMOVED AUTO-DISMISS LOGIC
+     We want the overlay to PERSIST when the challenge is completed/failed,
+     so the sender sees the result until the next reset window.
   useEffect(() => {
     if (!senderChallengeInCurrentBlock) return;
     if (senderChallengeInCurrentBlock.status === SLADESH_STATUS.IN_PROGRESS) return;
@@ -359,15 +362,18 @@ export default function Sladesh() {
       return next;
     });
   }, [senderChallengeInCurrentBlock]);
+  */
 
   const senderLockChallenge = useMemo(() => {
     if (!senderChallengeInCurrentBlock) return null;
+
+    // Check if explicitly dismissed by user (optional, depending on if we want to allow closing)
+    // For now, we respect manual dismissal if implemented, but we removed auto-dismiss.
     const isFinished = finishedSenderChallengeIds.has(senderChallengeInCurrentBlock.id);
     if (isFinished) return null;
-    if (senderChallengeInCurrentBlock.status === SLADESH_STATUS.IN_PROGRESS) {
-      return senderChallengeInCurrentBlock;
-    }
-    return null;
+
+    // Always return the challenge if it's in the current block, regardless of status
+    return senderChallengeInCurrentBlock;
   }, [finishedSenderChallengeIds, senderChallengeInCurrentBlock]);
 
   useEffect(() => {
@@ -750,9 +756,9 @@ function SenderLockOverlay({ recipient, fallbackName, timeLeftMs, status, nextRe
   const resetClock = nextResetAt ? TIME_FORMATTER.format(nextResetAt) : "--:--";
   const heading =
     derivedStatus === SLADESH_STATUS.COMPLETED
-      ? `${displayName} har gennemført`
+      ? `${displayName} har gennemført sin Sladesh`
       : derivedStatus === SLADESH_STATUS.FAILED
-        ? `${displayName} har fejlet`
+        ? `${displayName} har fejlet sin Sladesh`
         : `Venter på ${displayName}`;
   const statusCopy =
     derivedStatus === SLADESH_STATUS.COMPLETED
