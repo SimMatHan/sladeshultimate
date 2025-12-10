@@ -772,42 +772,38 @@ exports.onSladeshSent = functions
     .onCreate(async (snap, context) => {
         const challenge = snap.data();
         const challengeId = context.params.challengeId;
+        const receiverId = challenge?.recipientId || challenge?.receiverId;
 
-        if (!challenge || !challenge.receiverId) {
-            console.warn("[sladesh] Missing challenge data or receiverId", { challengeId });
+        if (!challenge || !receiverId) {
+            console.warn("[sladesh] Missing challenge data or receiver", { challengeId });
             return null;
         }
 
         console.log("[sladesh] Processing new Sladesh challenge", {
             challengeId,
             senderId: challenge.senderId,
-            receiverId: challenge.receiverId
+            receiverId
         });
 
         try {
             // Get receiver's user document
-            const receiverDoc = await db.collection("users").doc(challenge.receiverId).get();
+            const receiverDoc = await db.collection("users").doc(receiverId).get();
 
             if (!receiverDoc.exists) {
-                console.warn("[sladesh] Receiver not found", { receiverId: challenge.receiverId });
+                console.warn("[sladesh] Receiver not found", { receiverId });
                 return null;
             }
 
             const senderName = challenge.senderName || "En ven";
             const channelId = challenge.channelId || null;
-
-            if (channelId === DEN_AABNE_CHANNEL_ID) {
-                console.log("[sladesh] Skipping notification for Den Åbne Kanal", {
-                    challengeId,
-                    channelId
-                });
-                return null;
-            }
+            const receiverName = challenge.recipientName || challenge.receiverName || "En ven";
 
             // Build notification payload
             const payload = buildNotificationPayload("sladesh_received", {
                 senderId: challenge.senderId,
                 senderName,
+                receiverId,
+                receiverName,
                 sladeshId: challengeId,
                 channelId
             });
@@ -817,12 +813,14 @@ exports.onSladeshSent = functions
                 channelId,
                 senderId: challenge.senderId,
                 senderName,
+                receiverId,
+                receiverName,
                 type: "sladesh_received"
             });
 
             console.log("[sladesh] Notification delivered", {
                 challengeId,
-                receiverId: challenge.receiverId,
+                receiverId,
                 sent: result.sent,
                 failed: result.failed,
                 skipped: result.skipped
@@ -852,26 +850,23 @@ exports.onSladeshCompleted = functions
 
         const beforeStatus = (before.status || "").toString().toLowerCase();
         const afterStatus = (after.status || "").toString().toLowerCase();
+        const isCompleted = afterStatus === "completed";
+        const isFailed = afterStatus === "failed";
+        const wasTerminal = beforeStatus === "completed" || beforeStatus === "failed";
 
-        if (afterStatus !== "completed" || beforeStatus === "completed") {
+        // Only notify on first transition into a terminal state (completed/failed)
+        if ((!isCompleted && !isFailed) || wasTerminal || beforeStatus === afterStatus) {
             return null;
         }
 
         const senderId = after.senderId;
-        const receiverId = after.receiverId;
+        const receiverId = after.recipientId || after.receiverId;
         const receiverName = after.recipientName || after.receiverName || "En ven";
         const channelId = after.channelId || null;
+        const outcome = isFailed ? "failed" : "completed";
 
         if (!senderId) {
             console.warn("[sladesh] Missing senderId on completion", { challengeId });
-            return null;
-        }
-
-        if (channelId === DEN_AABNE_CHANNEL_ID) {
-            console.log("[sladesh] Skipping completion notification for Den Åbne Kanal", {
-                challengeId,
-                channelId
-            });
             return null;
         }
 
@@ -886,12 +881,15 @@ exports.onSladeshCompleted = functions
                 receiverId,
                 receiverName,
                 sladeshId: challengeId,
-                channelId
+                channelId,
+                outcome
             });
 
             const result = await deliverNotificationToUserDoc(senderDoc, payload, {
                 channelId,
                 receiverId,
+                receiverName,
+                status: outcome,
                 type: "sladesh_completed",
                 sladeshId: challengeId
             });
