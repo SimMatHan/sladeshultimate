@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { ensureFreshCheckInStatus } from './userService'
+import { DRINK_CATEGORY_ID_SET } from '../constants/drinks'
 
 // Simple in-memory cache per channel
 const cache = new Map()
@@ -48,6 +49,9 @@ function buildProfileFromUserData(userId, userData) {
   const drinkBreakdown = []
   if (userData.drinkTypes) {
     Object.entries(userData.drinkTypes).forEach(([type, count]) => {
+      if (!DRINK_CATEGORY_ID_SET.has(type)) {
+        return
+      }
       drinkBreakdown.push({
         id: `${userId}-${type}`,
         label: formatDrinkTypeLabel(type),
@@ -64,6 +68,9 @@ function buildProfileFromUserData(userId, userData) {
   if (userData.drinkVariations && Object.keys(userData.drinkVariations).length > 0) {
     let maxCount = 0
     Object.entries(userData.drinkVariations).forEach(([type, variations]) => {
+      if (!DRINK_CATEGORY_ID_SET.has(type)) {
+        return
+      }
       if (variations && typeof variations === 'object') {
         Object.entries(variations).forEach(([label, count]) => {
           if (count > maxCount) {

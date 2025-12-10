@@ -1,9 +1,11 @@
 export const CATEGORIES = [
-  { id: "beer", name: "Øl", icon: "🍺" },
-  { id: "cider", name: "Cider", icon: "🍏" },
-  { id: "wine", name: "Vin", icon: "🍷" },
-  { id: "cocktail", name: "Cocktails", icon: "🍸" },
-  { id: "shot", name: "Shots", icon: "🥃" },
+  { id: "beer", name: "Øl", icon: "🍺", isDrink: true },
+  { id: "cider", name: "Cider", icon: "🍏", isDrink: true },
+  { id: "wine", name: "Vin", icon: "🍷", isDrink: true },
+  { id: "cocktail", name: "Cocktails", icon: "🍸", isDrink: true },
+  { id: "shot", name: "Shots", icon: "🥃", isDrink: true },
+  // Non-drink events are logged under the "Andet" category but excluded from drink stats.
+  { id: "other", name: "Andet", icon: "🌀", isDrink: false },
 ];
 
 export const CATEGORY_THEMES = {
@@ -21,6 +23,9 @@ export const CATEGORY_THEMES = {
   },
   shot: {
     gradient: "linear-gradient(135deg, rgba(242, 153, 74, 0.75), rgba(242, 201, 76, 0.75))",
+  },
+  other: {
+    gradient: "linear-gradient(135deg, rgba(146, 168, 209, 0.75), rgba(99, 102, 241, 0.75))",
   },
 };
 
@@ -72,8 +77,20 @@ export const DEFAULT_VARIANTS = {
     { name: "Snaps", description: "Traditionel akvavit bedst iskold." },
     { name: "Gammel Dansk", description: "Bitter urtelikør fra Danmark." },
   ],
+  other: [
+    { name: "Cigaret", description: "Hold styr på smøgerne uden at tælle dem som drinks." },
+    { name: "Toiletbesøg", description: "Log pauser uden at påvirke promille og stats." },
+    { name: "Vand", description: "Husk at drik vand!" },
+  ],
 };
 
 
 export const CATEGORY_IDS = CATEGORIES.map((category) => category.id);
+export const NON_DRINK_CATEGORY_IDS = CATEGORIES.filter((category) => category.isDrink === false).map(
+  (category) => category.id
+);
+export const DRINK_CATEGORIES = CATEGORIES.filter((category) => category.isDrink !== false);
+export const DRINK_CATEGORY_IDS = DRINK_CATEGORIES.map((category) => category.id);
+export const DRINK_CATEGORY_ID_SET = new Set(DRINK_CATEGORY_IDS);
+export const NON_DRINK_CATEGORY_ID_SET = new Set(NON_DRINK_CATEGORY_IDS);
 

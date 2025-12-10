@@ -33,6 +33,7 @@ export const USER_SCHEMA = {
   drinkVariations: 'object',  // Per-run variations { "beer": { "Lager": 5, "IPA": 3 }, "cocktail": { "Mojito": 2 } } (resets at 10:00)
   allTimeDrinkVariations: 'object', // Lifetime variations { "beer": { "Lager": 50, "IPA": 30 }, "cocktail": { "Mojito": 20 } } (never resets)
   currentRunDrinkCount: 'number', // Per-run counter (resets at 10:00)
+  // NOTE: Non-drink logs (category "other") are stored in the same variation maps but do NOT contribute to drink counters.
   achievements: 'map',        // { [achievementId]: { count: number, firstUnlockedAt: timestamp, lastUnlockedAt: timestamp } }
   totalRunResets: 'number',   // Total times the user has hit the run reset button
   lastDrinkAt: 'timestamp | null', // Last drink timestamp for recent drinks ordering
@@ -71,7 +72,7 @@ export const USER_SCHEMA = {
 export const DRINK_VARIATION_SCHEMA = {
   name: 'string',            // Display name of the drink variation
   description: 'string',     // Short description (one or two sentences)
-  categoryId: 'string',      // One of: "beer" | "cider" | "wine" | "cocktail" | "shot"
+  categoryId: 'string',      // One of: "beer" | "cider" | "wine" | "cocktail" | "shot" | "other" (non-drink)
   createdBy: 'string | null',// Admin user identifier (email or uid)
   createdAt: 'timestamp'     // When the variation was created
 }

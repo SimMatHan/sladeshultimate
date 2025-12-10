@@ -6,6 +6,7 @@ import { useLocation } from "./LocationContext";
 import { addDrink, removeDrink, resetCurrentRun, updateUserLocation } from "../services/userService";
 import { useChannel } from "../hooks/useChannel";
 import { clearLeaderboardCache } from "../services/leaderboardService";
+import { DRINK_CATEGORY_ID_SET, NON_DRINK_CATEGORY_ID_SET } from "../constants/drinks";
 
 const DrinkLogContext = createContext(null);
 
@@ -72,6 +73,7 @@ export function DrinkLogProvider({ children }) {
         console.log("[drink-log] adjustVariantCount: No current user, aborting");
         return;
       }
+      const isNonDrinkCategory = NON_DRINK_CATEGORY_ID_SET.has(catId);
 
       setVariantCounts((prev) => {
         const category = prev[catId] ?? {};
@@ -97,13 +99,13 @@ export function DrinkLogProvider({ children }) {
           // Invalidate leaderboard cache so it shows fresh currentRunDrinkCount
           // This ensures Leaderboard updates immediately when drinks are logged
           // Note: With real-time subscriptions, this is a backup - subscriptions handle most updates
-          if (selectedChannel?.id) {
+          if (!isNonDrinkCategory && selectedChannel?.id) {
             clearLeaderboardCache(selectedChannel.id);
           }
 
           // Update location when logging a drink (so user appears on map)
           // This runs asynchronously and doesn't block the drink log
-          (async () => {
+          if (!isNonDrinkCategory) (async () => {
             try {
               // Update location in context
               updateLocation();
@@ -158,7 +160,7 @@ export function DrinkLogProvider({ children }) {
           await removeDrink(currentUser.uid, catId, variantName);
 
           // Invalidate leaderboard cache when removing drinks too
-          if (selectedChannel?.id) {
+          if (!isNonDrinkCategory && selectedChannel?.id) {
             clearLeaderboardCache(selectedChannel.id);
           }
         }
@@ -206,15 +208,18 @@ export function DrinkLogProvider({ children }) {
   const categoryTotals = useMemo(() => {
     if (!variantCounts) return {};
     return Object.fromEntries(
-      Object.entries(variantCounts).map(([catId, variants]) => [
-        catId,
-        Object.values(variants).reduce((sum, value) => sum + value, 0),
-      ])
+      Object.entries(variantCounts)
+        .filter(([catId]) => DRINK_CATEGORY_ID_SET.has(catId))
+        .map(([catId, variants]) => [
+          catId,
+          Object.values(variants).reduce((sum, value) => sum + value, 0),
+        ])
     );
   }, [variantCounts]);
 
   const currentRunDrinkCount = useMemo(() => {
-    return Object.values(variantCounts).reduce((total, category) => {
+    return Object.entries(variantCounts).reduce((total, [catId, category]) => {
+      if (!DRINK_CATEGORY_ID_SET.has(catId)) return total;
       return total + Object.values(category || {}).reduce((sum, count) => sum + count, 0);
     }, 0);
   }, [variantCounts]);

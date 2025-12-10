@@ -9,7 +9,7 @@ import { useCheckInGate } from "../contexts/CheckInContext";
 import { useUserData } from "../contexts/UserDataContext";
 import { useAuth } from "../hooks/useAuth";
 import { getNextResetBoundary } from "../services/userService";
-import { CATEGORIES } from "../constants/drinks";
+import { CATEGORIES, DRINK_CATEGORY_ID_SET } from "../constants/drinks";
 import { useDrinkLog } from "../contexts/DrinkLogContext";
 import { MAP_TILE_LAYER_PROPS } from "../utils/mapTiles";
 import { ACHIEVEMENTS } from "../config/achievements";
@@ -152,6 +152,9 @@ export default function Home() {
     const lastDrinkAt = normalizeToDate(userData?.lastDrinkAt);
 
     Object.entries(variantCounts).forEach(([catId, variants]) => {
+      if (!DRINK_CATEGORY_ID_SET.has(catId)) {
+        return;
+      }
       const category = CATEGORIES.find(cat => cat.id === catId);
       const categoryName = category?.name || catId;
 

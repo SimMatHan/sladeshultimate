@@ -4,11 +4,15 @@ import { motion } from 'framer-motion';
 import { getUser } from '../services/userService';
 import { ACHIEVEMENTS } from '../config/achievements';
 import { USE_MOCK_DATA } from '../config/env';
+import { DRINK_CATEGORY_ID_SET } from '../constants/drinks';
 
 function buildVariationBreakdown(variations, fallback = []) {
   const breakdown = [];
 
   Object.entries(variations || {}).forEach(([type, typeVariations]) => {
+    if (!DRINK_CATEGORY_ID_SET.has(type)) {
+      return;
+    }
     if (typeVariations && typeof typeVariations === 'object') {
       Object.entries(typeVariations).forEach(([variation, count]) => {
         if (count > 0) {
@@ -34,6 +38,9 @@ function buildTypeBreakdown(drinkTypes) {
   const breakdown = [];
 
   Object.entries(drinkTypes || {}).forEach(([type, count]) => {
+    if (!DRINK_CATEGORY_ID_SET.has(type)) {
+      return;
+    }
     if (count > 0) {
       breakdown.push({
         id: type,
@@ -59,6 +66,18 @@ function formatDrinkTypeLabel(type) {
     other: 'Andet'
   };
   return labels[type] || type.charAt(0).toUpperCase() + type.slice(1);
+}
+
+function filterDrinkVariations(variations = {}) {
+  return Object.fromEntries(
+    Object.entries(variations || {}).filter(([type]) => DRINK_CATEGORY_ID_SET.has(type))
+  );
+}
+
+function filterDrinkTypes(drinkTypes = {}) {
+  return Object.fromEntries(
+    Object.entries(drinkTypes || {}).filter(([type]) => DRINK_CATEGORY_ID_SET.has(type))
+  );
 }
 
 export default function ProfileDetails() {
@@ -125,12 +144,15 @@ export default function ProfileDetails() {
   // Build drink breakdown
   const currentRun = profile?.currentRunDrinkCount || 0;
 
-  const currentRunVariations = profile?.currentRunDrinkVariations || profile?.drinkVariations || {};
+  const currentRunVariations = useMemo(
+    () => filterDrinkVariations(profile?.currentRunDrinkVariations || profile?.drinkVariations || {}),
+    [profile?.currentRunDrinkVariations, profile?.drinkVariations]
+  );
   const allTimeVariations = useMemo(() => {
     // Use the new allTimeDrinkVariations field which tracks lifetime variations
     // This field is never reset and accumulates all drink variations over time
     // Format: { "beer": { "Lager": 50, "IPA": 30 }, "cocktail": { "Mojito": 20 } }
-    return profile?.allTimeDrinkVariations || {};
+    return filterDrinkVariations(profile?.allTimeDrinkVariations || {});
   }, [profile?.allTimeDrinkVariations]);
 
   const currentRunBreakdown = useMemo(
@@ -141,7 +163,7 @@ export default function ProfileDetails() {
   // For all-time view, use drinkTypes (type-level aggregation) instead of allTimeDrinkVariations
   // This shows drink type percentages (Beer: 60%, Wine: 40%) instead of variation percentages
   const allTimeBreakdown = useMemo(
-    () => buildTypeBreakdown(profile?.drinkTypes),
+    () => buildTypeBreakdown(filterDrinkTypes(profile?.drinkTypes)),
     [profile?.drinkTypes]
   );
 
@@ -187,7 +209,7 @@ export default function ProfileDetails() {
         : null;
     } else {
       // All-time: use drinkTypes directly
-      const drinkTypes = profile?.drinkTypes || {};
+      const drinkTypes = filterDrinkTypes(profile?.drinkTypes || {});
       let topType = null;
       let topCount = 0;
 

@@ -17,6 +17,7 @@ import {
 import { db } from '../firebase'
 import { deriveInitials, generateAvatarGradient } from '../config/firestore.schema'
 import { normalizePromilleInput } from '../utils/promille'
+import { NON_DRINK_CATEGORY_IDS } from '../constants/drinks'
 
 const RESET_BOUNDARY_HOUR = 12 // Check-in/message window resets at local 12:00
 const RESET_TIMEZONE = 'Europe/Copenhagen'
@@ -76,6 +77,9 @@ function getTimeZoneOffsetMs(date) {
 function shiftDateByOffset(date, offsetMs) {
   return new Date(date.getTime() + offsetMs)
 }
+
+const NON_DRINK_CATEGORY_ID_SET = new Set(NON_DRINK_CATEGORY_IDS)
+const isNonDrinkCategory = (categoryId) => NON_DRINK_CATEGORY_ID_SET.has(categoryId)
 
 export function getLatestResetBoundary(now = new Date()) {
   const offsetMs = getTimeZoneOffsetMs(now)
@@ -481,23 +485,28 @@ export async function addDrink(userId, type, variation) {
 
   const userData = userSnap.data()
   const refreshedData = await refreshDrinkDayStatus(userRef, userData)
+  const isNonDrink = isNonDrinkCategory(type)
 
   // Read current drinkVariations to handle nested path initialization
   const currentDrinkVariations = refreshedData.drinkVariations || {}
   const currentAllTimeVariations = refreshedData.allTimeDrinkVariations || {}
 
   // Build updates using increment for atomic operations
-  // DATA FLOW: currentRunDrinkCount is computed here using Firestore increment
-  // This ensures atomic updates and prevents race conditions
-  // The value is stored in the user document and read by Leaderboard via real-time subscriptions
-  // This fixes the "stuck at 0" bug by ensuring the count is always updated atomically
+  // When logging a non-drink category, we store the variation but skip drink-related counters.
   const updates = {
-    totalDrinks: increment(1),
-    [`drinkTypes.${type}`]: increment(1),
-    currentRunDrinkCount: increment(1), // This is the source of truth for currentRunDrinkCount
-    lastDrinkAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     lastActiveAt: serverTimestamp()
+  }
+
+  if (!isNonDrink) {
+    // DATA FLOW: currentRunDrinkCount is computed here using Firestore increment
+    // This ensures atomic updates and prevents race conditions
+    // The value is stored in the user document and read by Leaderboard via real-time subscriptions
+    // This fixes the "stuck at 0" bug by ensuring the count is always updated atomically
+    updates.totalDrinks = increment(1)
+    updates[`drinkTypes.${type}`] = increment(1)
+    updates.currentRunDrinkCount = increment(1) // This is the source of truth for currentRunDrinkCount
+    updates.lastDrinkAt = serverTimestamp()
   }
 
   // Handle nested drinkVariations path (current run - resets daily)
@@ -558,6 +567,7 @@ export async function removeDrink(userId, type, variation) {
   const drinkVariations = refreshedData.drinkVariations || {}
   const typeVariations = drinkVariations[type] || {}
   const currentVariationCount = typeVariations[variation] || 0
+  const isNonDrink = isNonDrinkCategory(type)
 
   // If value is 0 or doesn't exist, do nothing (never write negative values)
   if (currentVariationCount <= 0) {
@@ -571,13 +581,17 @@ export async function removeDrink(userId, type, variation) {
 
   // Use increment(-1) for all fields
   const updates = {
-    totalDrinks: increment(-1),
-    [`drinkTypes.${type}`]: increment(-1),
-    [`drinkVariations.${type}.${variation}`]: increment(-1),
-    currentRunDrinkCount: increment(-1),
     updatedAt: serverTimestamp(),
     lastActiveAt: serverTimestamp()
   }
+
+  if (!isNonDrink) {
+    updates.totalDrinks = increment(-1)
+    updates[`drinkTypes.${type}`] = increment(-1)
+    updates.currentRunDrinkCount = increment(-1)
+  }
+
+  updates[`drinkVariations.${type}.${variation}`] = increment(-1)
 
   // Only decrement all-time variations if count is > 0
   if (currentAllTimeCount > 0) {
