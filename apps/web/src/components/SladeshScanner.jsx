@@ -3,11 +3,18 @@ import { useSladesh, SLADESH_STATUS } from '../contexts/SladeshContext';
 import { useTheme } from '../contexts/ThemeContext';
 
 export default function SladeshScanner() {
-    const { activeChallenge, updateChallenge, completeChallenge, failChallenge } = useSladesh();
+    const { activeChallenge, updateChallenge, completeChallenge, failChallenge, markScannerSeen } = useSladesh();
     const { isDarkMode } = useTheme();
     const [step, setStep] = useState('intro'); // intro, before, drinking, after, success
     const [timeLeft, setTimeLeft] = useState(null);
     const fileInputRef = useRef(null);
+
+    // Mark this challenge as seen when scanner first appears
+    useEffect(() => {
+        if (activeChallenge?.id) {
+            markScannerSeen(activeChallenge.id);
+        }
+    }, [activeChallenge?.id, markScannerSeen]);
 
     useEffect(() => {
         if (!activeChallenge) return;
@@ -29,6 +36,15 @@ export default function SladeshScanner() {
 
         return () => clearInterval(interval);
     }, [activeChallenge, failChallenge]);
+
+    // Auto-dismiss scanner when challenge is completed or failed
+    useEffect(() => {
+        if (!activeChallenge) return;
+        if (activeChallenge.status === SLADESH_STATUS.COMPLETED || activeChallenge.status === SLADESH_STATUS.FAILED) {
+            // Scanner will automatically unmount when activeChallenge becomes null
+            // This is handled by the parent component (AppShell)
+        }
+    }, [activeChallenge]);
 
     if (!activeChallenge) return null;
 
@@ -175,14 +191,10 @@ export default function SladeshScanner() {
                 <div className="text-center space-y-6 max-w-sm animate-in zoom-in duration-500">
                     <div className="text-8xl">🏆</div>
                     <h1 className="text-3xl font-bold" style={{ color: 'var(--brand)' }}>Godt klaret!</h1>
-                    <p style={{ color: 'var(--muted)' }}>Du overlevede Sladesh'en.</p>
-                    <button
-                        onClick={() => {/* The lock will be released automatically by context update, but we can render a close button just in case or wait */ }}
-                        className="w-full py-4 rounded-2xl text-lg font-bold"
-                        style={{ backgroundColor: 'var(--subtle)', color: 'var(--ink)' }}
-                    >
-                        Luk (Låsen fjernes...)
-                    </button>
+                    <p style={{ color: 'var(--muted)' }}>Du overlevede Sladesh'en. Scanneren lukker automatisk...</p>
+                    <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                        Hvis scanneren ikke lukker, kan du genstarte appen.
+                    </p>
                 </div>
             )}
         </div>

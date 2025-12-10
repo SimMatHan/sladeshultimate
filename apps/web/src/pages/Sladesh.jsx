@@ -589,7 +589,6 @@ export default function Sladesh() {
 
   return (
     <Page title="Sladesh">
-      <ComingSoonOverlay />
       {senderLockChallenge ? (
         <SenderLockOverlay
           recipient={lockedRecipientProfile}
@@ -1161,24 +1160,4 @@ function formatResetCountdown(ms) {
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 }
 
-function ComingSoonOverlay() {
-  const { isDarkMode } = useTheme();
-  return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center px-6 py-8 backdrop-blur-sm"
-      style={{ backgroundColor: isDarkMode ? "rgba(6, 10, 24, 0.85)" : "rgba(11, 17, 32, 0.75)" }}
-    >
-      <div
-        className="w-full max-w-sm rounded-[28px] p-8 text-center shadow-[0_24px_60px_rgba(15,23,42,0.25)]"
-        style={{ backgroundColor: "var(--surface)" }}
-      >
-        <h2 className="text-xl font-bold mb-2" style={{ color: "var(--ink)" }}>
-          Coming soon...
-        </h2>
-        <p className="text-sm" style={{ color: "var(--muted)" }}>
-          Vi arbejder på højtryk for at gøre Sladesh klar til dig!
-        </p>
-      </div>
-    </div>
-  );
-}
+

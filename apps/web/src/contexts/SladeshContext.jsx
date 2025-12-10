@@ -16,6 +16,7 @@ const STORAGE_KEY = 'sladesh_challenges';
 export function SladeshProvider({ children }) {
     const { currentUser } = useAuth();
     const userNameCacheRef = useRef({});
+    const scannerSeenChallengesRef = useRef(new Set()); // Track which challenges have shown the scanner
 
     // Load challenges from localStorage
     const [challenges, setChallenges] = useState(() => {
@@ -38,11 +39,19 @@ export function SladeshProvider({ children }) {
     }, [challenges]);
 
     // Find active challenge for current user (as receiver)
+    // Only show scanner if we haven't seen this challenge yet
     const activeChallenge = useMemo(() => {
         if (!currentUser) return null;
-        return challenges.find(
+        const challenge = challenges.find(
             (c) => c.receiverId === currentUser.uid && c.status === SLADESH_STATUS.IN_PROGRESS
         );
+
+        // If challenge exists and we've already shown scanner for it, don't lock again
+        if (challenge && scannerSeenChallengesRef.current.has(challenge.id)) {
+            return null;
+        }
+
+        return challenge;
     }, [challenges, currentUser]);
 
     // Find active challenge the current user has sent (to lock sender UI)
@@ -52,6 +61,24 @@ export function SladeshProvider({ children }) {
             (c) => c.senderId === currentUser.uid && c.status === SLADESH_STATUS.IN_PROGRESS
         );
     }, [challenges, currentUser]);
+
+    // Mark a challenge as seen when scanner is shown
+    const markScannerSeen = useCallback((challengeId) => {
+        if (challengeId) {
+            scannerSeenChallengesRef.current.add(challengeId);
+        }
+    }, []);
+
+    // Clean up seen challenges when they're completed/failed
+    useEffect(() => {
+        const completedOrFailedIds = challenges
+            .filter(c => c.status === SLADESH_STATUS.COMPLETED || c.status === SLADESH_STATUS.FAILED)
+            .map(c => c.id);
+
+        completedOrFailedIds.forEach(id => {
+            scannerSeenChallengesRef.current.delete(id);
+        });
+    }, [challenges]);
 
     const resolveUserName = useCallback(async (userId, fallback = 'Ukendt') => {
         if (!userId) return fallback;
@@ -280,6 +307,7 @@ export function SladeshProvider({ children }) {
         completeChallenge,
         getUserSladeshStatus,
         debugReceiveSladesh,
+        markScannerSeen,
     };
 
     return (
