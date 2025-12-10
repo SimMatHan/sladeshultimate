@@ -3,12 +3,36 @@ import { useSladesh, SLADESH_STATUS } from '../contexts/SladeshContext';
 import { useTheme } from '../contexts/ThemeContext';
 
 export default function SladeshScanner() {
-    const { activeChallenge, updateChallenge, completeChallenge, failChallenge, markScannerSeen } = useSladesh();
+    const { activeChallenge, updateChallenge, completeChallenge, failChallenge } = useSladesh();
     const { isDarkMode } = useTheme();
-    const [step, setStep] = useState('intro'); // intro, before, drinking, after, success
+    // Initialize step from Firestore or default to 'intro'
+    const [step, setStep] = useState(() => activeChallenge?.scannerStep || 'intro');
     const [timeLeft, setTimeLeft] = useState(null);
     const fileInputRef = useRef(null);
+    const hasInitialized = useRef(false);
 
+    // Sync step state with Firestore when it changes
+    useEffect(() => {
+        if (!activeChallenge || !hasInitialized.current) return;
+
+        // Update Firestore with current scanner step
+        updateChallenge(activeChallenge.id, {
+            scannerStep: step,
+            scannerLastUpdated: Date.now()
+        });
+    }, [step, activeChallenge, updateChallenge]);
+
+    // Initialize step from activeChallenge on mount or when challenge changes
+    useEffect(() => {
+        if (!activeChallenge) return;
+
+        // Resume from saved step or start from intro
+        const savedStep = activeChallenge.scannerStep || 'intro';
+        setStep(savedStep);
+        hasInitialized.current = true;
+    }, [activeChallenge?.id]);
+
+    // Handle timer countdown
     useEffect(() => {
         if (!activeChallenge) return;
 
@@ -30,7 +54,16 @@ export default function SladeshScanner() {
         return () => clearInterval(interval);
     }, [activeChallenge, failChallenge]);
 
-
+    // Auto-close scanner after success
+    useEffect(() => {
+        if (step === 'success') {
+            const timeout = setTimeout(() => {
+                // Mark challenge as completed, which will cause scanner to unmount
+                completeChallenge(activeChallenge.id, activeChallenge.proofAfterImage);
+            }, 2000);
+            return () => clearTimeout(timeout);
+        }
+    }, [step, activeChallenge, completeChallenge]);
 
     if (!activeChallenge) return null;
 
@@ -53,7 +86,7 @@ export default function SladeshScanner() {
                 updateChallenge(activeChallenge.id, { proofBeforeImage: imageUrl });
                 setStep('drinking');
             } else if (step === 'after') {
-                completeChallenge(activeChallenge.id, imageUrl);
+                updateChallenge(activeChallenge.id, { proofAfterImage: imageUrl });
                 setStep('success');
             }
         };
