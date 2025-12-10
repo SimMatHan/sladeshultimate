@@ -112,15 +112,25 @@ export default function SladeshScanner() {
     // Auto-navigate after completion
     useEffect(() => {
         if (phase === 'completed' && activeChallenge) {
-            console.log('[Scanner] Challenge completed, navigating to home in 5s');
-            const timeout = setTimeout(() => {
-                console.log('[Scanner] Navigating to /home');
+            console.log('[Scanner] Challenge completed, starting 5s countdown');
+
+            const timeout = setTimeout(async () => {
+                console.log('[Scanner] Countdown finished. Marking as COMPLETED and navigating.');
+
+                // NOW we mark it as completed (unmounting the scanner)
+                // Use a try-catch to ensure navigation happens even if Firestore fails
+                try {
+                    await completeChallenge(activeChallenge.id, activeChallenge.proofAfterImage);
+                } catch (err) {
+                    console.error('[Scanner] Failed to complete challenge:', err);
+                }
+
                 navigate('/home');
             }, 5000);
 
             return () => clearTimeout(timeout);
         }
-    }, [phase, activeChallenge?.id, navigate]);
+    }, [phase, activeChallenge?.id, activeChallenge?.proofAfterImage, completeChallenge, navigate]);
 
     // Handle photo capture
     const handlePhotoCapture = useCallback(async (file) => {
@@ -166,13 +176,17 @@ export default function SladeshScanner() {
                     setPhase('failed');
                 } else {
                     // Success!
-                    console.log('[Scanner] Challenge completed successfully!');
+                    console.log('[Scanner] Challenge phase completed! Showing success screen.');
+
+                    // Update phase to 'completed' locally and in Firestore
+                    // NOTE: We do NOT call completeChallenge() yet. 
+                    // We keep status='IN_PROGRESS' so the scanner stays mounted to show the success screen.
                     await updateChallenge(activeChallenge.id, {
                         proofAfterImage: imageData,
-                        phase: 'empty_captured',
+                        phase: 'completed',
                         emptyCapturedAt: now
                     });
-                    await completeChallenge(activeChallenge.id, imageData);
+
                     setPhase('completed');
                 }
             }
