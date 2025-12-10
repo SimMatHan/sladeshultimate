@@ -14,24 +14,23 @@ function buildVariationBreakdown(variations, fallback = []) {
       return;
     }
     if (typeVariations && typeof typeVariations === 'object') {
-      Object.entries(typeVariations).forEach(([variation, count]) => {
-        if (count > 0) {
-          breakdown.push({
-            id: `${type}-${variation}`,
-            label: variation,
-            type,
-            count,
-          });
-        }
-      });
+      const totalForType = Object.values(typeVariations).reduce((sum, value) => sum + (value || 0), 0);
+      if (totalForType > 0) {
+        breakdown.push({
+          id: type,
+          label: formatDrinkTypeLabel(type),
+          type,
+          count: totalForType,
+        });
+      }
     }
   });
 
   if (breakdown.length > 0) {
-    return breakdown.sort((a, b) => b.count - a.count);
+    return breakdown;
   }
 
-  return fallback || [];
+  return (fallback || []).map((item) => (item.type ? { ...item, label: formatDrinkTypeLabel(item.type) } : item));
 }
 
 function buildTypeBreakdown(drinkTypes) {
@@ -86,6 +85,16 @@ function getOtherVariations(allTimeDrinkVariations = {}) {
 
 function getOtherTotals(otherVariations = {}) {
   return Object.values(otherVariations || {}).reduce((sum, count) => sum + (count || 0), 0);
+}
+
+function sortBreakdownByPercentage(items = [], total = 0) {
+  return [...items].sort((a, b) => {
+    const aPct = total ? a.count / total : 0;
+    const bPct = total ? b.count / total : 0;
+    if (bPct !== aPct) return bPct - aPct;
+    if (b.count !== a.count) return b.count - a.count;
+    return (a.label || '').localeCompare(b.label || '', 'da');
+  });
 }
 
 export default function ProfileDetails() {
@@ -204,6 +213,11 @@ export default function ProfileDetails() {
     return profile?.totalDrinks || getTotalCount(allTimeBreakdown);
   }, [breakdownScope, currentRun, currentRunBreakdown, allTimeBreakdown, profile?.totalDrinks]);
 
+  const sortedBreakdown = useMemo(
+    () => sortBreakdownByPercentage(selectedBreakdown, percentageBase),
+    [selectedBreakdown, percentageBase]
+  );
+
   const favoriteType = useMemo(() => {
     // For current run, use variations; for all-time, use drinkTypes
     if (breakdownScope === 'current') {
@@ -251,7 +265,7 @@ export default function ProfileDetails() {
     }
   }, [percentageBase, breakdownScope, currentRunVariations, profile?.drinkTypes]);
 
-  const favoriteVariation = selectedBreakdown[0] || null;
+  const favoriteVariation = sortedBreakdown[0] || null;
 
   // Get unlocked achievements
   const unlockedAchievements = useMemo(() => {
@@ -384,9 +398,9 @@ export default function ProfileDetails() {
               : `Ingen favorit endnu \u2014 log en drink i ${breakdownScope === 'current' ? 'dette run' : 'Sladesh'} for at se din favorit.`}
           </p>
         </div>
-        {selectedBreakdown.length > 0 ? (
+        {sortedBreakdown.length > 0 ? (
           <div className="space-y-4">
-            {selectedBreakdown.map((item) => {
+            {sortedBreakdown.map((item) => {
               const percentage = percentageBase ? Math.round((item.count / percentageBase) * 100) : 0;
               return (
                 <div key={item.id} className="flex flex-col gap-1">
