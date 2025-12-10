@@ -40,6 +40,7 @@ const PAGE_TITLES = {
   '/manage-channels': { title: 'Administrer kanaler', subtitle: null },
   '/manage-profile': { title: 'Administrer profil', subtitle: null },
   '/notifications': { title: 'Notifikationer', subtitle: null },
+  '/donation': { title: 'Støt Sladesh', subtitle: null },
   '/admin': { title: 'Adminportal', subtitle: null },
 }
 

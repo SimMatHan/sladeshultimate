@@ -574,7 +574,7 @@ export default function TopBar({
   const isProfilePage = location.pathname.startsWith('/profile/')
 
   const showBackButton =
-    ['/admin', '/manage-channels', '/manage-profile'].includes(location.pathname) ||
+    ['/admin', '/manage-channels', '/manage-profile', '/donation'].includes(location.pathname) ||
     isAchievementsPage ||
     isDrinkPage ||
     isMapPage ||

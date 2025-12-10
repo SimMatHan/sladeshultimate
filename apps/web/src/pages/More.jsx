@@ -21,6 +21,8 @@ function ActionCard({
       "linear-gradient(135deg, rgba(252, 231, 243, 0.9), rgba(255, 228, 230, 0.75))",
     profile:
       "linear-gradient(135deg, rgba(226, 232, 240, 0.9), rgba(219, 234, 254, 0.75))",
+    support:
+      "linear-gradient(135deg, rgba(255, 56, 92, 0.18), rgba(255, 177, 193, 0.4))",
     critical:
       "linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(220, 38, 38, 0.3))",
   };
@@ -125,6 +127,14 @@ export default function More() {
             to="/manage-channels"
             actionLabel="Kanaler"
             tone="channels"
+          />
+          <ActionCard
+            icon="🤝"
+            title="Støt Sladesh"
+            description="Giv en frivillig MobilePay-donation til hobbyprojektet."
+            to="/donation"
+            actionLabel="Support"
+            tone="support"
           />
           <ActionCard
             icon="🧑‍🎨"

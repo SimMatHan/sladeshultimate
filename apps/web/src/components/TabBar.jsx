@@ -22,7 +22,7 @@ const tabs = [
       (pathname, location) => pathname.startsWith('/profile/') && location.state?.from === 'leaderboard'
     ]
   },
-  { to: '/more', label: 'More', Icon: MenuIcon, additionalActivePaths: ['/manage-channels', '/manage-profile', '/admin'] },
+  { to: '/more', label: 'More', Icon: MenuIcon, additionalActivePaths: ['/manage-channels', '/manage-profile', '/admin', '/donation'] },
 ]
 
 function Item({ to, label, Icon, end, additionalActivePaths = [] }) {

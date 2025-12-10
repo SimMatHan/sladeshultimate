@@ -24,6 +24,7 @@ import ProfileDetails from './pages/ProfileDetails'
 import { isAdminUser } from './config/admin'
 import useDisplayMode from './hooks/useDisplayMode'
 import useStandaloneOverscrollBlock from './hooks/useStandaloneOverscrollBlock'
+import DonationPage from './pages/DonationPage'
 
 /** Firebase Auth guards - check if user is authenticated */
 function useAuthGuard() {
@@ -170,6 +171,7 @@ export default function RoutesView() {
         <Route path="sladesh" element={<Sladesh />} />
         <Route path="map" element={<Map />} />
         <Route path="more" element={<More />} />
+        <Route path="donation" element={<DonationPage />} />
         <Route path="drink/:categoryId" element={<DrinkVariations />} />
         <Route path="manage-channels" element={<ManageChannels />} />
         <Route path="profile/:userId" element={<ProfileDetails />} />
