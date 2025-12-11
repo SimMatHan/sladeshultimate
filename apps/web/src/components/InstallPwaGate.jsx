@@ -10,7 +10,7 @@ export default function InstallPwaGate({
           📱
         </div>
         <h1 className="text-2xl font-semibold text-[color:var(--ink,#F8FAFC)]">
-          Installér SladeshUltimate
+          Installér Sladesh
         </h1>
         <p className="mt-3 text-sm leading-relaxed text-[color:var(--muted,#B9C0D4)]">
           Tilføj appen til din hjemmeskærm for den bedste og hurtigste

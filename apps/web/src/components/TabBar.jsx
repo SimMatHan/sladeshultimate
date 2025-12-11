@@ -58,7 +58,8 @@ function Item({ to, label, Icon, end, additionalActivePaths = [] }) {
 export default function TabBar() {
   return (
     <nav
-      className="h-16 grid grid-cols-4 bg-[var(--surface)]"
+      data-role="tabbar"
+      className="h-16 grid grid-cols-4 bg-[var(--tabbar-bg,var(--surface))]"
       aria-label="Primary navigation"
     >
       {tabs.map((tab) => (

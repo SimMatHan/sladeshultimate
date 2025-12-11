@@ -3,12 +3,14 @@ import { Outlet, useLocation as useRouteLocation } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import TopBar from './TopBar'
 import TabBar from './TabBar'
+import DonationBanner from './DonationBanner'
 import { useAuth } from '../hooks/useAuth'
 import { addCheckIn, getUser, updateUserLocation } from '../services/userService'
 import { incrementCheckInCount } from '../services/statsService'
 import { useLocation as useGeoLocation } from '../contexts/LocationContext'
 import CheckInContext from '../contexts/CheckInContext'
 import { useChannel } from '../hooks/useChannel'
+import { useSessionCountdown } from '../hooks/useSessionCountdown'
 import {
   areNotificationsEnabled,
   ensurePushSubscription,
@@ -30,6 +32,8 @@ import { APP_VERSION } from '../appVersion'
 const CHECK_IN_STORAGE_KEY = 'sladesh:checkedIn'
 const CHECK_IN_GATE_ACTIVATED_KEY = 'sladesh:checkInGateActivated'
 const LAST_SEEN_APP_VERSION_KEY = 'sladesh:lastSeenAppVersion'
+const DONATION_BANNER_DISMISSED_KEY = 'sladesh:donationBannerDismissed'
+const DONATION_SESSION_DURATION_MS = 5 * 60 * 1000
 
 const PAGE_TITLES = {
   '/home': { title: null, subtitle: null }, // title and subtitle will be set dynamically
@@ -79,10 +83,22 @@ export default function AppShell() {
   const [isRequestingNotifications, setIsRequestingNotifications] = useState(false)
   const [notificationError, setNotificationError] = useState(null)
   const [showVersionPopup, setShowVersionPopup] = useState(false)
+  const [donationBannerDismissed, setDonationBannerDismissed] = useState(() => {
+    try {
+      return localStorage.getItem(DONATION_BANNER_DISMISSED_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+  const { isElapsed: hasDonationTimerElapsed } = useSessionCountdown({
+    durationMs: DONATION_SESSION_DURATION_MS,
+    isEnabled: !donationBannerDismissed,
+  })
   const { isLocked } = useSladesh()
   const blockingOverlayVisible =
     (!checkedIn && showCheckInGate) || showSuccessOverlay || showNotificationPrompt || showVersionPopup || isLocked
   const showChannelLoader = isChannelSwitching || (!selectedChannel && channelsLoading)
+  const shouldShowDonationBanner = hasDonationTimerElapsed && !donationBannerDismissed
 
   // FIXED: Lock scroll region when blocking overlays are visible to prevent background scrolling
   useEffect(() => {
@@ -377,6 +393,15 @@ export default function AppShell() {
     }
   }, [])
 
+  const handleDismissDonationBanner = useCallback(() => {
+    setDonationBannerDismissed(true)
+    try {
+      localStorage.setItem(DONATION_BANNER_DISMISSED_KEY, '1')
+    } catch {
+      // ignore storage errors
+    }
+  }, [])
+
   return (
     <CheckInContext.Provider value={checkInContextValue}>
       <DrinkLogProvider>
@@ -396,6 +421,9 @@ export default function AppShell() {
 
             <main className="scroll-region">
               <div className="mx-auto max-w-[480px] px-4 py-3">
+                {shouldShowDonationBanner && (
+                  <DonationBanner onClose={handleDismissDonationBanner} />
+                )}
                 {/* Removing the location key keeps page components (e.g. DrinkVariations) mounted between category changes, avoiding full remount flicker. */}
                 <Outlet />
               </div>

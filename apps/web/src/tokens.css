@@ -27,6 +27,7 @@
   --subtle: #f7f7f7;
   --line: #ebebeb;
   --line-rgb: 235 235 235;
+  --tabbar-bg: var(--surface);
 
   /* Status */
   --success: #10b981;
@@ -73,6 +74,7 @@
   --subtle: #171717;
   --line: #242424;
   --line-rgb: 36 36 36;
+  --tabbar-bg: #000000;
 
   --success: #34d399;
   --success-rgb: 52 211 153;

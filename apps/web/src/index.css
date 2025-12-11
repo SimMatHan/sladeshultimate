@@ -144,7 +144,7 @@ body.standalone-scroll-guard .scroll-region {
   width: 100%;
   z-index: 70;
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  background: var(--bg);
+  background: var(--tabbar-bg, var(--bg));
   border-top: 1px solid var(--line);
 }
 
