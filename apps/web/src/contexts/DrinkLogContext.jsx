@@ -29,6 +29,24 @@ const buildCategoryCounts = (items = [], source = {}) =>
     return acc;
   }, {});
 
+const mapDrinkVariationsToCounts = (variantsByCategory, drinkVariations = {}, prev = {}) => {
+  if (!variantsByCategory) return prev || {};
+  return Object.fromEntries(
+    Object.entries(variantsByCategory).map(([catId, items]) => [
+      catId,
+      buildCategoryCounts(items, drinkVariations[catId] || {}),
+    ])
+  );
+};
+
+const sumDrinkVariations = (variations = {}) => {
+  return Object.entries(variations).reduce((total, [catId, category]) => {
+    if (!DRINK_CATEGORY_ID_SET.has(catId)) return total;
+    const categoryTotal = Object.values(category || {}).reduce((sum, value) => sum + value, 0);
+    return total + categoryTotal;
+  }, 0);
+};
+
 export function DrinkLogProvider({ children }) {
   const { currentUser } = useAuth();
   const { userData, refreshUserData } = useUserData();
@@ -36,31 +54,51 @@ export function DrinkLogProvider({ children }) {
   const { userLocation, updateLocation } = useLocation();
   const { selectedChannel } = useChannel();
   const spamEventsRef = useRef([]);
+  const mutationQueueRef = useRef(Promise.resolve());
   const [spamCooldownUntil, setSpamCooldownUntil] = useState(null);
   const [spamMessage, setSpamMessage] = useState(null);
   const [spamCooldownRemainingMs, setSpamCooldownRemainingMs] = useState(0);
   const [variantCounts, setVariantCounts] = useState(() => createZeroCounts(variantsByCategory));
+  const [runCountOverride, setRunCountOverride] = useState(null);
   const [isResetting, setIsResetting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const prevVariantsRef = useRef(null);
   const hasLoadedOnce = useRef(false);
 
+  const syncVariantCountsFromSource = useCallback(
+    (drinkVariations, logLabel, runCountFromServer) => {
+      if (!variantsByCategory) return;
+      setVariantCounts((prev) => {
+        const next = mapDrinkVariationsToCounts(variantsByCategory, drinkVariations, prev);
+        prevVariantsRef.current = next;
+        return next;
+      });
+      if (typeof runCountFromServer === "number") {
+        setRunCountOverride(runCountFromServer);
+      }
+      if (logLabel) {
+        const derivedRunCount = sumDrinkVariations(drinkVariations);
+        console.info(`[drink-log] ${logLabel}`, {
+          derivedRunCount,
+          firestoreRunCount: userData?.currentRunDrinkCount,
+        });
+      }
+    },
+    [userData?.currentRunDrinkCount, variantsByCategory]
+  );
+
   useEffect(() => {
     if (!variantsByCategory) return;
 
-    setVariantCounts((prev) => {
-      const next = {};
-      Object.entries(variantsByCategory).forEach(([catId, items]) => {
-        if (userData?.drinkVariations?.[catId]) {
-          next[catId] = buildCategoryCounts(items, userData.drinkVariations[catId]);
-        } else {
-          const previousCategory = prev?.[catId] ?? prevVariantsRef.current?.[catId] ?? {};
-          next[catId] = buildCategoryCounts(items, previousCategory);
-        }
-      });
-      prevVariantsRef.current = next;
-      return next;
-    });
+    if (userData) {
+      syncVariantCountsFromSource(
+        userData.drinkVariations || {},
+        "Hydrated from Firestore userData",
+        userData.currentRunDrinkCount
+      );
+    } else if (userData === null) {
+      syncVariantCountsFromSource({}, "Cleared variant counts for signed-out user", 0);
+    }
 
     // Mark as loaded once we have userData (even if it's empty)
     // This prevents showing "0" before Firebase data arrives
@@ -68,7 +106,13 @@ export function DrinkLogProvider({ children }) {
       hasLoadedOnce.current = true;
       setIsLoading(false);
     }
-  }, [variantsByCategory, userData]);
+  }, [syncVariantCountsFromSource, userData, variantsByCategory]);
+
+  useEffect(() => {
+    if (userData?.currentRunDrinkCount != null) {
+      setRunCountOverride(userData.currentRunDrinkCount);
+    }
+  }, [userData?.currentRunDrinkCount]);
 
   useEffect(() => {
     prevVariantsRef.current = variantCounts;
@@ -104,145 +148,159 @@ export function DrinkLogProvider({ children }) {
     spamEventsRef.current = [];
   }, []);
 
-  const adjustVariantCount = useCallback(
-    async (catId, variantName, delta) => {
-      if (!currentUser) {
-        console.log("[drink-log] adjustVariantCount: No current user, aborting");
-        return;
-      }
-      const isNonDrinkCategory = NON_DRINK_CATEGORY_ID_SET.has(catId);
-
-      let previousSpamEventsSnapshot = null;
-      const isDrinkCategory = !isNonDrinkCategory && DRINK_CATEGORY_ID_SET.has(catId);
-      if (delta > 0 && isDrinkCategory) {
-        const now = Date.now();
-        const cooldownActive = spamCooldownUntil && spamCooldownUntil > now;
-        if (cooldownActive) {
-          setSpamMessage("Du er midlertidigt blokeret for at logge nye drinks. Vent et øjeblik, så er du klar igen.");
-          return;
-        }
-
-        const recentEvents = (spamEventsRef.current || []).filter((ts) => now - ts < SPAM_WINDOW_MS);
-        spamEventsRef.current = recentEvents;
-
-        if (recentEvents.length >= SPAM_THRESHOLD) {
-          startSpamCooldown(now);
-          return;
-        }
-
-        previousSpamEventsSnapshot = [...recentEvents];
-        spamEventsRef.current = [...recentEvents, now];
-      }
-
-      setVariantCounts((prev) => {
-        const category = prev[catId] ?? {};
-        const current = category[variantName] ?? 0;
-        const next = Math.max(0, current + delta);
-        if (next === current) {
-          return prev;
-        }
-
-        return {
-          ...prev,
-          [catId]: {
-            ...category,
-            [variantName]: next,
-          },
-        };
+  const enqueueMutation = useCallback(
+    (fn) => {
+      mutationQueueRef.current = mutationQueueRef.current
+        .catch(() => undefined)
+        .then(() => fn());
+      return mutationQueueRef.current.catch((error) => {
+        console.error("[drink-log] mutation queue failed", error);
+        throw error;
       });
-
-      try {
-        if (delta > 0) {
-          await addDrink(currentUser.uid, catId, variantName);
-
-          // Invalidate leaderboard cache so it shows fresh currentRunDrinkCount
-          // This ensures Leaderboard updates immediately when drinks are logged
-          // Note: With real-time subscriptions, this is a backup - subscriptions handle most updates
-          if (!isNonDrinkCategory && selectedChannel?.id) {
-            clearLeaderboardCache(selectedChannel.id);
-          }
-
-          // Update location when logging a drink (so user appears on map)
-          // This runs asynchronously and doesn't block the drink log
-          if (!isNonDrinkCategory) (async () => {
-            try {
-              // Update location in context
-              updateLocation();
-
-              // Get current location (either from state or fetch fresh)
-              let locationToSave = userLocation;
-
-              // If no location in state, try to get it directly
-              if (!locationToSave && 'geolocation' in navigator) {
-                try {
-                  const position = await new Promise((resolve, reject) => {
-                    navigator.geolocation.getCurrentPosition(resolve, reject, {
-                      enableHighAccuracy: true,
-                      timeout: 5000,
-                      maximumAge: 60000, // Accept location up to 1 minute old
-                    });
-                  });
-                  locationToSave = {
-                    lat: position.coords.latitude,
-                    lng: position.coords.longitude,
-                  };
-                } catch (geoError) {
-                  console.warn("[drink-log] Could not get fresh location:", geoError);
-                }
-              }
-
-              // Use fallback location if still no location available
-              if (!locationToSave) {
-                locationToSave = {
-                  lat: 55.6761, // Default Copenhagen
-                  lng: 12.5683,
-                };
-              }
-
-              const venue =
-                userData?.lastCheckInVenue ||
-                userData?.currentLocation?.venue ||
-                selectedChannel?.name ||
-                'Ukendt sted';
-
-              await updateUserLocation(currentUser.uid, {
-                lat: locationToSave.lat,
-                lng: locationToSave.lng,
-                venue,
-              });
-            } catch (locationError) {
-              console.error("[drink-log] Error saving location:", locationError);
-              // Don't fail the drink log if location save fails
-            }
-          })();
-        } else if (delta < 0) {
-          await removeDrink(currentUser.uid, catId, variantName);
-
-          // Invalidate leaderboard cache when removing drinks too
-          if (!isNonDrinkCategory && selectedChannel?.id) {
-            clearLeaderboardCache(selectedChannel.id);
-          }
-        }
-        await refreshUserData(true);
-      } catch (error) {
-        console.error("[drink-log] adjustVariantCount: Error updating drink in Firestore:", error);
-        if (delta > 0 && previousSpamEventsSnapshot) {
-          spamEventsRef.current = previousSpamEventsSnapshot;
-        }
-        setVariantCounts((prev) => {
-          const category = prev[catId] ?? {};
-          const current = category[variantName] ?? 0;
-          return {
-            ...prev,
-            [catId]: {
-              ...category,
-              [variantName]: Math.max(0, current - delta),
-            },
-          };
-        });
-      }
     },
-    [currentUser, updateLocation, userLocation, userData, selectedChannel, spamCooldownUntil, startSpamCooldown, refreshUserData]
+    []
+  );
+
+  const adjustVariantCount = useCallback(
+    (catId, variantName, delta) =>
+      enqueueMutation(async () => {
+        if (!currentUser) {
+          console.log("[drink-log] adjustVariantCount: No current user, aborting");
+          return;
+        }
+        const isNonDrinkCategory = NON_DRINK_CATEGORY_ID_SET.has(catId);
+
+        let previousSpamEventsSnapshot = null;
+        const isDrinkCategory = !isNonDrinkCategory && DRINK_CATEGORY_ID_SET.has(catId);
+        if (delta > 0 && isDrinkCategory) {
+          const now = Date.now();
+          const cooldownActive = spamCooldownUntil && spamCooldownUntil > now;
+          if (cooldownActive) {
+            setSpamMessage("Du er midlertidigt blokeret for at logge nye drinks. Vent et øjeblik, så er du klar igen.");
+            return;
+          }
+
+          const recentEvents = (spamEventsRef.current || []).filter((ts) => now - ts < SPAM_WINDOW_MS);
+          spamEventsRef.current = recentEvents;
+
+          if (recentEvents.length >= SPAM_THRESHOLD) {
+            startSpamCooldown(now);
+            return;
+          }
+
+          previousSpamEventsSnapshot = [...recentEvents];
+          spamEventsRef.current = [...recentEvents, now];
+        }
+
+        try {
+          let mutationResult = null;
+          if (delta > 0) {
+            mutationResult = await addDrink(currentUser.uid, catId, variantName);
+
+            // Invalidate leaderboard cache so it shows fresh currentRunDrinkCount
+            // This ensures Leaderboard updates immediately when drinks are logged
+            // Note: With real-time subscriptions, this is a backup - subscriptions handle most updates
+            if (!isNonDrinkCategory && selectedChannel?.id) {
+              clearLeaderboardCache(selectedChannel.id);
+            }
+
+            // Update location when logging a drink (so user appears on map)
+            // This runs asynchronously and doesn't block the drink log
+            if (!isNonDrinkCategory) (async () => {
+              try {
+                // Update location in context
+                updateLocation();
+
+                // Get current location (either from state or fetch fresh)
+                let locationToSave = userLocation;
+
+                // If no location in state, try to get it directly
+                if (!locationToSave && 'geolocation' in navigator) {
+                  try {
+                    const position = await new Promise((resolve, reject) => {
+                      navigator.geolocation.getCurrentPosition(resolve, reject, {
+                        enableHighAccuracy: true,
+                        timeout: 5000,
+                        maximumAge: 60000, // Accept location up to 1 minute old
+                      });
+                    });
+                    locationToSave = {
+                      lat: position.coords.latitude,
+                      lng: position.coords.longitude,
+                    };
+                  } catch (geoError) {
+                    console.warn("[drink-log] Could not get fresh location:", geoError);
+                  }
+                }
+
+                // Use fallback location if still no location available
+                if (!locationToSave) {
+                  locationToSave = {
+                    lat: 55.6761, // Default Copenhagen
+                    lng: 12.5683,
+                  };
+                }
+
+                const venue =
+                  userData?.lastCheckInVenue ||
+                  userData?.currentLocation?.venue ||
+                  selectedChannel?.name ||
+                  'Ukendt sted';
+
+                await updateUserLocation(currentUser.uid, {
+                  lat: locationToSave.lat,
+                  lng: locationToSave.lng,
+                  venue,
+                });
+              } catch (locationError) {
+                console.error("[drink-log] Error saving location:", locationError);
+                // Don't fail the drink log if location save fails
+              }
+            })();
+          } else if (delta < 0) {
+            mutationResult = await removeDrink(currentUser.uid, catId, variantName);
+
+            // Invalidate leaderboard cache when removing drinks too
+            if (!isNonDrinkCategory && selectedChannel?.id) {
+              clearLeaderboardCache(selectedChannel.id);
+            }
+          }
+
+          if (mutationResult?.drinkVariations) {
+            syncVariantCountsFromSource(
+              mutationResult.drinkVariations,
+              "Synced after server mutation",
+              mutationResult.currentRunDrinkCount
+            );
+          }
+
+          await refreshUserData(true);
+        } catch (error) {
+          console.error("[drink-log] adjustVariantCount: Error updating drink in Firestore:", error);
+          if (delta > 0 && previousSpamEventsSnapshot) {
+            spamEventsRef.current = previousSpamEventsSnapshot;
+          }
+          if (userData?.drinkVariations) {
+            syncVariantCountsFromSource(
+              userData.drinkVariations,
+              "Recovered variant counts from last known Firestore state",
+              userData?.currentRunDrinkCount
+            );
+          }
+        }
+      }),
+    [
+      currentUser,
+      enqueueMutation,
+      refreshUserData,
+      selectedChannel,
+      spamCooldownUntil,
+      startSpamCooldown,
+      syncVariantCountsFromSource,
+      updateLocation,
+      userData,
+      userLocation
+    ]
   );
 
   const resetRun = useCallback(async () => {
@@ -251,7 +309,7 @@ export function DrinkLogProvider({ children }) {
       return false;
     }
 
-    setVariantCounts(createZeroCounts(variantsByCategory));
+    syncVariantCountsFromSource({}, "Reset current run locally", 0);
 
     try {
       setIsResetting(true);
@@ -265,7 +323,7 @@ export function DrinkLogProvider({ children }) {
     } finally {
       setIsResetting(false);
     }
-  }, [currentUser, refreshUserData, variantsByCategory]);
+  }, [currentUser, refreshUserData, syncVariantCountsFromSource]);
 
   const categoryTotals = useMemo(() => {
     if (!variantCounts) return {};
@@ -280,11 +338,14 @@ export function DrinkLogProvider({ children }) {
   }, [variantCounts]);
 
   const currentRunDrinkCount = useMemo(() => {
-    return Object.entries(variantCounts).reduce((total, [catId, category]) => {
-      if (!DRINK_CATEGORY_ID_SET.has(catId)) return total;
-      return total + Object.values(category || {}).reduce((sum, count) => sum + count, 0);
-    }, 0);
-  }, [variantCounts]);
+    if (runCountOverride != null) {
+      return runCountOverride;
+    }
+    if (userData?.currentRunDrinkCount != null) {
+      return userData.currentRunDrinkCount;
+    }
+    return sumDrinkVariations(variantCounts);
+  }, [runCountOverride, userData?.currentRunDrinkCount, variantCounts]);
 
   const spamStatus = useMemo(() => {
     const isBlocked = Boolean(spamCooldownUntil && spamCooldownUntil > Date.now());
@@ -317,5 +378,3 @@ export function useDrinkLog() {
   }
   return context;
 }
-
-

@@ -4,51 +4,59 @@ export default function InstallPwaGate({
   isIos,
 }) {
   return (
-    <div className="flex h-[80vh] w-screen flex-col items-center justify-center overflow-hidden bg-[var(--bg,#0F1115)] px-5 pt-20 text-[color:var(--text,#F5F6F8)]">
-      <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-white/5 p-6 text-center shadow-2xl backdrop-blur-2xl">
-        <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--brand,#FF385C)]/15 text-3xl">
-          📱
-        </div>
-        <h1 className="text-2xl font-semibold text-[color:var(--ink,#F8FAFC)]">
-          Installér Sladesh
-        </h1>
-        <p className="mt-3 text-sm leading-relaxed text-[color:var(--muted,#B9C0D4)]">
-          Tilføj appen til din hjemmeskærm for den bedste og hurtigste
-          Sladesh-oplevelse. Når den er installeret, åbnes den i fuldskærm som
-          en rigtig app.
+    <div
+      className="flex min-h-screen w-full flex-col items-center justify-center overflow-x-hidden bg-[var(--bg,#0F1115)] px-4 text-[color:var(--text,#F5F6F8)]"
+      style={{
+        paddingTop: 'max(1.5rem, env(safe-area-inset-top))',
+        paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))',
+      }}
+    >
+      <div className="w-full max-w-[480px] rounded-3xl border border-white/10 bg-white/5 p-5 text-center shadow-2xl backdrop-blur-2xl sm:p-6">
+        <h1 className="text-xl font-semibold text-[color:var(--ink,#F8FAFC)] sm:text-2xl">Installer Sladesh</h1>
+        <p className="mt-3 text-[15px] leading-relaxed text-[color:var(--muted,#B9C0D4)] sm:text-base">
+          Tilføj appen til din hjemmeskaerm for den bedste og hurtigste Sladesh-oplevelse.
         </p>
+        <div className="mt-4 rounded-2xl bg-white/5 px-4 py-3 text-[15px] text-[color:var(--ink,#F8FAFC)] sm:text-sm">
+          <p className="font-semibold text-[color:var(--ink,#F8FAFC)]">Virker kun i Safari eller Chrome</p>
+          <p className="mt-1 text-[color:var(--muted,#D3DAE8)]">
+            Åbn siden i Safari på iOS eller Chrome på Android for at kunne installere appen.
+          </p>
+        </div>
 
         {canPromptInstall && (
           <button
             type="button"
             onClick={handleInstallClick}
-            className="mt-6 inline-flex w-full items-center justify-center rounded-2xl bg-[var(--brand,#FF385C)] px-4 py-3 text-base font-semibold text-[var(--brand-ink,#0D0A0B)] shadow-soft transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface,#0F1115)]"
+            className="mt-6 inline-flex w-full items-center justify-center rounded-2xl bg-[var(--brand,#FF385C)] px-4 py-3 text-base font-semibold text-[var(--brand-ink,#0D0A0B)] shadow-soft transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand,#FF385C)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface,#0F1115)] sm:text-lg"
           >
-            Installér app
+            Installer app
           </button>
         )}
 
         {!canPromptInstall && isIos && (
-          <div className="mt-6 rounded-2xl bg-white/5 p-4 text-left text-sm text-[color:var(--ink,#F8FAFC)]">
-            <p className="font-semibold text-[color:var(--ink,#F8FAFC)]">
-              Sådan installerer du på iOS:
-            </p>
+          <div className="mt-6 rounded-2xl bg-white/5 p-2 text-left text-[15px] text-[color:var(--ink,#F8FAFC)] sm:text-sm">
+            <p className="font-semibold text-[color:var(--ink,#F8FAFC)]">Sådan installerer du i Safari på iOS:</p>
             <ol className="mt-3 space-y-2 text-[color:var(--muted,#D3DAE8)]">
-              <li>1. Tryk på share-ikonet i Safari.</li>
-              <li>2. Vælg “Føj til hjemmeskærm”.</li>
-              <li>3. Bekræft navnet og tryk “Tilføj”.</li>
+              <li>1. Åbn siden i Safari (kraevet for PWA på iOS).</li>
+              <li>2. Tryk på delingsikonet (firkant med pil op).</li>
+              <li>3. Vælg "Føj til hjemmeskærm" eller "Add to Home Screen".</li>
+              <li>4. Tryk "Tilføj" eller "Add" i højre hjørne.</li>
             </ol>
           </div>
         )}
 
         {!canPromptInstall && !isIos && (
-          <p className="mt-6 text-sm text-[color:var(--muted,#B9C0D4)]">
-            Åbn denne side i din browsers installerbare PWA-visning for at
-            fortsætte.
-          </p>
+          <div className="mt-6 rounded-2xl bg-white/5 p-4 text-left text-[15px] text-[color:var(--ink,#F8FAFC)] sm:text-sm">
+            <p className="font-semibold text-[color:var(--ink,#F8FAFC)]">Sådan installerer du i Chrome:</p>
+            <ol className="mt-3 space-y-2 text-[color:var(--muted,#D3DAE8)]">
+              <li>1. Åbn siden i Chrome (krævet for PWA-installation).</li>
+              <li>2. Tryk på menu-ikonet (tre prikker).</li>
+              <li>3. Vælg "Installer app" eller "Tilføj til startskarm".</li>
+              <li>4. Bekræft installationen.</li>
+            </ol>
+          </div>
         )}
       </div>
     </div>
   )
 }
-

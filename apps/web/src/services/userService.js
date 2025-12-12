@@ -12,7 +12,9 @@ import {
   serverTimestamp,
   addDoc,
   Timestamp,
-  increment
+  increment,
+  runTransaction,
+  getDocFromServer
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { deriveInitials, generateAvatarGradient } from '../config/firestore.schema'
@@ -311,6 +313,27 @@ async function refreshDrinkDayStatus(userRef, userData, now = new Date()) {
   return nextData
 }
 
+function getDrinkStateFromSnapshot(userData = {}) {
+  return {
+    drinkVariations: userData.drinkVariations || {},
+    allTimeDrinkVariations: userData.allTimeDrinkVariations || {},
+    drinkTypes: userData.drinkTypes || {},
+    totalDrinks: userData.totalDrinks || 0,
+    currentRunDrinkCount: userData.currentRunDrinkCount || 0,
+    lastDrinkDayStart: userData.lastDrinkDayStart || null,
+    lastDrinkAt: userData.lastDrinkAt || null
+  }
+}
+
+async function fetchUserSnapshot(userRef) {
+  try {
+    return await getDocFromServer(userRef)
+  } catch (error) {
+    console.warn('[userService] Falling back to cache for user', userRef.id, error)
+    return await getDoc(userRef)
+  }
+}
+
 // Reset the current drink run manually (used by UI reset action)
 export async function resetCurrentRun(userId, now = new Date()) {
   const userRef = doc(db, 'users', userId)
@@ -425,13 +448,19 @@ export async function updateUser(userId, updates) {
  */
 export async function getUser(userId) {
   const userRef = doc(db, 'users', userId)
-  const userSnap = await getDoc(userRef)
+  const userSnap = await fetchUserSnapshot(userRef)
 
   if (!userSnap.exists()) {
     return null
   }
 
   const userData = userSnap.data()
+  console.info('[userService] Hydrating user data from Firestore', {
+    userId,
+    source: userSnap.metadata?.fromCache ? 'cache' : 'server',
+    currentRunDrinkCount: userData?.currentRunDrinkCount,
+    totalDrinks: userData?.totalDrinks
+  })
   const checkInRefreshed = await refreshCheckInStatus(userRef, userData)
   const drinkDayRefreshed = await refreshDrinkDayStatus(userRef, checkInRefreshed)
   return { id: userSnap.id, ...drinkDayRefreshed }
@@ -467,140 +496,131 @@ export async function searchUsersByName(searchTerm, maxResults = 20) {
 }
 
 /**
- * Add a drink to user's drink tracking
- * Updates user's total drinks count, drink types, and drink variations using Firestore increment
- * @param {string} userId - User ID
- * @param {string} type - Drink type (e.g., "beer", "shot", "cocktail")
- * @param {string} variation - Drink variation (e.g., "Lager", "IPA", "Mojito")
- * @returns {Promise<void>}
+ * Apply a drink delta inside a transaction to keep counters and variations in sync.
+ * @param {string} userId
+ * @param {string} type
+ * @param {string} variation
+ * @param {number} delta
+ * @returns {Promise<Object>} Updated drink state
  */
-export async function addDrink(userId, type, variation) {
+async function applyDrinkDelta(userId, type, variation, delta) {
   const userRef = doc(db, 'users', userId)
 
-  // Refresh drink day status before adding (checks if new day started and resets per-run fields)
-  const userSnap = await getDoc(userRef)
-  if (!userSnap.exists()) {
-    throw new Error(`Bruger ${userId} blev ikke fundet`)
-  }
+  const result = await runTransaction(db, async (transaction) => {
+    const userSnap = await transaction.get(userRef)
+    if (!userSnap.exists()) {
+      throw new Error(`Bruger ${userId} blev ikke fundet`)
+    }
 
-  const userData = userSnap.data()
-  const refreshedData = await refreshDrinkDayStatus(userRef, userData)
-  const isNonDrink = isNonDrinkCategory(type)
+    const now = new Date()
+    const latestBoundary = getLatestDrinkDayBoundary(now)
+    const baseline = getDrinkStateFromSnapshot(userSnap.data())
+    const isNonDrink = isNonDrinkCategory(type)
+    const drinkDayExpired = isDrinkDayExpired(userSnap.data(), now)
 
-  // Read current drinkVariations to handle nested path initialization
-  const currentDrinkVariations = refreshedData.drinkVariations || {}
-  const currentAllTimeVariations = refreshedData.allTimeDrinkVariations || {}
+    let drinkVariations = drinkDayExpired ? {} : { ...baseline.drinkVariations }
+    let allTimeDrinkVariations = { ...baseline.allTimeDrinkVariations }
+    let drinkTypes = { ...baseline.drinkTypes }
+    let totalDrinks = baseline.totalDrinks
+    let currentRunDrinkCount = drinkDayExpired ? 0 : baseline.currentRunDrinkCount
+    const lastDrinkDayStart =
+      drinkDayExpired || !baseline.lastDrinkDayStart
+        ? Timestamp.fromDate(latestBoundary)
+        : baseline.lastDrinkDayStart
 
-  // Build updates using increment for atomic operations
-  // When logging a non-drink category, we store the variation but skip drink-related counters.
-  const updates = {
-    updatedAt: serverTimestamp(),
-    lastActiveAt: serverTimestamp()
-  }
+    const typeVariations = { ...(drinkVariations[type] || {}) }
+    const currentVariationCount = typeVariations[variation] || 0
 
-  if (!isNonDrink) {
-    // DATA FLOW: currentRunDrinkCount is computed here using Firestore increment
-    // This ensures atomic updates and prevents race conditions
-    // The value is stored in the user document and read by Leaderboard via real-time subscriptions
-    // This fixes the "stuck at 0" bug by ensuring the count is always updated atomically
-    updates.totalDrinks = increment(1)
-    updates[`drinkTypes.${type}`] = increment(1)
-    updates.currentRunDrinkCount = increment(1) // This is the source of truth for currentRunDrinkCount
-    updates.lastDrinkAt = serverTimestamp()
-  }
+    // Avoid negative writes
+    if (delta < 0 && currentVariationCount <= 0) {
+      return {
+        ...baseline,
+        drinkVariations,
+        allTimeDrinkVariations,
+        drinkTypes,
+        totalDrinks,
+        currentRunDrinkCount,
+        lastDrinkDayStart
+      }
+    }
 
-  // Handle nested drinkVariations path (current run - resets daily)
-  // Firestore increment will create nested paths if parent structure exists
-  // Ensure parent structure exists first if needed
-  const typeVariations = currentDrinkVariations[type] || {}
+    const nextVariationCount = Math.max(0, currentVariationCount + delta)
+    typeVariations[variation] = nextVariationCount
+    drinkVariations[type] = typeVariations
 
-  // If the type doesn't exist in drinkVariations, initialize it
-  if (!currentDrinkVariations.hasOwnProperty(type)) {
-    // Initialize the type structure first
-    const newDrinkVariations = { ...currentDrinkVariations }
-    newDrinkVariations[type] = { [variation]: 1 }
-    updates.drinkVariations = newDrinkVariations
-  } else {
-    // Type exists, can use increment on the nested path
-    // Firestore will create the variation key if it doesn't exist
-    updates[`drinkVariations.${type}.${variation}`] = increment(1)
-  }
+    const allTimeTypeVariations = { ...(allTimeDrinkVariations[type] || {}) }
+    const currentAllTimeCount = allTimeTypeVariations[variation] || 0
+    const nextAllTimeCount = Math.max(0, currentAllTimeCount + delta)
+    allTimeTypeVariations[variation] = nextAllTimeCount
+    allTimeDrinkVariations[type] = allTimeTypeVariations
 
-  // Handle all-time drink variations (never resets)
-  // This is used for the ProfileDetails "All-time" percentage view
-  const allTimeTypeVariations = currentAllTimeVariations[type] || {}
+    if (!isNonDrink) {
+      totalDrinks = Math.max(0, totalDrinks + delta)
+      const typeTotal = drinkTypes[type] || 0
+      drinkTypes[type] = Math.max(0, typeTotal + delta)
+      currentRunDrinkCount = Math.max(0, currentRunDrinkCount + delta)
+    }
 
-  if (!currentAllTimeVariations.hasOwnProperty(type)) {
-    // Initialize the all-time type structure first
-    const newAllTimeVariations = { ...currentAllTimeVariations }
-    newAllTimeVariations[type] = { [variation]: 1 }
-    updates.allTimeDrinkVariations = newAllTimeVariations
-  } else {
-    // Type exists, can use increment on the nested path
-    updates[`allTimeDrinkVariations.${type}.${variation}`] = increment(1)
-  }
+    const updates = {
+      drinkVariations,
+      allTimeDrinkVariations,
+      drinkTypes,
+      totalDrinks,
+      currentRunDrinkCount,
+      lastDrinkDayStart,
+      updatedAt: serverTimestamp(),
+      lastActiveAt: serverTimestamp()
+    }
 
-  await updateDoc(userRef, updates)
+    if (!isNonDrink && delta > 0) {
+      updates.lastDrinkAt = serverTimestamp()
+    }
+
+    transaction.update(userRef, updates)
+
+    return {
+      drinkVariations,
+      allTimeDrinkVariations,
+      drinkTypes,
+      totalDrinks,
+      currentRunDrinkCount,
+      lastDrinkDayStart,
+      lastDrinkAt: !isNonDrink && delta > 0 ? Timestamp.now() : baseline.lastDrinkAt
+    }
+  })
+
+  console.info('[userService] Drink mutation applied', {
+    userId,
+    type,
+    variation,
+    delta,
+    totalDrinks: result.totalDrinks,
+    currentRunDrinkCount: result.currentRunDrinkCount
+  })
+
+  return result
 }
 
 /**
- * Remove a drink from user's drink tracking
- * Decrements user's total drinks count, drink types, and drink variations using Firestore increment
+ * Add a drink to user's drink tracking (transactional)
  * @param {string} userId - User ID
  * @param {string} type - Drink type (e.g., "beer", "shot", "cocktail")
  * @param {string} variation - Drink variation (e.g., "Lager", "IPA", "Mojito")
- * @returns {Promise<void>}
+ * @returns {Promise<Object>} Updated drink state
+ */
+export async function addDrink(userId, type, variation) {
+  return applyDrinkDelta(userId, type, variation, 1)
+}
+
+/**
+ * Remove a drink from user's drink tracking (transactional)
+ * @param {string} userId - User ID
+ * @param {string} type - Drink type (e.g., "beer", "shot", "cocktail")
+ * @param {string} variation - Drink variation (e.g., "Lager", "IPA", "Mojito")
+ * @returns {Promise<Object>} Updated drink state
  */
 export async function removeDrink(userId, type, variation) {
-  const userRef = doc(db, 'users', userId)
-
-  // Refresh drink day status first
-  const userSnap = await getDoc(userRef)
-  if (!userSnap.exists()) {
-    throw new Error(`Bruger ${userId} blev ikke fundet`)
-  }
-
-  const userData = userSnap.data()
-  const refreshedData = await refreshDrinkDayStatus(userRef, userData)
-
-  // Check current value of drinkVariations[type][variation]
-  const drinkVariations = refreshedData.drinkVariations || {}
-  const typeVariations = drinkVariations[type] || {}
-  const currentVariationCount = typeVariations[variation] || 0
-  const isNonDrink = isNonDrinkCategory(type)
-
-  // If value is 0 or doesn't exist, do nothing (never write negative values)
-  if (currentVariationCount <= 0) {
-    return
-  }
-
-  // Check all-time variations
-  const allTimeVariations = refreshedData.allTimeDrinkVariations || {}
-  const allTimeTypeVariations = allTimeVariations[type] || {}
-  const currentAllTimeCount = allTimeTypeVariations[variation] || 0
-
-  // Use increment(-1) for all fields
-  const updates = {
-    updatedAt: serverTimestamp(),
-    lastActiveAt: serverTimestamp()
-  }
-
-  if (!isNonDrink) {
-    updates.totalDrinks = increment(-1)
-    updates[`drinkTypes.${type}`] = increment(-1)
-    updates.currentRunDrinkCount = increment(-1)
-  }
-
-  updates[`drinkVariations.${type}.${variation}`] = increment(-1)
-
-  // Only decrement all-time variations if count is > 0
-  if (currentAllTimeCount > 0) {
-    updates[`allTimeDrinkVariations.${type}.${variation}`] = increment(-1)
-  }
-
-  // Note: Do NOT update lastDrinkAt when removing (keep most recent timestamp)
-
-  await updateDoc(userRef, updates)
+  return applyDrinkDelta(userId, type, variation, -1)
 }
 
 export async function recordAchievementUnlock(userId, achievementId, hasUnlockedBefore = false) {
