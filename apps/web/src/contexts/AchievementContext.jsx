@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { ACHIEVEMENTS } from '../config/achievements'
+import { IS_DEVELOPMENT } from '../config/env'
 import { useDrinkLog } from './DrinkLogContext'
 import { useUserData } from './UserDataContext'
 import { useAuth } from '../hooks/useAuth'
@@ -39,6 +40,10 @@ export function AchievementProvider({ children }) {
       if (!type) return null
 
       if (type === 'run_drinks') {
+        if (hasVariationType) {
+          const runVariationCounts = userData?.drinkVariations?.[variationType] || {}
+          return Object.values(runVariationCounts).reduce((sum, value) => sum + value, 0)
+        }
         return currentRunDrinkCount
       }
 
@@ -189,6 +194,14 @@ export function AchievementProvider({ children }) {
 
         // Unlock if we've crossed a new threshold multiple AND haven't unlocked today
         if (currentMultiples > previousMultiples) {
+          if (IS_DEVELOPMENT && achievement.id === 'obeerma') {
+            console.debug('[achievements][dev] Obeerma threshold crossed', {
+              variationType: achievement.variationType || 'all drinks',
+              threshold: achievement.threshold,
+              currentValue,
+              previousValue,
+            })
+          }
           unlockAchievement(achievement)
         }
       }
@@ -215,4 +228,3 @@ export function useAchievements() {
   }
   return context
 }
-

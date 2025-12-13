@@ -9,9 +9,10 @@ export const ACHIEVEMENTS = [
   },
   {
     id: 'obeerma',
-    type: 'total_drinks',
+    type: 'run_drinks',
     variationType: 'beer',
-    threshold: 15,
+    // Threshold counts beers in the current run (drinkVariations.beer). Unlocks on the 10th beer of a run.
+    threshold: 10,
     title: 'Obeerma',
     description: 'Beers down the hatch. Change is brewing.',
     image: '/assets/achievements/obeerma.png',

@@ -537,7 +537,9 @@ function ProfileCard({ profile, rank, onSelect, isActive, sortMode, achievements
 
     const isReceiver = sladeshStatus.receiverId === profile.id;
 
-    if (sladeshStatus.status === SLADESH_STATUS.IN_PROGRESS && isReceiver) {
+    if (!isReceiver) return null;
+
+    if (sladeshStatus.status === SLADESH_STATUS.IN_PROGRESS) {
       return renderStatusTab('In Progress', 'progress');
     }
 
@@ -710,6 +712,5 @@ function Avatar({ emoji, gradient, initials, className = 'h-12 w-12 text-xl' }) 
     </div>
   );
 }
-
 
 

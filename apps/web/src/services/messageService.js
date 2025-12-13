@@ -20,6 +20,21 @@ import { getLatestResetBoundary, getNextResetBoundary } from './userService'
 
 const MESSAGES_PER_PERIOD = 3
 
+function calculateQuotaFromUserData(userData = {}, now = new Date()) {
+  const lastReset = normalizeToDate(userData.lastMessagePeriodReset)
+  const latestBoundary = getLatestResetBoundary(now)
+  const resetNeeded = !lastReset || lastReset.getTime() < latestBoundary.getTime()
+  const used = resetNeeded ? 0 : userData.messageCount || 0
+  const remaining = Math.max(0, MESSAGES_PER_PERIOD - used)
+
+  return {
+    used,
+    limit: MESSAGES_PER_PERIOD,
+    remaining,
+    canSend: remaining > 0
+  }
+}
+
 /**
  * Normalize date value to Date object
  */
@@ -80,16 +95,7 @@ export async function getMessageQuota(userId) {
   }
   
   const updatedUserData = await ensureMessageQuotaReset(userId, userData)
-  const used = updatedUserData.messageCount || 0
-  const remaining = Math.max(0, MESSAGES_PER_PERIOD - used)
-  const canSend = remaining > 0
-  
-  return {
-    used,
-    limit: MESSAGES_PER_PERIOD,
-    remaining,
-    canSend
-  }
+  return calculateQuotaFromUserData(updatedUserData)
 }
 
 /**
@@ -202,6 +208,27 @@ export function subscribeToMessages(channelId, callback) {
   return unsubscribe
 }
 
+export function subscribeToMessageQuota(userId, callback) {
+  if (!userId) {
+    return () => {}
+  }
+
+  const userRef = doc(db, 'users', userId)
+  const unsubscribe = onSnapshot(
+    userRef,
+    (snapshot) => {
+      if (!snapshot.exists()) return
+      const quota = calculateQuotaFromUserData(snapshot.data())
+      callback(quota)
+    },
+    (error) => {
+      console.error('Error subscribing to message quota:', error)
+    }
+  )
+
+  return unsubscribe
+}
+
 /**
  * Mark messages as seen for a channel
  * @param {string} userId - User ID
@@ -277,4 +304,3 @@ export async function getUnreadMessageCount(channelId, userId) {
     return 0
   }
 }
-

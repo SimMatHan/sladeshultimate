@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useMemo, useCallback, u
 import { collection, doc, getDoc, onSnapshot, query, updateDoc, where, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../hooks/useAuth';
 import { db } from '../firebase';
+import { getLatestResetBoundary, getNextResetBoundary } from '../services/userService';
 
 const SladeshContext = createContext(null);
 
@@ -27,6 +28,38 @@ export function SladeshProvider({ children }) {
             return [];
         }
     });
+
+    const [currentResetBoundary, setCurrentResetBoundary] = useState(() => getLatestResetBoundary());
+
+    // Keep a live marker for the current 12h block so UI can reset badges at 00:00/12:00 without refresh
+    useEffect(() => {
+        let timeoutId;
+
+        const syncBoundary = () => {
+            const latest = getLatestResetBoundary(new Date());
+            setCurrentResetBoundary((prev) => (prev?.getTime?.() === latest.getTime() ? prev : latest));
+        };
+
+        const scheduleNextTick = () => {
+            const now = new Date();
+            const nextBoundary = getNextResetBoundary(now);
+            const delay = Math.max(nextBoundary.getTime() - now.getTime(), 500);
+
+            timeoutId = window.setTimeout(() => {
+                syncBoundary();
+                scheduleNextTick();
+            }, delay);
+        };
+
+        syncBoundary();
+        scheduleNextTick();
+
+        return () => {
+            if (timeoutId) {
+                window.clearTimeout(timeoutId);
+            }
+        };
+    }, []);
 
     // Persist challenges to localStorage
     useEffect(() => {
@@ -256,17 +289,33 @@ export function SladeshProvider({ children }) {
         });
     }, [updateChallenge]);
 
-    // Helper to get challenge status for a specific user (for Leaderboard)
-    const getUserSladeshStatus = useCallback((userId) => {
-        // Find most recent relevant challenge for this user
-        // Either as sender or receiver
-        const userChallenges = challenges.filter(c => c.senderId === userId || c.receiverId === userId);
-        if (userChallenges.length === 0) return null;
+    const isChallengeInCurrentBlock = useCallback((challenge) => {
+        if (!challenge) return false;
+        const boundaryMs = currentResetBoundary?.getTime?.();
+        if (!boundaryMs) return true;
+        const timestampMs = typeof challenge.createdAt === 'number'
+            ? challenge.createdAt
+            : typeof challenge.deadlineAt === 'number'
+                ? challenge.deadlineAt
+                : null;
 
-        // Sort by createdAt desc
-        userChallenges.sort((a, b) => b.createdAt - a.createdAt);
-        return userChallenges[0];
-    }, [challenges, currentUser]);
+        if (!timestampMs || Number.isNaN(timestampMs)) {
+            return false;
+        }
+
+        return timestampMs >= boundaryMs;
+    }, [currentResetBoundary]);
+
+    // Helper to get the latest challenge where the user is the receiver (for Leaderboard)
+    const getUserSladeshStatus = useCallback((userId) => {
+        const receivedChallenges = challenges
+            .filter((c) => c.receiverId === userId)
+            .filter(isChallengeInCurrentBlock)
+            .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+        if (receivedChallenges.length === 0) return null;
+        return receivedChallenges[0];
+    }, [challenges, isChallengeInCurrentBlock]);
 
     // DEBUG: Function to simulate receiving a Sladesh (for testing)
     const debugReceiveSladesh = useCallback(() => {
@@ -305,4 +354,3 @@ export function useSladesh() {
     }
     return context;
 }
-

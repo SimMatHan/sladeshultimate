@@ -11,7 +11,8 @@ import {
   sendMessage,
   getMessageQuota,
   markMessagesAsSeen,
-  getUnreadMessageCount
+  getUnreadMessageCount,
+  subscribeToMessageQuota
 } from "../services/messageService";
 
 const DEFAULT_MESSAGES = [
@@ -40,6 +41,16 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
   const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
+  const refreshQuotaFromServer = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const latestQuota = await getMessageQuota(userId);
+      setQuota(latestQuota);
+      console.debug("[MessagesPanel] quota refreshed from Firestore", latestQuota);
+    } catch (error) {
+      console.error("Error loading quota from Firestore:", error);
+    }
+  }, [userId]);
 
   // Format timestamp to relative time
   const formatTime = (timestamp) => {
@@ -84,27 +95,24 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
     return unsubscribe;
   }, [open, channelId, userId]);
 
-  // Load quota when panel opens and refresh periodically
+  // Keep quota synced with Firestore to avoid stale local values
   useEffect(() => {
-    if (!open || !userId) return;
+    if (!open || !userId) return undefined;
 
-    const loadQuota = async () => {
-      try {
-        const currentQuota = await getMessageQuota(userId);
-        setQuota(currentQuota);
-      } catch (error) {
-        console.error('Error loading quota:', error);
-      }
+    let isActive = true;
+    refreshQuotaFromServer();
+
+    const unsubscribe = subscribeToMessageQuota(userId, (liveQuota) => {
+      if (!isActive) return;
+      setQuota(liveQuota);
+      console.debug("[MessagesPanel] quota snapshot from Firestore", liveQuota);
+    });
+
+    return () => {
+      isActive = false;
+      unsubscribe?.();
     };
-
-    // Load immediately
-    loadQuota();
-
-    // Refresh quota every 5 seconds while panel is open
-    const intervalId = setInterval(loadQuota, 5000);
-
-    return () => clearInterval(intervalId);
-  }, [open, userId]);
+  }, [open, userId, refreshQuotaFromServer]);
 
   // Auto-scroll when new messages arrive
   useEffect(() => {
@@ -115,7 +123,7 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
 
   const handleSendMessage = useCallback(async (e) => {
     e?.preventDefault();
-    if (!messageInput.trim() || !channelId || !userId || !userName || isSending || !quota.canSend) {
+    if (!messageInput.trim() || !channelId || !userId || !userName || isSending || !quota?.canSend) {
       return;
     }
 
@@ -123,41 +131,21 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
     setError(null);
 
     try {
-      // Optimistically update quota in UI
-      const optimisticQuota = {
-        ...quota,
-        used: quota.used + 1,
-        remaining: Math.max(0, quota.remaining - 1),
-        canSend: quota.remaining > 1
-      };
-      setQuota(optimisticQuota);
-
       await sendMessage(channelId, userId, userName, messageInput);
       setMessageInput("");
-
-      // Refresh quota from Firestore after a short delay to ensure update is visible
-      setTimeout(async () => {
-        try {
-          const newQuota = await getMessageQuota(userId);
-          setQuota(newQuota);
-        } catch (error) {
-          console.error("Error refreshing quota:", error);
-        }
-      }, 500);
+      await refreshQuotaFromServer();
     } catch (err) {
       console.error("Error sending message:", err);
       setError(err.message || "Kunne ikke sende besked");
-      // Revert optimistic update on error
       try {
-        const currentQuota = await getMessageQuota(userId);
-        setQuota(currentQuota);
+        await refreshQuotaFromServer();
       } catch (error) {
-        console.error("Error reverting quota:", error);
+        console.error("Error refreshing quota after failure:", error);
       }
     } finally {
       setIsSending(false);
     }
-  }, [messageInput, channelId, userId, userName, isSending, quota.canSend]);
+  }, [messageInput, channelId, userId, userName, isSending, quota?.canSend, refreshQuotaFromServer]);
 
   if (!channelId) {
     return (
@@ -183,7 +171,7 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
       onClose={onClose}
       position="top"
       title="Beskeder"
-      description={`${quota.used}/${quota.limit} beskeder brugt`}
+      description={`${quota.remaining} ud af ${quota.limit} beskeder tilgængelig`}
       height="min(70vh, 600px)"
       animationDuration={300}
     >

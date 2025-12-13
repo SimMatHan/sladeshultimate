@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { doc, onSnapshot } from 'firebase/firestore'
 import { getUserChannels, setActiveChannel } from '../services/channelService'
 import { useAuth } from './useAuth'
+import { db } from '../firebase'
 
 /**
  * Custom hook for managing channel selection
@@ -12,6 +14,7 @@ export function useChannel() {
   const [activeChannelId, setActiveChannelId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [switching, setSwitching] = useState(false)
+  const hasSeenInitialSnapshotRef = useRef(false)
 
   const refreshChannels = useCallback(async () => {
     if (!currentUser) {
@@ -36,6 +39,26 @@ export function useChannel() {
   useEffect(() => {
     refreshChannels()
   }, [refreshChannels])
+
+  // Stay in sync with activeChannelId changes (e.g., when switching from TopBar)
+  useEffect(() => {
+    if (!currentUser) return undefined
+
+    const userRef = doc(db, 'users', currentUser.uid)
+    const unsubscribe = onSnapshot(userRef, (snap) => {
+      if (!snap.exists()) return
+      const nextActiveId = snap.data()?.activeChannelId || null
+      setActiveChannelId((prev) => (prev === nextActiveId ? prev : nextActiveId))
+      if (!hasSeenInitialSnapshotRef.current) {
+        hasSeenInitialSnapshotRef.current = true
+        setLoading(false)
+      }
+    })
+
+    return () => {
+      unsubscribe()
+    }
+  }, [currentUser])
 
   const selectedChannel = useMemo(
     () => channels.find(ch => ch.id === activeChannelId) || null,
@@ -91,4 +114,3 @@ export function useChannel() {
     switchChannel
   }
 }
-
