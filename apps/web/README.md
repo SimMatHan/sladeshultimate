@@ -76,3 +76,9 @@ export default function Home() {
 ```
 
 The `AppShell` component handles all layout concerns, so pages just need to render their content directly.
+
+## Drink logging fix notes
+
+- **Root cause:** Drink clicks were serialized through Firestore and re-hydrated via `refreshUserData` on each mutation. Slow or out-of-order reads overwrote newer local changes, there was no local persistence, and UI waited for network responses before updating. This made plus/minus feel unresponsive, sometimes rolled back totals, and showed zero after reload/offline resume.
+- **Repro:** Start with a non-zero drink count, click plus/minus quickly (or toggle tabs/reload on a flaky connection). The slower `refreshUserData` response can win the race and restore an older count, and a reload briefly shows 0 until Firestore returns.
+- **Fix:** Introduced a local event-log reducer (`drinkEngine`) as the single source of truth, debounced localStorage persistence with versioning, and background-only Firestore sync. UI updates instantly from the reducer, minus targets the latest add in the current run, and hydration no longer wipes state.
