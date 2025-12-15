@@ -24,6 +24,10 @@ import { NON_DRINK_CATEGORY_IDS } from '../constants/drinks'
 // Single active Sladesh guard: used as an error code when a receiver is already locked
 export const SLADESH_ACTIVE_ERROR = 'receiver_already_active'
 
+const RESOLVED_SLADESH_STATUSES = new Set(['completed', 'failed', 'expired'])
+const isResolvedSladeshStatus = (status = '') => RESOLVED_SLADESH_STATUSES.has(status)
+const isActiveSladeshStatus = (status = '') => !isResolvedSladeshStatus(status)
+
 const RESET_BOUNDARY_HOUR = 12 // Check-in/message window resets at local 12:00
 const RESET_TIMEZONE = 'Europe/Copenhagen'
 const DRINK_DAY_START_HOUR = 10
@@ -733,6 +737,7 @@ export async function addDrinkLogEntry(userId, logData) {
  * @param {string} [sladeshData.channelId] - Optional channel ID
  * @param {string} [sladeshData.challengeId] - Optional fixed document ID (for optimistic UI)
  * @param {number} [sladeshData.deadlineAtMs] - Optional deadline timestamp in ms
+ * @param {string} [sladeshData.idempotencyKey] - Optional idempotency key (defaults to challengeId)
  * @returns {Promise<string>} Document ID of the new challenge
  */
 export async function addSladesh(senderId, sladeshData) {
@@ -744,7 +749,8 @@ export async function addSladesh(senderId, sladeshData) {
     senderName = null,
     recipientName = null,
     challengeId = null,
-    deadlineAtMs = null
+    deadlineAtMs = null,
+    idempotencyKey = null
   } = sladeshData
   const deadlineAt = Timestamp.fromMillis(deadlineAtMs ?? Date.now() + 10 * 60 * 1000) // 10 minutes from send time
 
@@ -760,6 +766,7 @@ export async function addSladesh(senderId, sladeshData) {
     channelId: channelId || null,
     deadlineAt,
     status: 'pending',
+    idempotencyKey: idempotencyKey || challengeRef.id,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   }
@@ -769,6 +776,7 @@ export async function addSladesh(senderId, sladeshData) {
     const recipientRef = doc(db, 'users', recipientId)
     const senderRef = doc(db, 'users', senderId)
     const recipientSnap = await transaction.get(recipientRef)
+    const existingChallengeSnap = await transaction.get(challengeRef)
 
     if (!recipientSnap.exists()) {
       throw new Error('recipient_not_found')
@@ -776,7 +784,38 @@ export async function addSladesh(senderId, sladeshData) {
 
     const activeSladesh = recipientSnap.data().activeSladesh || null
     const activeStatus = (activeSladesh?.status || '').toString().toLowerCase()
-    const hasActiveLock = !!activeSladesh && activeStatus !== 'completed' && activeStatus !== 'failed'
+    const hasActiveLock = !!activeSladesh && isActiveSladeshStatus(activeStatus)
+
+    // Idempotency guard: if the challenge already exists, do not re-create or double-increment stats
+    if (existingChallengeSnap.exists()) {
+      const existingData = existingChallengeSnap.data() || {}
+      const existingStatus = (existingData.status || '').toString().toLowerCase()
+      const existingResolved = isResolvedSladeshStatus(existingStatus)
+
+      if (existingResolved) {
+        const error = new Error('sladesh_already_resolved')
+        error.code = 'sladesh_already_resolved'
+        throw error
+      }
+
+      // Ensure recipient has the active lock for this challenge (for stale clients)
+      if (!activeSladesh || activeSladesh.challengeId !== challengeRef.id) {
+        transaction.update(recipientRef, {
+          activeSladesh: {
+            challengeId: challengeRef.id,
+            status: 'in_progress',
+            setAt: serverTimestamp(),
+            senderId,
+            recipientId
+          },
+          updatedAt: serverTimestamp(),
+          lastActiveAt: serverTimestamp()
+        })
+      }
+
+      // No-op write path: we already have this challenge, return early to avoid double increments
+      return challengeRef.id
+    }
 
     if (hasActiveLock && activeSladesh.challengeId !== challengeRef.id) {
       const error = new Error(SLADESH_ACTIVE_ERROR)

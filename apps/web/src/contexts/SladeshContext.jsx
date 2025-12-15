@@ -10,6 +10,7 @@ export const SLADESH_STATUS = {
     IN_PROGRESS: 'IN_PROGRESS',
     COMPLETED: 'COMPLETED',
     FAILED: 'FAILED',
+    EXPIRED: 'EXPIRED',
 };
 
 const STORAGE_KEY = 'sladesh_challenges';
@@ -131,7 +132,9 @@ export function SladeshProvider({ children }) {
                 ? SLADESH_STATUS.FAILED
                 : statusRaw === 'completed'
                     ? SLADESH_STATUS.COMPLETED
-                    : SLADESH_STATUS.IN_PROGRESS; // treat pending/in_progress as active
+                    : statusRaw === 'expired'
+                        ? SLADESH_STATUS.EXPIRED
+                        : SLADESH_STATUS.IN_PROGRESS; // treat pending/in_progress as active
 
         if (statusRaw === 'pending') {
             updateDoc(doc(db, 'sladeshChallenges', docSnap.id), {

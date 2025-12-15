@@ -133,6 +133,7 @@ export default function Sladesh() {
   const [membersLoading, setMembersLoading] = useState(!USE_MOCK_DATA);
   const [membersError, setMembersError] = useState(null);
   const [pendingTarget, setPendingTarget] = useState(null);
+  const [pendingRequestId, setPendingRequestId] = useState(null);
   const [statusMessage, setStatusMessage] = useState(null);
   const [isSending, setIsSending] = useState(false);
   const [senderTimeLeft, setSenderTimeLeft] = useState(null);
@@ -279,7 +280,8 @@ export default function Sladesh() {
   // Enforce single active Sladesh per receiver: mark targets with an active lock
   const isTargetLocked = useCallback((target) => {
     const status = (target?.activeSladesh?.status || "").toString().toLowerCase();
-    return !!target?.activeSladesh && status !== "completed" && status !== "failed";
+    const resolvedStatuses = new Set(["completed", "failed", "expired"]);
+    return !!target?.activeSladesh && !resolvedStatuses.has(status);
   }, []);
 
   const orbitParticipants = useMemo(() => {
@@ -455,7 +457,7 @@ export default function Sladesh() {
     (target) => {
       if (membersLoading || isSending) return;
       if (isTargetLocked(target)) {
-        setStatusMessage({ tone: "error", body: "User is already in an active Sladesh." });
+        setStatusMessage({ tone: "error", body: "Bruger har allerede en aktiv Sladesh." });
         return;
       }
       if (cannotInitiateReason) {
@@ -463,6 +465,7 @@ export default function Sladesh() {
         return;
       }
       setPendingTarget(target);
+      setPendingRequestId(crypto.randomUUID());
     },
     [cannotInitiateReason, isSending, isTargetLocked, membersLoading]
   );
@@ -474,7 +477,7 @@ export default function Sladesh() {
     }
     const unlockedTargets = eligibleTargets.filter((target) => !isTargetLocked(target));
     if (!unlockedTargets.length) {
-      setStatusMessage({ tone: "info", body: "User is already in an active Sladesh." });
+      setStatusMessage({ tone: "info", body: "Bruger har allerede en aktiv Sladesh." });
       return;
     }
     const randomIndex = Math.floor(Math.random() * unlockedTargets.length);
@@ -485,8 +488,9 @@ export default function Sladesh() {
     if (!pendingTarget) return;
 
     if (!USE_MOCK_DATA && isTargetLocked(pendingTarget)) {
-      setStatusMessage({ tone: "error", body: "User is already in an active Sladesh." });
+      setStatusMessage({ tone: "error", body: "Bruger har allerede en aktiv Sladesh." });
       setPendingTarget(null);
+      setPendingRequestId(null);
       return;
     }
 
@@ -500,17 +504,22 @@ export default function Sladesh() {
       } catch {
         // ignore
       }
-      setStatusMessage({ tone: "success", body: `Mock: Sladesh sendt til ${pendingTarget.username || pendingTarget.name}.` });
+      setStatusMessage({ tone: "success", body: "Mock: Sladesh sendt til " + (pendingTarget.username || pendingTarget.name) + "." });
       setPendingTarget(null);
+      setPendingRequestId(null);
       return;
     }
 
     if (!currentUser) {
-      setStatusMessage({ tone: "error", body: "Du skal være logget ind for at sende en Sladesh." });
+      setStatusMessage({ tone: "error", body: "Du skal vaere logget ind for at sende en Sladesh." });
+      setPendingRequestId(null);
       return;
     }
 
     setIsSending(true);
+
+    const requestId = pendingRequestId || crypto.randomUUID();
+    setPendingRequestId(requestId);
 
     const target = pendingTarget;
     const senderName = userProfile?.fullName || currentUser.displayName || currentUser.email || currentUser.uid;
@@ -521,14 +530,14 @@ export default function Sladesh() {
       { id: currentUser.uid, name: senderName },
       { id: target.id, name: recipientName },
       {
-        challengeId: crypto.randomUUID(),
+        challengeId: requestId,
         createdAt: optimisticCreatedAt,
         deadlineAt: optimisticDeadlineAt,
       }
     );
 
     setPendingTarget(null);
-    setStatusMessage({ tone: "success", body: `Sladesh sendt til ${recipientName}.` });
+    setStatusMessage({ tone: "success", body: "Sladesh sendt til " + recipientName + "." });
 
     try {
       updateLocation();
@@ -559,11 +568,12 @@ export default function Sladesh() {
           lng: resolvedLocation.lng ?? DEFAULT_LOCATION.lng,
         },
         channelId: selectedChannel?.id || null,
-        challengeId: optimisticChallenge.id,
+        challengeId: requestId,
+        idempotencyKey: requestId,
         deadlineAtMs: optimisticDeadlineAt,
       });
 
-      // Save location to Firestore so user appears on map
+      // Save location to Firestore so user appears on map (best effort)
       try {
         await updateUserLocation(currentUser.uid, {
           lat: resolvedLocation.lat ?? DEFAULT_LOCATION.lat,
@@ -572,22 +582,21 @@ export default function Sladesh() {
         });
       } catch (locationError) {
         console.error("Error saving location after sladesh:", locationError);
-        // Don't fail sladesh send if location save fails
       }
 
       await incrementSladeshCount();
       setUserProfile((prev) =>
         prev
           ? {
-            ...prev,
-            lastSladeshSentAt: new Date(),
-          }
+              ...prev,
+              lastSladeshSentAt: new Date(),
+            }
           : {
-            lastSladeshSentAt: new Date(),
-          }
+              lastSladeshSentAt: new Date(),
+            }
       );
 
-      console.log('[Sladesh] Successfully sent Sladesh', {
+      console.log("[Sladesh] Successfully sent Sladesh", {
         recipient: recipientName,
         recipientId: target.id,
         venue
@@ -597,15 +606,17 @@ export default function Sladesh() {
       console.error("Error sending sladesh:", error);
       removeChallenge(optimisticChallenge?.id);
       if (error?.code === SLADESH_ACTIVE_ERROR || error?.message === SLADESH_ACTIVE_ERROR) {
-        setStatusMessage({ tone: "error", body: "User is already in an active Sladesh." });
+        setStatusMessage({ tone: "error", body: "Bruger har allerede en aktiv Sladesh." });
       } else {
-        setStatusMessage({ tone: "error", body: "Kunne ikke sende Sladesh. Prøv igen." });
+        setStatusMessage({ tone: "error", body: "Kunne ikke sende Sladesh. Prov igen." });
       }
     } finally {
       setIsSending(false);
+      setPendingRequestId(null);
     }
   }, [
     currentUser,
+    pendingRequestId,
     pendingTarget,
     removeChallenge,
     selectedChannel,
@@ -615,10 +626,10 @@ export default function Sladesh() {
     userProfile,
     isTargetLocked,
   ]);
-
   const handleCloseOverlay = useCallback(() => {
     if (isSending) return;
     setPendingTarget(null);
+    setPendingRequestId(null);
   }, [isSending]);
 
   return (
@@ -649,14 +660,18 @@ export default function Sladesh() {
               disabled={!!cannotInitiateReason || membersLoading || isSending}
               onPress={handleRandomSladesh}
             />
-            {participantsWithRandomAngles.map((participant) => (
-              <OrbitAvatar
-                key={participant.id}
-                participant={participant}
-                disabled={!!cannotInitiateReason || membersLoading || isSending}
-                onSelect={() => guardAndSetTarget(participant)}
-              />
-            ))}
+            {participantsWithRandomAngles.map((participant) => {
+              const locked = isTargetLocked(participant);
+              return (
+                <OrbitAvatar
+                  key={participant.id}
+                  participant={participant}
+                  locked={locked}
+                  disabled={!!cannotInitiateReason || membersLoading || isSending || locked}
+                  onSelect={() => guardAndSetTarget(participant)}
+                />
+              );
+            })}
           </div>
         </div>
 
@@ -945,7 +960,7 @@ function OrbitBackdrop() {
   );
 }
 
-function OrbitAvatar({ participant, disabled, onSelect }) {
+function OrbitAvatar({ participant, disabled, onSelect, locked = false }) {
   const size = "h-16 w-16";
   const textSize = "text-lg";
   const duration = participant.duration ?? 28;
@@ -964,10 +979,17 @@ function OrbitAvatar({ participant, disabled, onSelect }) {
         <button
           type="button"
           disabled={disabled}
+          aria-disabled={disabled}
           onClick={onSelect}
-          className="orbit-item__payload focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:opacity-60"
+          title={locked ? "Bruger har allerede en aktiv Sladesh." : undefined}
+          className="orbit-item__payload relative focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:opacity-60"
         >
           <AvatarBadge participant={participant} size={size} textSize={textSize} />
+          {locked ? (
+            <span className="absolute -top-2 right-0 rounded-full bg-[color:var(--brand,#FF385C)] px-2 py-1 text-[10px] font-semibold uppercase text-white shadow">
+              Aktiv
+            </span>
+          ) : null}
           <span className="text-xs font-medium drop-shadow-sm" style={{ color: "var(--ink)" }}>
             {participant.username || participant.name}
           </span>
