@@ -104,6 +104,11 @@ export default function AdminPortal() {
   const [donorEditingForm, setDonorEditingForm] = useState({ name: "", amount: "", date: "", message: "" });
   const [isUpdatingDonor, setIsUpdatingDonor] = useState(false);
 
+  // Stress Signal state
+  const [stressSignalForm, setStressSignalForm] = useState({ channelId: "", title: "", message: "" });
+  const [stressSignalFeedback, setStressSignalFeedback] = useState(null);
+  const [isSendingStressSignal, setIsSendingStressSignal] = useState(false);
+
   const handleVariationChange = (field) => (event) => {
     setVariationForm((prev) => ({
       ...prev,
@@ -740,6 +745,79 @@ export default function AdminPortal() {
     }
   };
 
+  // Stress Signal handlers
+  const handleStressSignalChange = (field) => (event) => {
+    setStressSignalForm((prev) => ({
+      ...prev,
+      [field]: event.target.value,
+    }));
+  };
+
+  const handleStressSignalSubmit = async (event) => {
+    event.preventDefault();
+    setStressSignalFeedback(null);
+
+    if (!currentUser || !isAdmin) {
+      setStressSignalFeedback({
+        status: "error",
+        message: "Du skal være logget ind som admin for at sende stress signals.",
+      });
+      return;
+    }
+
+    if (!stressSignalForm.channelId || !stressSignalForm.title.trim() || !stressSignalForm.message.trim()) {
+      setStressSignalFeedback({
+        status: "error",
+        message: "Kanal, titel og besked er påkrævet.",
+      });
+      return;
+    }
+
+    // Confirmation dialog
+    if (!window.confirm(`Er du sikker på, at du vil sende denne stress signal til alle i kanalen?\n\nTitel: ${stressSignalForm.title}\nBesked: ${stressSignalForm.message}`)) {
+      return;
+    }
+
+    setIsSendingStressSignal(true);
+    try {
+      const auth = getAuth();
+      const token = await auth.currentUser.getIdToken();
+
+      const response = await fetch('/api/adminBroadcast', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          channelId: stressSignalForm.channelId,
+          title: stressSignalForm.title.trim(),
+          message: stressSignalForm.message.trim(),
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || 'Kunne ikke sende stress signal');
+      }
+
+      setStressSignalFeedback({
+        status: "success",
+        message: `Stress signal sendt til ${result.sent} modtagere. ${result.cleaned > 0 ? `${result.cleaned} døde subscriptions ryddet op.` : ''}`,
+      });
+      setStressSignalForm({ channelId: "", title: "", message: "" });
+    } catch (error) {
+      console.error("[AdminPortal] Failed to send stress signal", error);
+      setStressSignalFeedback({
+        status: "error",
+        message: error.message || "Kunne ikke sende stress signal.",
+      });
+    } finally {
+      setIsSendingStressSignal(false);
+    }
+  };
+
   return (
     <Page title="Adminportal">
       <div className="flex flex-col gap-6">
@@ -808,6 +886,94 @@ export default function AdminPortal() {
                 Simuler Sladesh
               </button>
             </div>
+          </Card>
+        </section>
+
+        <section className="space-y-3">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
+              Stress Signal
+            </div>
+            <p className="text-sm text-[color:var(--muted)]">
+              Send en push-notifikation til alle subscribers i en kanal.
+            </p>
+          </div>
+          <Card className="space-y-4 px-5 py-6">
+            <FeedbackBanner
+              feedback={stressSignalFeedback}
+              onDismiss={() => setStressSignalFeedback(null)}
+            />
+            <form className="space-y-4" onSubmit={handleStressSignalSubmit}>
+              <div className="space-y-2">
+                <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
+                  Kanal
+                </label>
+                <select
+                  value={stressSignalForm.channelId}
+                  onChange={handleStressSignalChange("channelId")}
+                  disabled={channelsLoading || !isAdmin}
+                  className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{
+                    borderColor: "var(--line)",
+                    backgroundColor: "var(--subtle)",
+                    color: "var(--ink)",
+                    "--tw-ring-offset-color": "var(--bg)",
+                  }}
+                >
+                  <option value="">Vælg kanal...</option>
+                  {channels.map((channel) => (
+                    <option key={channel.id} value={channel.id}>
+                      {channel.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
+                  Titel
+                </label>
+                <input
+                  type="text"
+                  value={stressSignalForm.title}
+                  onChange={handleStressSignalChange("title")}
+                  placeholder="fx Vigtig besked"
+                  disabled={!isAdmin}
+                  className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{
+                    borderColor: "var(--line)",
+                    backgroundColor: "var(--subtle)",
+                    color: "var(--ink)",
+                    "--tw-ring-offset-color": "var(--bg)",
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
+                  Besked
+                </label>
+                <textarea
+                  value={stressSignalForm.message}
+                  onChange={handleStressSignalChange("message")}
+                  rows={4}
+                  placeholder="Skriv din besked her..."
+                  disabled={!isAdmin}
+                  className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{
+                    borderColor: "var(--line)",
+                    backgroundColor: "var(--subtle)",
+                    color: "var(--ink)",
+                    "--tw-ring-offset-color": "var(--bg)",
+                  }}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isSendingStressSignal || !isAdmin}
+                className="w-full rounded-2xl bg-[color:var(--brand,#FF385C)] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSendingStressSignal ? "Sender..." : "Send Stress Signal"}
+              </button>
+            </form>
           </Card>
         </section>
 

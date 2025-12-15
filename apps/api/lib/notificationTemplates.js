@@ -84,58 +84,75 @@ const builders = {
       }
     }
   },
-  
+
   sladesh_received: (context = {}) => {
-  const senderName = context.senderName || context.data?.senderName || 'En ven'
-  const sladeshId = context.sladeshId || context.data?.sladeshId
-  const channelId = context.channelId || context.data?.channelId
-  return {
-    title: context.title || 'Ny Sladesh!',
-    body: context.body || `${senderName} har sendt dig en Sladesh 🍻`,
-    tag: context.tag || `sladesh_${sladeshId || 'challenge'}`,
-    data: {
-      type: 'sladesh_received',
-      senderId: context.senderId || context.data?.senderId,
-      senderName,
-      receiverId: context.receiverId || context.data?.receiverId,
-      receiverName: context.receiverName || context.data?.receiverName,
-      sladeshId,
-      channelId,
-      url: context.data?.url || (channelId ? `/home?channel=${channelId}` : '/home'),
-      ...context.data
+    const senderName = context.senderName || context.data?.senderName || 'En ven'
+    const sladeshId = context.sladeshId || context.data?.sladeshId
+    const channelId = context.channelId || context.data?.channelId
+    return {
+      title: context.title || 'Ny Sladesh!',
+      body: context.body || `${senderName} har sendt dig en Sladesh 🍻`,
+      tag: context.tag || `sladesh_${sladeshId || 'challenge'}`,
+      data: {
+        type: 'sladesh_received',
+        senderId: context.senderId || context.data?.senderId,
+        senderName,
+        receiverId: context.receiverId || context.data?.receiverId,
+        receiverName: context.receiverName || context.data?.receiverName,
+        sladeshId,
+        channelId,
+        url: context.data?.url || (channelId ? `/home?channel=${channelId}` : '/home'),
+        ...context.data
+      }
     }
-  }
   },
 
   sladesh_completed: (context = {}) => {
-  const receiverName = context.receiverName || context.data?.receiverName || 'En ven'
-  const sladeshId = context.sladeshId || context.data?.sladeshId
-  const channelId = context.channelId || context.data?.channelId
-  const outcomeRaw = (context.outcome || context.data?.outcome || 'completed').toString().toLowerCase()
-  const isFailed = outcomeRaw === 'failed'
-  const resolvedOutcome = isFailed ? 'failed' : 'completed'
-  const resolvedTitle = isFailed
-    ? `${receiverName} har fejlet sin Sladesh 😅`
-    : `${receiverName} har gennemført sin Sladesh 🎉`
-  const resolvedBody = isFailed
-    ? 'De næste runde må vente lidt endnu.'
-    : 'Din Sladesh er i hus. Send en ny, når du er klar!'
-  return {
-    title: context.title || resolvedTitle,
-    body: context.body || resolvedBody,
-    tag: context.tag || `sladesh_completed_${sladeshId || 'challenge'}`,
-    data: {
-      type: 'sladesh_completed',
-      receiverId: context.receiverId || context.data?.receiverId,
-      receiverName,
-      outcome: resolvedOutcome,
-      sladeshId,
-      channelId,
-      url: context.data?.url || (channelId ? `/home?channel=${channelId}` : '/home'),
-      ...context.data
+    const receiverName = context.receiverName || context.data?.receiverName || 'En ven'
+    const sladeshId = context.sladeshId || context.data?.sladeshId
+    const channelId = context.channelId || context.data?.channelId
+    const outcomeRaw = (context.outcome || context.data?.outcome || 'completed').toString().toLowerCase()
+    const isFailed = outcomeRaw === 'failed'
+    const resolvedOutcome = isFailed ? 'failed' : 'completed'
+    const resolvedTitle = isFailed
+      ? `${receiverName} har fejlet sin Sladesh 😅`
+      : `${receiverName} har gennemført sin Sladesh 🎉`
+    const resolvedBody = isFailed
+      ? 'De næste runde må vente lidt endnu.'
+      : 'Din Sladesh er i hus. Send en ny, når du er klar!'
+    return {
+      title: context.title || resolvedTitle,
+      body: context.body || resolvedBody,
+      tag: context.tag || `sladesh_completed_${sladeshId || 'challenge'}`,
+      data: {
+        type: 'sladesh_completed',
+        receiverId: context.receiverId || context.data?.receiverId,
+        receiverName,
+        outcome: resolvedOutcome,
+        sladeshId,
+        channelId,
+        url: context.data?.url || (channelId ? `/home?channel=${channelId}` : '/home'),
+        ...context.data
+      }
+    }
+  },
+
+  stress_signal: (context = {}) => {
+    const channelId = context.channelId || context.data?.channelId
+    const channelName = context.channelName || context.data?.channelName || 'alle'
+    return {
+      title: context.title || 'Stress Signal',
+      body: context.body || 'Vigtig besked fra admin',
+      tag: context.tag || `stress_signal_${Date.now()}`,
+      data: {
+        type: 'stress_signal',
+        channelId,
+        channelName,
+        url: context.data?.url || (channelId ? `/home?channel=${channelId}` : '/home'),
+        ...context.data
+      }
     }
   }
-}
 }
 
 function fallbackBuilder(context = {}) {
