@@ -17,7 +17,7 @@ import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { isAdminUser } from "../config/admin";
 import { CATEGORIES } from "../constants/drinks";
-import { resetAchievements, resetSladeshState } from "../services/userService";
+import { resetAchievements, resetSladeshState, getAllUsers, resetSladeshStateForUser } from "../services/userService";
 import { useSladesh } from "../contexts/SladeshContext";
 import { getDonors, addDonor, updateDonor, deleteDonor } from "../services/donorService";
 
@@ -109,6 +109,14 @@ export default function AdminPortal() {
   const [stressSignalFeedback, setStressSignalFeedback] = useState(null);
   const [isSendingStressSignal, setIsSendingStressSignal] = useState(false);
 
+  // User Sladesh Management state
+  const [users, setUsers] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [userResetFeedback, setUserResetFeedback] = useState(null);
+  const [isResettingUserSladesh, setIsResettingUserSladesh] = useState(false);
+  const [userSearchTerm, setUserSearchTerm] = useState("");
+
   const handleVariationChange = (field) => (event) => {
     setVariationForm((prev) => ({
       ...prev,
@@ -193,6 +201,32 @@ export default function AdminPortal() {
       setDonorsLoading(false);
     }
   }, []);
+
+  // Load all users for Sladesh management
+  useEffect(() => {
+    if (!isAdmin) {
+      setUsers([]);
+      setUsersLoading(false);
+      return;
+    }
+
+    async function loadUsers() {
+      try {
+        const allUsers = await getAllUsers();
+        setUsers(allUsers);
+      } catch (error) {
+        console.error('[AdminPortal] Failed to load users', error);
+        setUserResetFeedback({
+          status: "error",
+          message: error.message || "Kunne ikke indlæse brugere.",
+        });
+      } finally {
+        setUsersLoading(false);
+      }
+    }
+
+    loadUsers();
+  }, [isAdmin]);
 
   const groupedVariations = useMemo(() => {
     const groups = CATEGORIES.reduce((acc, category) => {
@@ -818,6 +852,63 @@ export default function AdminPortal() {
     }
   };
 
+  // User Sladesh Management handlers
+  const handleResetUserSladesh = async () => {
+    if (!currentUser || !isAdmin) {
+      setUserResetFeedback({
+        status: "error",
+        message: "Du skal være logget ind som admin.",
+      });
+      return;
+    }
+
+    if (!selectedUserId) {
+      setUserResetFeedback({
+        status: "error",
+        message: "Vælg en bruger først.",
+      });
+      return;
+    }
+
+    const selectedUser = users.find(u => u.id === selectedUserId);
+    if (!selectedUser) {
+      setUserResetFeedback({
+        status: "error",
+        message: "Bruger ikke fundet.",
+      });
+      return;
+    }
+
+    // Confirmation dialog
+    if (!window.confirm(`Er du sikker på, at du vil nulstille Sladesh for ${selectedUser.fullName}?\n\nDette vil nulstille alle Sladesh-tællere og markere aktive udfordringer som failed.`)) {
+      return;
+    }
+
+    setIsResettingUserSladesh(true);
+    setUserResetFeedback(null);
+    try {
+      await resetSladeshStateForUser(selectedUserId);
+
+      // Reload users to get updated stats
+      const allUsers = await getAllUsers();
+      setUsers(allUsers);
+
+      setUserResetFeedback({
+        status: "success",
+        message: `Sladesh data er nulstillet for ${selectedUser.fullName}.`,
+      });
+      setSelectedUserId(""); // Clear selection
+    } catch (error) {
+      console.error("[AdminPortal] Failed to reset user sladesh", error);
+      setUserResetFeedback({
+        status: "error",
+        message: error.message || "Kunne ikke nulstille Sladesh.",
+      });
+    } finally {
+      setIsResettingUserSladesh(false);
+    }
+  };
+
   return (
     <Page title="Adminportal">
       <div className="flex flex-col gap-6">
@@ -884,6 +975,103 @@ export default function AdminPortal() {
                 className="rounded-2xl border border-amber-200 bg-white px-4 py-2 text-sm font-semibold text-amber-600 shadow-sm transition hover:bg-amber-50"
               >
                 Simuler Sladesh
+              </button>
+            </div>
+          </Card>
+        </section>
+
+        <section className="space-y-3">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
+              Bruger Sladesh Nulstilling
+            </div>
+            <p className="text-sm text-[color:var(--muted)]">
+              Nulstil Sladesh data for en specifik bruger (kun brugere der har brugt Sladesh).
+            </p>
+          </div>
+          <Card className="space-y-4 px-5 py-6">
+            <FeedbackBanner
+              feedback={userResetFeedback}
+              onDismiss={() => setUserResetFeedback(null)}
+            />
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
+                  Vælg bruger
+                </label>
+                {usersLoading ? (
+                  <div className="text-sm text-[color:var(--muted)]">Indlæser brugere...</div>
+                ) : (
+                  <select
+                    value={selectedUserId}
+                    onChange={(e) => setSelectedUserId(e.target.value)}
+                    disabled={!isAdmin || usersLoading}
+                    className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60"
+                    style={{
+                      borderColor: "var(--line)",
+                      backgroundColor: "var(--subtle)",
+                      color: "var(--ink)",
+                      "--tw-ring-offset-color": "var(--bg)",
+                    }}
+                  >
+                    <option value="">Vælg en bruger...</option>
+                    {users.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.fullName}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {selectedUserId && (() => {
+                const selectedUser = users.find(u => u.id === selectedUserId);
+                if (!selectedUser) return null;
+
+                const hasUsedSladesh = selectedUser.sladeshSent > 0 || selectedUser.sladeshReceived > 0;
+
+                return (
+                  <div className="rounded-2xl border px-4 py-3 space-y-3" style={{ borderColor: "var(--line)", backgroundColor: "var(--subtle)" }}>
+                    <div className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+                      {selectedUser.fullName}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <div className="text-[color:var(--muted)]">Sendt</div>
+                        <div className="font-semibold" style={{ color: "var(--ink)" }}>{selectedUser.sladeshSent}</div>
+                      </div>
+                      <div>
+                        <div className="text-[color:var(--muted)]">Modtaget</div>
+                        <div className="font-semibold" style={{ color: "var(--ink)" }}>{selectedUser.sladeshReceived}</div>
+                      </div>
+                      <div>
+                        <div className="text-[color:var(--muted)]">Gennemført</div>
+                        <div className="font-semibold" style={{ color: "var(--ink)" }}>{selectedUser.sladeshCompletedCount}</div>
+                      </div>
+                      <div>
+                        <div className="text-[color:var(--muted)]">Fejlet</div>
+                        <div className="font-semibold" style={{ color: "var(--ink)" }}>{selectedUser.sladeshFailedCount}</div>
+                      </div>
+                    </div>
+                    {!hasUsedSladesh && (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                        ⚠️ Denne bruger har ikke brugt Sladesh endnu. Nulstilling er ikke mulig.
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              <button
+                type="button"
+                onClick={handleResetUserSladesh}
+                disabled={isResettingUserSladesh || !isAdmin || !selectedUserId || (() => {
+                  const selectedUser = users.find(u => u.id === selectedUserId);
+                  return !selectedUser || (selectedUser.sladeshSent === 0 && selectedUser.sladeshReceived === 0);
+                })()}
+                className="w-full rounded-2xl border border-red-200 bg-white px-4 py-3 text-sm font-semibold text-red-600 shadow-sm transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isResettingUserSladesh ? "Nulstiller..." : "Nulstil Brugerens Sladesh"}
               </button>
             </div>
           </Card>

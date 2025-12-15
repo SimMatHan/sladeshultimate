@@ -978,6 +978,64 @@ export async function resetSladeshState(userId) {
 }
 
 /**
+ * Admin: Get all users from the database
+ * Returns basic user information for admin management
+ * @returns {Promise<Array>} Array of user objects with essential fields
+ */
+export async function getAllUsers() {
+  const usersRef = collection(db, 'users')
+  const q = query(usersRef, orderBy('fullName'))
+  const snapshot = await getDocs(q)
+
+  return snapshot.docs.map(docSnap => {
+    const data = docSnap.data()
+    return {
+      id: docSnap.id,
+      fullName: data.fullName || 'Ukendt',
+      username: data.username || data.email || 'Ukendt',
+      email: data.email || '',
+      sladeshSent: data.sladeshSent || 0,
+      sladeshReceived: data.sladeshReceived || 0,
+      sladeshCompletedCount: data.sladeshCompletedCount || 0,
+      sladeshFailedCount: data.sladeshFailedCount || 0,
+      totalDrinks: data.totalDrinks || 0
+    }
+  })
+}
+
+/**
+ * Admin: Reset Sladesh state for a specific user
+ * Only allows reset if user has actually used Sladesh (sent or received at least one)
+ * @param {string} userId - User ID to reset
+ * @throws {Error} If user hasn't used Sladesh or user not found
+ * @returns {Promise<void>}
+ */
+export async function resetSladeshStateForUser(userId) {
+  if (!userId) {
+    throw new Error('User ID er påkrævet')
+  }
+
+  const userRef = doc(db, 'users', userId)
+  const userSnap = await getDoc(userRef)
+
+  if (!userSnap.exists()) {
+    throw new Error(`Bruger med ID ${userId} blev ikke fundet`)
+  }
+
+  const userData = userSnap.data()
+  const sladeshSent = userData.sladeshSent || 0
+  const sladeshReceived = userData.sladeshReceived || 0
+
+  // Validation: Only allow reset if user has actually used Sladesh
+  if (sladeshSent === 0 && sladeshReceived === 0) {
+    throw new Error('Denne bruger har ikke brugt Sladesh endnu. Kun brugere der har sendt eller modtaget mindst én Sladesh kan nulstilles.')
+  }
+
+  // Use the existing resetSladeshState function
+  await resetSladeshState(userId)
+}
+
+/**
  * Update user's location
  * @param {string} userId - User ID
  * @param {Object} locationData - Location data with lat, lng, and venue
