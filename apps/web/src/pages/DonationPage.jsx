@@ -1,9 +1,43 @@
+import { useEffect, useState } from "react";
 import Card from "../components/Card";
 import Page from "../components/Page";
+import { getDonors } from "../services/donorService";
 
 const MOBILEPAY_URL = "https://qr.mobilepay.dk/box/f921fbf7-b760-4f56-b911-9279fb3240e4/pay-in";
 
 export default function DonationPage() {
+  const [donors, setDonors] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    try {
+      const donorList = getDonors();
+      setDonors(donorList);
+    } catch (error) {
+      console.error('[DonationPage] Failed to load donors', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const formatAmount = (amount) => {
+    return new Intl.NumberFormat('da-DK', {
+      style: 'currency',
+      currency: 'DKK',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return new Intl.DateTimeFormat('da-DK', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }).format(date);
+  };
+
   return (
     <Page title="Støt Sladesh">
       <div className="space-y-6">
@@ -40,20 +74,63 @@ export default function DonationPage() {
           </a>
         </Card>
 
-        <Card className="px-5 py-5 space-y-3">
-          <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border text-lg" style={{ borderColor: 'var(--line)', backgroundColor: 'var(--surface)', color: 'var(--brand)' }}>
-              ❤️
+        {/* Top Donors Section */}
+        <Card className="px-5 py-6 space-y-4">
+          <div className="space-y-2">
+            <div
+              className="text-xs font-medium uppercase tracking-wide"
+              style={{ color: 'var(--muted)' }}
+            >
+              Top Donerer
             </div>
-            <div className="space-y-1">
-              <div className="text-base font-semibold" style={{ color: 'var(--ink)' }}>
-                Din støtte går en forskel
-              </div>
-              <p className="text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
-                Hver donation hjælper med at holde servere kørende og giver tid til at bygge nye features til fællesskabet.
+            <p className="text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
+              Tak til alle der har støttet Sladesh! 🙏
+            </p>
+          </div>
+
+          {loading ? (
+            <div className="text-center py-4 text-sm" style={{ color: 'var(--muted)' }}>
+              Indlæser...
+            </div>
+          ) : donors.length === 0 ? (
+            <div className="rounded-2xl border border-dashed px-4 py-6 text-center" style={{ borderColor: 'var(--line)' }}>
+              <p className="text-sm" style={{ color: 'var(--muted)' }}>
+                Ingen donorer endnu. Vær den første til at støtte! 💚
               </p>
             </div>
-          </div>
+          ) : (
+            <div className="space-y-3">
+              {donors.map((donor) => (
+                <div
+                  key={donor.id}
+                  className="rounded-2xl border px-4 py-3 space-y-2"
+                  style={{ borderColor: 'var(--line)', backgroundColor: 'var(--subtle)' }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                        {donor.name}
+                      </div>
+                      <div className="text-xs" style={{ color: 'var(--muted)' }}>
+                        {formatDate(donor.date)}
+                      </div>
+                    </div>
+                    <div className="text-sm font-semibold shrink-0" style={{ color: 'var(--brand)' }}>
+                      {formatAmount(donor.amount)}
+                    </div>
+                  </div>
+                  {donor.message && (
+                    <div
+                      className="text-xs leading-relaxed italic pt-1 border-t"
+                      style={{ color: 'var(--muted)', borderColor: 'var(--line)' }}
+                    >
+                      "{donor.message}"
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
       </div>
     </Page>

@@ -19,6 +19,7 @@ import { isAdminUser } from "../config/admin";
 import { CATEGORIES } from "../constants/drinks";
 import { resetAchievements, resetSladeshState } from "../services/userService";
 import { useSladesh } from "../contexts/SladeshContext";
+import { getDonors, addDonor, updateDonor, deleteDonor } from "../services/donorService";
 
 const DRINK_CATEGORIES = CATEGORIES.map(({ id, name }) => ({
   value: id,
@@ -45,7 +46,7 @@ function FeedbackBanner({ feedback, onDismiss }) {
       ? "border-red-200 bg-red-50 text-red-700"
       : "border-emerald-200 bg-emerald-50 text-emerald-700";
 
-  
+
 
   return (
     <div
@@ -92,6 +93,16 @@ export default function AdminPortal() {
   const [sladeshFeedback, setSladeshFeedback] = useState(null);
   const [isResettingSladesh, setIsResettingSladesh] = useState(false);
   const { debugReceiveSladesh } = useSladesh();
+
+  // Donor state
+  const [donors, setDonors] = useState([]);
+  const [donorsLoading, setDonorsLoading] = useState(true);
+  const [donorForm, setDonorForm] = useState({ name: "", amount: "", date: "", message: "" });
+  const [donorFeedback, setDonorFeedback] = useState(null);
+  const [isSavingDonor, setIsSavingDonor] = useState(false);
+  const [donorEditingId, setDonorEditingId] = useState(null);
+  const [donorEditingForm, setDonorEditingForm] = useState({ name: "", amount: "", date: "", message: "" });
+  const [isUpdatingDonor, setIsUpdatingDonor] = useState(false);
 
   const handleVariationChange = (field) => (event) => {
     setVariationForm((prev) => ({
@@ -165,6 +176,18 @@ export default function AdminPortal() {
 
     return () => unsubscribe();
   }, [isAdmin]);
+
+  // Load donors from localStorage
+  useEffect(() => {
+    try {
+      const donorList = getDonors();
+      setDonors(donorList);
+    } catch (error) {
+      console.error('[AdminPortal] Failed to load donors', error);
+    } finally {
+      setDonorsLoading(false);
+    }
+  }, []);
 
   const groupedVariations = useMemo(() => {
     const groups = CATEGORIES.reduce((acc, category) => {
@@ -504,7 +527,7 @@ export default function AdminPortal() {
     }
   };
 
-  
+
 
   const handleResetAchievements = async () => {
     if (!currentUser || !isAdmin) {
@@ -563,6 +586,157 @@ export default function AdminPortal() {
       });
     } finally {
       setIsResettingSladesh(false);
+    }
+  };
+
+  // Donor handlers
+  const handleDonorChange = (field) => (event) => {
+    setDonorForm((prev) => ({
+      ...prev,
+      [field]: event.target.value,
+    }));
+  };
+
+  const handleDonorEditChange = (field) => (event) => {
+    setDonorEditingForm((prev) => ({
+      ...prev,
+      [field]: event.target.value,
+    }));
+  };
+
+  const startEditingDonor = (donor) => {
+    setDonorEditingId(donor.id);
+    setDonorEditingForm({
+      name: donor.name ?? "",
+      amount: donor.amount?.toString() ?? "",
+      date: donor.date ?? "",
+      message: donor.message ?? "",
+    });
+  };
+
+  const cancelEditingDonor = () => {
+    setDonorEditingId(null);
+    setDonorEditingForm({ name: "", amount: "", date: "", message: "" });
+    setIsUpdatingDonor(false);
+  };
+
+  const handleDonorSubmit = async (event) => {
+    event.preventDefault();
+    setDonorFeedback(null);
+
+    if (!currentUser || !isAdmin) {
+      setDonorFeedback({
+        status: "error",
+        message: "Du skal være logget ind som admin for at oprette donorer.",
+      });
+      return;
+    }
+
+    if (!donorForm.name.trim() || !donorForm.amount || !donorForm.date) {
+      setDonorFeedback({
+        status: "error",
+        message: "Navn, beløb og dato er påkrævet.",
+      });
+      return;
+    }
+
+    setIsSavingDonor(true);
+    try {
+      addDonor({
+        name: donorForm.name,
+        amount: donorForm.amount,
+        date: donorForm.date,
+        message: donorForm.message,
+      });
+
+      // Reload donors
+      const donorList = getDonors();
+      setDonors(donorList);
+
+      setDonorFeedback({
+        status: "success",
+        message: "Donor oprettet.",
+      });
+      setDonorForm({ name: "", amount: "", date: "", message: "" });
+    } catch (error) {
+      console.error("[AdminPortal] Failed to create donor", error);
+      setDonorFeedback({
+        status: "error",
+        message: error.message || "Kunne ikke oprette donor.",
+      });
+    } finally {
+      setIsSavingDonor(false);
+    }
+  };
+
+  const handleUpdateDonor = async (event) => {
+    event.preventDefault();
+
+    if (!donorEditingId) return;
+
+    if (!donorEditingForm.name.trim() || !donorEditingForm.amount || !donorEditingForm.date) {
+      setDonorFeedback({
+        status: "error",
+        message: "Navn, beløb og dato er påkrævet.",
+      });
+      return;
+    }
+
+    setIsUpdatingDonor(true);
+    try {
+      updateDonor(donorEditingId, {
+        name: donorEditingForm.name,
+        amount: donorEditingForm.amount,
+        date: donorEditingForm.date,
+        message: donorEditingForm.message,
+      });
+
+      // Reload donors
+      const donorList = getDonors();
+      setDonors(donorList);
+
+      setDonorFeedback({
+        status: "success",
+        message: "Donor opdateret.",
+      });
+      cancelEditingDonor();
+    } catch (error) {
+      console.error("[AdminPortal] Failed to update donor", error);
+      setDonorFeedback({
+        status: "error",
+        message: error.message || "Kunne ikke opdatere donor.",
+      });
+    } finally {
+      setIsUpdatingDonor(false);
+    }
+  };
+
+  const handleDeleteDonor = async (donorId) => {
+    if (!donorId) return;
+    if (!window.confirm("Er du sikker på, at du vil slette denne donor?")) {
+      return;
+    }
+
+    try {
+      deleteDonor(donorId);
+
+      // Reload donors
+      const donorList = getDonors();
+      setDonors(donorList);
+
+      setDonorFeedback({
+        status: "success",
+        message: "Donor slettet.",
+      });
+      if (donorEditingId === donorId) {
+        cancelEditingDonor();
+      }
+    } catch (error) {
+      console.error("[AdminPortal] Failed to delete donor", error);
+      setDonorFeedback({
+        status: "error",
+        message: error.message || "Kunne ikke slette donor.",
+      });
     }
   };
 
@@ -1119,6 +1293,275 @@ export default function AdminPortal() {
               </div>
             </Card>
           )}
+        </section>
+
+        {/* Donor Management Section */}
+        <section className="space-y-3">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
+              Donorer
+            </div>
+            <p className="text-sm text-[color:var(--muted)]">
+              Administrer top donerer som vises på donationssiden.
+            </p>
+          </div>
+          <Card className="space-y-4 px-5 py-6">
+            <FeedbackBanner
+              feedback={donorFeedback}
+              onDismiss={() => setDonorFeedback(null)}
+            />
+            <form className="space-y-4" onSubmit={handleDonorSubmit}>
+              <div className="space-y-2">
+                <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
+                  Navn
+                </label>
+                <input
+                  type="text"
+                  value={donorForm.name}
+                  onChange={handleDonorChange("name")}
+                  required
+                  placeholder="fx Simon Hansen"
+                  className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1"
+                  style={{
+                    borderColor: "var(--line)",
+                    backgroundColor: "var(--subtle)",
+                    color: "var(--ink)",
+                    "--tw-ring-offset-color": "var(--bg)",
+                  }}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
+                    Beløb (DKK)
+                  </label>
+                  <input
+                    type="number"
+                    value={donorForm.amount}
+                    onChange={handleDonorChange("amount")}
+                    required
+                    min="0"
+                    step="1"
+                    placeholder="100"
+                    className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1"
+                    style={{
+                      borderColor: "var(--line)",
+                      backgroundColor: "var(--subtle)",
+                      color: "var(--ink)",
+                      "--tw-ring-offset-color": "var(--bg)",
+                    }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
+                    Dato
+                  </label>
+                  <input
+                    type="date"
+                    value={donorForm.date}
+                    onChange={handleDonorChange("date")}
+                    required
+                    className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1"
+                    style={{
+                      borderColor: "var(--line)",
+                      backgroundColor: "var(--subtle)",
+                      color: "var(--ink)",
+                      "--tw-ring-offset-color": "var(--bg)",
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
+                  Besked (valgfri)
+                </label>
+                <textarea
+                  value={donorForm.message}
+                  onChange={handleDonorChange("message")}
+                  rows={2}
+                  placeholder="Tak for en fed app!"
+                  className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1"
+                  style={{
+                    borderColor: "var(--line)",
+                    backgroundColor: "var(--subtle)",
+                    color: "var(--ink)",
+                    "--tw-ring-offset-color": "var(--bg)",
+                  }}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isSavingDonor}
+                className="w-full rounded-2xl bg-[color:var(--brand,#FF385C)] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSavingDonor ? "Gemmer..." : "Opret donor"}
+              </button>
+            </form>
+          </Card>
+
+          <Card className="space-y-4 px-5 py-6">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
+                Alle donorer
+              </div>
+              {donorsLoading && (
+                <span className="text-xs text-[color:var(--muted)]">Indlæser…</span>
+              )}
+            </div>
+            {!donorsLoading && donors.length === 0 && (
+              <div className="rounded-2xl border border-dashed px-4 py-3 text-sm text-[color:var(--muted)]">
+                Ingen donorer endnu.
+              </div>
+            )}
+            <div className="space-y-3">
+              {donors.map((donor) => {
+                const isEditing = donorEditingId === donor.id;
+                return (
+                  <div
+                    key={donor.id}
+                    className="rounded-2xl border px-4 py-3"
+                    style={{
+                      borderColor: "var(--line)",
+                      backgroundColor: "var(--subtle)",
+                    }}
+                  >
+                    {isEditing ? (
+                      <form className="space-y-3" onSubmit={handleUpdateDonor}>
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
+                            Navn
+                          </label>
+                          <input
+                            type="text"
+                            value={donorEditingForm.name}
+                            onChange={handleDonorEditChange("name")}
+                            required
+                            className="w-full rounded-2xl border px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1"
+                            style={{
+                              borderColor: "var(--line)",
+                              backgroundColor: "var(--surface)",
+                              color: "var(--ink)",
+                              "--tw-ring-offset-color": "var(--bg)",
+                            }}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
+                              Beløb (DKK)
+                            </label>
+                            <input
+                              type="number"
+                              value={donorEditingForm.amount}
+                              onChange={handleDonorEditChange("amount")}
+                              required
+                              min="0"
+                              step="1"
+                              className="w-full rounded-2xl border px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1"
+                              style={{
+                                borderColor: "var(--line)",
+                                backgroundColor: "var(--surface)",
+                                color: "var(--ink)",
+                                "--tw-ring-offset-color": "var(--bg)",
+                              }}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
+                              Dato
+                            </label>
+                            <input
+                              type="date"
+                              value={donorEditingForm.date}
+                              onChange={handleDonorEditChange("date")}
+                              required
+                              className="w-full rounded-2xl border px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1"
+                              style={{
+                                borderColor: "var(--line)",
+                                backgroundColor: "var(--surface)",
+                                color: "var(--ink)",
+                                "--tw-ring-offset-color": "var(--bg)",
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
+                            Besked
+                          </label>
+                          <textarea
+                            value={donorEditingForm.message}
+                            onChange={handleDonorEditChange("message")}
+                            rows={2}
+                            className="w-full rounded-2xl border px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1"
+                            style={{
+                              borderColor: "var(--line)",
+                              backgroundColor: "var(--surface)",
+                              color: "var(--ink)",
+                              "--tw-ring-offset-color": "var(--bg)",
+                            }}
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={cancelEditingDonor}
+                            className="flex-1 rounded-2xl border px-4 py-2 text-sm font-semibold text-[color:var(--muted)] hover:text-[color:var(--ink)]"
+                            style={{ borderColor: "var(--line)" }}
+                            disabled={isUpdatingDonor}
+                          >
+                            Annuller
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={isUpdatingDonor}
+                            className="flex-1 rounded-2xl bg-[color:var(--brand,#FF385C)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition disabled:opacity-60"
+                          >
+                            {isUpdatingDonor ? "Gemmer..." : "Gem"}
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1">
+                            <div className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+                              {donor.name}
+                            </div>
+                            <div className="mt-1 text-xs" style={{ color: "var(--muted)" }}>
+                              {new Intl.NumberFormat('da-DK', { style: 'currency', currency: 'DKK', minimumFractionDigits: 0 }).format(donor.amount)} • {new Intl.DateTimeFormat('da-DK', { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(donor.date))}
+                            </div>
+                            {donor.message && (
+                              <div className="mt-1 text-xs italic text-[color:var(--muted)]">
+                                "{donor.message}"
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => startEditingDonor(donor)}
+                            className="rounded-2xl border px-3 py-1 text-xs font-semibold text-[color:var(--muted)] hover:text-[color:var(--ink)]"
+                            style={{ borderColor: "var(--line)" }}
+                          >
+                            Redigér
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteDonor(donor.id)}
+                            className="rounded-2xl border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+                          >
+                            Slet
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
         </section>
       </div >
     </Page >
