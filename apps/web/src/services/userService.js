@@ -235,14 +235,6 @@ async function refreshCheckInStatus(userRef, userData, now = new Date()) {
     updates.currentLocation = null
   }
 
-  // Also reset message quota if period has expired (same boundaries as check-in)
-  const lastMessageReset = normalizeToDate(userData.lastMessagePeriodReset)
-  const latestBoundary = getLatestResetBoundary(now)
-  if (!lastMessageReset || lastMessageReset.getTime() < latestBoundary.getTime()) {
-    updates.messageCount = 0
-    updates.lastMessagePeriodReset = Timestamp.fromDate(latestBoundary)
-  }
-
   await updateDoc(userRef, updates)
 
   const nextData = {
@@ -256,12 +248,6 @@ async function refreshCheckInStatus(userRef, userData, now = new Date()) {
     nextData.checkInStatus = false
     // Clear location when check-in expires
     nextData.currentLocation = null
-  }
-
-  // Update message quota in returned data if it was reset
-  if (!lastMessageReset || lastMessageReset.getTime() < latestBoundary.getTime()) {
-    nextData.messageCount = 0
-    nextData.lastMessagePeriodReset = Timestamp.fromDate(latestBoundary)
   }
 
   return nextData
@@ -405,8 +391,6 @@ export async function createUser({ uid, email, fullName, username, displayName =
     sladeshReceived: 0,
     lastSladeshSentAt: null,
     activeSladesh: null,
-    messageCount: 0,
-    lastMessagePeriodReset: null,
     lastMessageViewedAt: {},
     joinedChannelIds: [],
     activeChannelId: null,

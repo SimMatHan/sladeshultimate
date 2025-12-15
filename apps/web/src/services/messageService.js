@@ -12,28 +12,9 @@ import {
   serverTimestamp,
   getDoc,
   updateDoc,
-  increment
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { getUser } from './userService'
-import { getLatestResetBoundary, getNextResetBoundary } from './userService'
-
-const MESSAGES_PER_PERIOD = 3
-
-function calculateQuotaFromUserData(userData = {}, now = new Date()) {
-  const lastReset = normalizeToDate(userData.lastMessagePeriodReset)
-  const latestBoundary = getLatestResetBoundary(now)
-  const resetNeeded = !lastReset || lastReset.getTime() < latestBoundary.getTime()
-  const used = resetNeeded ? 0 : userData.messageCount || 0
-  const remaining = Math.max(0, MESSAGES_PER_PERIOD - used)
-
-  return {
-    used,
-    limit: MESSAGES_PER_PERIOD,
-    remaining,
-    canSend: remaining > 0
-  }
-}
 
 /**
  * Normalize date value to Date object
@@ -52,53 +33,6 @@ function normalizeToDate(value) {
 }
 
 /**
- * Ensure message quota is reset if period has expired
- * @param {string} userId - User ID
- * @param {Object} userData - User data from Firestore
- * @returns {Promise<Object>} Updated user data with reset quota if needed
- */
-async function ensureMessageQuotaReset(userId, userData, now = new Date()) {
-  const lastReset = normalizeToDate(userData.lastMessagePeriodReset)
-  const latestBoundary = getLatestResetBoundary(now)
-  
-  // If no reset timestamp or it's before the latest boundary, reset is needed
-  if (!lastReset || lastReset.getTime() < latestBoundary.getTime()) {
-    const userRef = doc(db, 'users', userId)
-    const boundaryTimestamp = Timestamp.fromDate(latestBoundary)
-    
-    await updateDoc(userRef, {
-      messageCount: 0,
-      lastMessagePeriodReset: boundaryTimestamp,
-      updatedAt: serverTimestamp(),
-      lastActiveAt: serverTimestamp()
-    })
-    
-    return {
-      ...userData,
-      messageCount: 0,
-      lastMessagePeriodReset: boundaryTimestamp
-    }
-  }
-  
-  return userData
-}
-
-/**
- * Get message quota status for a user
- * @param {string} userId - User ID
- * @returns {Promise<{used: number, limit: number, remaining: number, canSend: boolean}>}
- */
-export async function getMessageQuota(userId) {
-  const userData = await getUser(userId)
-  if (!userData) {
-    throw new Error('Bruger blev ikke fundet')
-  }
-  
-  const updatedUserData = await ensureMessageQuotaReset(userId, userData)
-  return calculateQuotaFromUserData(updatedUserData)
-}
-
-/**
  * Send a message to a channel
  * @param {string} channelId - Channel ID
  * @param {string} userId - User ID
@@ -111,16 +45,7 @@ export async function sendMessage(channelId, userId, userName, content) {
     throw new Error('channelId, userId, userName og content skal udfyldes for at sende en besked')
   }
   
-  // Check quota before sending
-  const quota = await getMessageQuota(userId)
-  if (!quota.canSend) {
-    throw new Error(`Du har brugt alle ${MESSAGES_PER_PERIOD} beskeder for denne periode. Prøv igen efter ${getNextResetBoundary(new Date()).toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' })}`)
-  }
-  
-  // Get user data to ensure quota is reset if needed
-  const userData = await getUser(userId)
-  await ensureMessageQuotaReset(userId, userData)
-  
+
   // Create message in Firestore
   const messagesRef = collection(db, 'channels', channelId, 'messages')
   const messageDoc = {
@@ -133,15 +58,17 @@ export async function sendMessage(channelId, userId, userName, content) {
   }
   
   const messageRef = await addDoc(messagesRef, messageDoc)
-  
-  // Increment message count atomically using Firestore increment
-  // This avoids race conditions and ensures the count is always accurate
-  const userRef = doc(db, 'users', userId)
-  await updateDoc(userRef, {
-    messageCount: increment(1),
-    updatedAt: serverTimestamp(),
-    lastActiveAt: serverTimestamp()
-  })
+
+  // Best-effort user activity update (should not block sending the message)
+  try {
+    const userRef = doc(db, 'users', userId)
+    await updateDoc(userRef, {
+      updatedAt: serverTimestamp(),
+      lastActiveAt: serverTimestamp()
+    })
+  } catch (error) {
+    console.warn('[messageService] Failed updating user activity after sendMessage', error)
+  }
   
   return messageRef.id
 }
@@ -205,27 +132,6 @@ export function subscribeToMessages(channelId, callback) {
     }
   )
   
-  return unsubscribe
-}
-
-export function subscribeToMessageQuota(userId, callback) {
-  if (!userId) {
-    return () => {}
-  }
-
-  const userRef = doc(db, 'users', userId)
-  const unsubscribe = onSnapshot(
-    userRef,
-    (snapshot) => {
-      if (!snapshot.exists()) return
-      const quota = calculateQuotaFromUserData(snapshot.data())
-      callback(quota)
-    },
-    (error) => {
-      console.error('Error subscribing to message quota:', error)
-    }
-  )
-
   return unsubscribe
 }
 

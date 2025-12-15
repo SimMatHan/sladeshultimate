@@ -9,10 +9,8 @@ import { USE_MOCK_DATA } from "../config/env";
 import {
   subscribeToMessages,
   sendMessage,
-  getMessageQuota,
   markMessagesAsSeen,
   getUnreadMessageCount,
-  subscribeToMessageQuota
 } from "../services/messageService";
 
 const DEFAULT_MESSAGES = [
@@ -36,21 +34,22 @@ const DEFAULT_MESSAGES = [
 function MessagesPanel({ open, onClose, channelId, userId, userName }) {
   const [messages, setMessages] = useState([]);
   const [messageInput, setMessageInput] = useState("");
-  const [quota, setQuota] = useState({ used: 0, limit: 3, remaining: 3, canSend: true });
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
-  const refreshQuotaFromServer = useCallback(async () => {
-    if (!userId) return;
+
+  useEffect(() => {
+    if (!open) return;
+    if (typeof window === "undefined") return;
     try {
-      const latestQuota = await getMessageQuota(userId);
-      setQuota(latestQuota);
-      console.debug("[MessagesPanel] quota refreshed from Firestore", latestQuota);
-    } catch (error) {
-      console.error("Error loading quota from Firestore:", error);
+      ["messageQuota", "messagesLeft", "quotaResetAt", "messageQuotaResetAt"].forEach((key) => {
+        window.localStorage.removeItem(key);
+      });
+    } catch {
+      // ignore
     }
-  }, [userId]);
+  }, [open]);
 
   // Format timestamp to relative time
   const formatTime = (timestamp) => {
@@ -95,25 +94,6 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
     return unsubscribe;
   }, [open, channelId, userId]);
 
-  // Keep quota synced with Firestore to avoid stale local values
-  useEffect(() => {
-    if (!open || !userId) return undefined;
-
-    let isActive = true;
-    refreshQuotaFromServer();
-
-    const unsubscribe = subscribeToMessageQuota(userId, (liveQuota) => {
-      if (!isActive) return;
-      setQuota(liveQuota);
-      console.debug("[MessagesPanel] quota snapshot from Firestore", liveQuota);
-    });
-
-    return () => {
-      isActive = false;
-      unsubscribe?.();
-    };
-  }, [open, userId, refreshQuotaFromServer]);
-
   // Auto-scroll when new messages arrive
   useEffect(() => {
     if (messagesEndRef.current && messages.length > 0) {
@@ -123,7 +103,7 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
 
   const handleSendMessage = useCallback(async (e) => {
     e?.preventDefault();
-    if (!messageInput.trim() || !channelId || !userId || !userName || isSending || !quota?.canSend) {
+    if (!messageInput.trim() || !channelId || !userId || !userName || isSending) {
       return;
     }
 
@@ -133,19 +113,13 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
     try {
       await sendMessage(channelId, userId, userName, messageInput);
       setMessageInput("");
-      await refreshQuotaFromServer();
     } catch (err) {
       console.error("Error sending message:", err);
       setError(err.message || "Kunne ikke sende besked");
-      try {
-        await refreshQuotaFromServer();
-      } catch (error) {
-        console.error("Error refreshing quota after failure:", error);
-      }
     } finally {
       setIsSending(false);
     }
-  }, [messageInput, channelId, userId, userName, isSending, quota?.canSend, refreshQuotaFromServer]);
+  }, [messageInput, channelId, userId, userName, isSending]);
 
   if (!channelId) {
     return (
@@ -171,7 +145,6 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
       onClose={onClose}
       position="top"
       title="Beskeder"
-      description={`${quota.remaining} ud af ${quota.limit} beskeder tilgængelig`}
       height="min(70vh, 600px)"
       animationDuration={300}
     >
@@ -233,8 +206,8 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
               type="text"
               value={messageInput}
               onChange={(e) => setMessageInput(e.target.value)}
-              placeholder={quota.canSend ? "Skriv en besked..." : "Kvote opbrugt"}
-              disabled={!quota.canSend || isSending}
+              placeholder="Skriv en besked..."
+              disabled={isSending}
               maxLength={500}
               className="flex-1 px-4 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] disabled:opacity-50 disabled:cursor-not-allowed"
               style={{
@@ -245,11 +218,11 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
             />
             <button
               type="submit"
-              disabled={!messageInput.trim() || !quota.canSend || isSending}
+              disabled={!messageInput.trim() || isSending}
               className="px-4 py-2 rounded-xl font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               style={{
-                backgroundColor: quota.canSend ? 'var(--brand, #FF385C)' : 'var(--line)',
-                color: quota.canSend ? 'white' : 'var(--muted)'
+                backgroundColor: 'var(--brand, #FF385C)',
+                color: 'white'
               }}
             >
               {isSending ? "..." : "Send"}
