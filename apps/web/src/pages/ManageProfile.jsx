@@ -1,11 +1,11 @@
 import { useEffect, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
 import Card from "../components/Card";
 import Page from "../components/Page";
 import Sheet from "../components/Sheet";
 import ToggleSwitch from "../components/ToggleSwitch";
 import { useTheme } from "../contexts/ThemeContext";
 import { useAuth } from "../hooks/useAuth";
+import { useLocation } from "../contexts/LocationContext";
 import { useUserData } from "../contexts/UserDataContext";
 import { getUser, updateUser } from "../services/userService";
 import { ensurePushSubscription, getNotificationPermission, isPushSupported } from "../push";
@@ -14,9 +14,9 @@ import { ensurePushSubscription, getNotificationPermission, isPushSupported } fr
 import { EMOJI_OPTIONS, GRADIENT_OPTIONS } from "../config/profileOptions";
 
 export default function ManageProfile() {
-  const navigate = useNavigate();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const { currentUser } = useAuth();
+  const { updateLocation, locationPermission } = useLocation();
   const { refreshUserData } = useUserData();
   const [userData, setUserData] = useState({
     username: "",
@@ -47,8 +47,29 @@ export default function ManageProfile() {
       return true;
     }
   });
+  const [locationEnabled, setLocationEnabled] = useState(() => {
+    try {
+      const stored = localStorage.getItem('locationEnabled');
+      return stored !== null ? stored === 'true' : false;
+    } catch {
+      return false;
+    }
+  });
+  const [locationHint, setLocationHint] = useState(null);
+  const [isRequestingLocation, setIsRequestingLocation] = useState(false);
   const isInitialLoad = useRef(true);
   const saveTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    if (!locationPermission || locationPermission === 'unknown') return;
+    const enabled = locationPermission === 'granted';
+    setLocationEnabled(enabled);
+    try {
+      localStorage.setItem('locationEnabled', String(enabled));
+    } catch {
+      // ignore
+    }
+  }, [locationPermission]);
 
   // Load user data from Firestore
   useEffect(() => {
@@ -251,6 +272,35 @@ export default function ManageProfile() {
     }
 
     setFeedback(newValue ? "Notifikationer aktiveret" : "Notifikationer deaktiveret");
+  };
+
+  const handleLocationToggle = async () => {
+    setLocationHint(null);
+
+    if (locationEnabled) {
+      setLocationHint("Slå fra i telefonens/browserens indstillinger");
+      return;
+    }
+
+    if (locationPermission === "denied") {
+      setLocationHint("Slå til i telefonens/browserens indstillinger");
+      return;
+    }
+
+    setIsRequestingLocation(true);
+    await updateLocation({ allowPrompt: true });
+    setIsRequestingLocation(false);
+
+    try {
+      if (navigator?.permissions?.query) {
+        const status = await navigator.permissions.query({ name: "geolocation" });
+        if (status.state === "denied") {
+          setLocationHint("Slå til i telefonens/browserens indstillinger");
+        }
+      }
+    } catch {
+      // ignore
+    }
   };
 
   const handlePromilleToggle = () => {
@@ -563,6 +613,50 @@ export default function ManageProfile() {
                 ariaLabel="Aktiver notifikationer"
               />
             </div>
+          </div>
+        </Card>
+
+        <Card className="px-5 py-6 space-y-4">
+          <div className="space-y-1">
+            <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+              Tilladelser
+            </div>
+            <h2 className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>
+              Tilladelser
+            </h2>
+            <p className="text-sm" style={{ color: 'var(--muted)' }}>
+              Forbered tilladelser, så funktioner virker med det samme.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--line)', backgroundColor: 'var(--surface)' }}>
+            <div className="flex items-center justify-between gap-3">
+              <span className="space-y-1">
+                <span className="block text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                  Lokation
+                </span>
+                <span className="block text-xs" style={{ color: 'var(--muted)' }}>
+                  {locationEnabled ? 'Aktiveret' : 'Deaktiveret'}
+                </span>
+              </span>
+              <span className="flex items-center gap-3">
+                {isRequestingLocation ? (
+                  <span className="text-xs" style={{ color: 'var(--muted)' }}>
+                    Henter...
+                  </span>
+                ) : null}
+                <ToggleSwitch
+                  checked={locationEnabled}
+                  onChange={handleLocationToggle}
+                  ariaLabel="Aktiver lokation"
+                />
+              </span>
+            </div>
+            {locationHint ? (
+              <div className="mt-3 text-xs" style={{ color: 'var(--muted)' }}>
+                {locationHint}
+              </div>
+            ) : null}
           </div>
         </Card>
 

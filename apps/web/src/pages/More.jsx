@@ -1,11 +1,8 @@
-import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Card from "../components/Card";
 import Page from "../components/Page";
-import ToggleSwitch from "../components/ToggleSwitch";
 import { useAuth } from "../hooks/useAuth";
 import { isAdminUser } from "../config/admin";
-import { useLocation } from "../contexts/LocationContext";
 
 
 function ActionCard({
@@ -101,31 +98,6 @@ export default function More() {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
   const isAdmin = isAdminUser(currentUser);
-  const { updateLocation, locationPermission } = useLocation();
-
-  const [locationEnabled, setLocationEnabled] = useState(() => {
-    try {
-      const stored = localStorage.getItem('locationEnabled');
-      return stored !== null ? stored === 'true' : false;
-    } catch {
-      return false;
-    }
-  });
-  const [locationHint, setLocationHint] = useState(null);
-  const [isRequestingLocation, setIsRequestingLocation] = useState(false);
-
-  useEffect(() => {
-    if (!locationPermission || locationPermission === 'unknown') return;
-    const enabled = locationPermission === 'granted';
-    setLocationEnabled(enabled);
-    try {
-      localStorage.setItem('locationEnabled', String(enabled));
-    } catch {
-      // ignore
-    }
-  }, [locationPermission]);
-
-
   const handleSignOut = () => {
     localStorage.removeItem("signedIn");
     localStorage.removeItem("onboarded");
@@ -133,7 +105,7 @@ export default function More() {
     navigate("/");
   };
 
-  const handleLocationToggle = async () => {
+  /* const handleLocationToggle = async () => {
     setLocationHint(null);
 
     if (locationEnabled) {
@@ -160,11 +132,12 @@ export default function More() {
     } catch {
       // ignore
     }
-  };
+  }; */
 
   return (
     <Page title="Mere">
       <div className="flex flex-1 flex-col space-y-6">
+        {/*
         <Card className="px-5 py-6 space-y-4">
           <div className="space-y-1">
             <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
@@ -208,6 +181,7 @@ export default function More() {
             ) : null}
           </div>
         </Card>
+        */}
 
         <div className="space-y-4">
           {isAdmin && (
