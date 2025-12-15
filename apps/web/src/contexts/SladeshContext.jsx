@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useMemo, useCallback, u
 import { collection, doc, getDoc, onSnapshot, query, updateDoc, where, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../hooks/useAuth';
 import { db } from '../firebase';
-import { getLatestResetBoundary, getNextResetBoundary, clearActiveSladeshLock } from '../services/userService';
+import { getLatestResetBoundary, getNextResetBoundary, clearActiveSladeshLock, incrementSladeshStats } from '../services/userService';
 
 const SladeshContext = createContext(null);
 
@@ -297,19 +297,33 @@ export function SladeshProvider({ children }) {
 
     // Mark challenge as failed
     const failChallenge = useCallback(async (challengeId) => {
+        const challenge = challenges.find((c) => c.id === challengeId);
         await updateChallenge(challengeId, { status: SLADESH_STATUS.FAILED });
         await releaseReceiverLock(challengeId, 'failed');
-    }, [releaseReceiverLock, updateChallenge]);
+        // Increment failed count for receiver (idempotent)
+        if (challenge?.receiverId) {
+            await incrementSladeshStats(challenge.receiverId, challengeId, 'failed').catch((err) => {
+                console.error('[failChallenge] Failed to increment stats', err);
+            });
+        }
+    }, [challenges, releaseReceiverLock, updateChallenge]);
 
     // Mark challenge as completed
     const completeChallenge = useCallback(async (challengeId, proofAfterImage) => {
+        const challenge = challenges.find((c) => c.id === challengeId);
         await updateChallenge(challengeId, {
             status: SLADESH_STATUS.COMPLETED,
             proofAfterImage,
             completedAt: Date.now(),
         });
         await releaseReceiverLock(challengeId, 'completed');
-    }, [releaseReceiverLock, updateChallenge]);
+        // Increment completed count for receiver (idempotent)
+        if (challenge?.receiverId) {
+            await incrementSladeshStats(challenge.receiverId, challengeId, 'completed').catch((err) => {
+                console.error('[completeChallenge] Failed to increment stats', err);
+            });
+        }
+    }, [challenges, releaseReceiverLock, updateChallenge]);
 
     // Defensive cleanup: if a resolved challenge comes in via Firestore, clear any lingering receiver lock
     useEffect(() => {

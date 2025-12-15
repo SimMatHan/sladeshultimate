@@ -393,6 +393,8 @@ export async function createUser({ uid, email, fullName, username, displayName =
     lastStatusCheckedAt: now,
     sladeshSent: 0,
     sladeshReceived: 0,
+    sladeshCompletedCount: 0,
+    sladeshFailedCount: 0,
     lastSladeshSentAt: null,
     activeSladesh: null,
     lastMessageViewedAt: {},
@@ -660,9 +662,9 @@ export async function addCheckIn(userId, checkInData) {
     typeof checkInData.location.lng === 'number'
   const locationPayload = hasLocation
     ? {
-        lat: checkInData.location.lat,
-        lng: checkInData.location.lng,
-      }
+      lat: checkInData.location.lat,
+      lng: checkInData.location.lng,
+    }
     : null
 
   const checkInDoc = await addDoc(checkInsRef, {
@@ -679,11 +681,11 @@ export async function addCheckIn(userId, checkInData) {
     lastStatusCheckedAt: serverTimestamp(),
     currentLocation: locationPayload
       ? {
-          ...locationPayload,
-          venue: checkInData.venue,
-          timestamp,
-          lastActiveAt: serverTimestamp()
-        }
+        ...locationPayload,
+        venue: checkInData.venue,
+        timestamp,
+        lastActiveAt: serverTimestamp()
+      }
       : null,
     activeChannelId: checkInData.channelId || null,
     updatedAt: serverTimestamp(),
@@ -711,9 +713,9 @@ export async function addDrinkLogEntry(userId, logData) {
     typeof logData.location.lng === 'number'
   const locationPayload = hasLocation
     ? {
-        lat: logData.location.lat,
-        lng: logData.location.lng,
-      }
+      lat: logData.location.lat,
+      lng: logData.location.lng,
+    }
     : null
 
   await addDoc(drinkLogsRef, {
@@ -877,6 +879,64 @@ export async function clearActiveSladeshLock(userId, challengeId) {
       updatedAt: serverTimestamp(),
       lastActiveAt: serverTimestamp()
     })
+  })
+}
+
+/**
+ * Increment Sladesh stats for a user (completed or failed count)
+ * Uses transaction to ensure idempotency - only increments if challenge status is changing from in_progress
+ * @param {string} userId - User ID (receiver of the Sladesh)
+ * @param {string} challengeId - Challenge ID
+ * @param {string} status - 'completed' or 'failed'
+ * @returns {Promise<void>}
+ */
+export async function incrementSladeshStats(userId, challengeId, status) {
+  if (!userId || !challengeId || !status) {
+    console.warn('[incrementSladeshStats] Missing required parameters', { userId, challengeId, status })
+    return
+  }
+
+  if (status !== 'completed' && status !== 'failed') {
+    console.warn('[incrementSladeshStats] Invalid status', status)
+    return
+  }
+
+  const userRef = doc(db, 'users', userId)
+  const challengeRef = doc(db, 'sladeshChallenges', challengeId)
+
+  await runTransaction(db, async (transaction) => {
+    const challengeSnap = await transaction.get(challengeRef)
+
+    if (!challengeSnap.exists()) {
+      console.warn('[incrementSladeshStats] Challenge not found', challengeId)
+      return
+    }
+
+    const challengeData = challengeSnap.data()
+    const currentStatus = (challengeData.status || '').toString().toLowerCase()
+
+    // Idempotency guard: only increment if status is changing FROM in_progress/pending
+    // This prevents double-counting on retries or refreshes
+    if (currentStatus === status) {
+      console.log('[incrementSladeshStats] Challenge already has status', status, '- skipping increment')
+      return
+    }
+
+    if (currentStatus !== 'in_progress' && currentStatus !== 'pending') {
+      console.log('[incrementSladeshStats] Challenge status is', currentStatus, '- skipping increment')
+      return
+    }
+
+    // Increment the appropriate counter
+    const fieldName = status === 'completed' ? 'sladeshCompletedCount' : 'sladeshFailedCount'
+
+    transaction.update(userRef, {
+      [fieldName]: increment(1),
+      updatedAt: serverTimestamp(),
+      lastActiveAt: serverTimestamp()
+    })
+
+    console.log('[incrementSladeshStats] Incremented', fieldName, 'for user', userId)
   })
 }
 

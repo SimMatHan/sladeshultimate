@@ -313,6 +313,8 @@ export default function ProfileDetails() {
   const totalDrinks = profile.totalDrinks || 0;
   const sladeshSent = profile?.sladeshSent || 0;
   const sladeshReceived = profile?.sladeshReceived || 0;
+  const sladeshCompleted = profile?.sladeshCompletedCount || 0;
+  const sladeshFailed = profile?.sladeshFailedCount || 0;
   const scopeLabel = breakdownScope === 'current' ? 'nuværende run' : 'hele Sladesh-historikken';
 
   return (
@@ -351,6 +353,8 @@ export default function ProfileDetails() {
           <StatTile value={currentRun} label="Loggede drinks i dag" />
           <StatTile value={sladeshReceived} label="Sladesh modtaget" />
           <StatTile value={sladeshSent} label="Sladesh sendt" />
+          <StatTile value={sladeshCompleted} label="Sladesh completed" />
+          <StatTile value={sladeshFailed} label="Sladesh failed" />
         </div>
 
         {/* Achievements Section */}
