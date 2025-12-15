@@ -180,7 +180,7 @@ export function LocationProvider({ children }) {
     readPermissionState()
   }, [readPermissionState])
 
-  // Location permission prompt is handled explicitly in Map.jsx.
+  // Location permission prompt is handled explicitly in Map.jsx (and the user-triggered toggle in More.jsx).
 
   // CHANNEL FILTERING: Fetch other users' locations from Firestore, filtered by activeChannelId.
   // Users only appear when they perform actions: check-ins, drinks, or sladesh.
@@ -333,7 +333,7 @@ export function LocationProvider({ children }) {
   // - User tracks a beverage (Home.jsx)
   // - User sends a sladesh (Sladesh.jsx)
   // - User makes a comment (TODO: implement when comments feature is added)
-  // allowPrompt: set to true when the UI is allowed to show the permission dialog (Map.jsx only).
+  // allowPrompt: set to true when the UI is allowed to show the permission dialog (Map.jsx or More.jsx toggle).
   const updateLocation = useCallback(
     async ({ allowPrompt = false } = {}) => {
       if (USE_MOCK_DATA) {

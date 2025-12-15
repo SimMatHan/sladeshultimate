@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Card from "../components/Card";
 import Page from "../components/Page";
 import Sheet from "../components/Sheet";
+import ToggleSwitch from "../components/ToggleSwitch";
 import { useTheme } from "../contexts/ThemeContext";
 import { useAuth } from "../hooks/useAuth";
 import { useUserData } from "../contexts/UserDataContext";
@@ -11,24 +12,6 @@ import { ensurePushSubscription, getNotificationPermission, isPushSupported } fr
 
 
 import { EMOJI_OPTIONS, GRADIENT_OPTIONS } from "../config/profileOptions";
-
-function ToggleSwitch({ checked, onChange, ariaLabel }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={ariaLabel}
-      onClick={onChange}
-      className="relative inline-flex h-7 w-12 items-center rounded-full transition"
-      style={{ backgroundColor: checked ? 'var(--brand)' : 'var(--line)' }}
-    >
-      <span
-        className={`inline-block h-6 w-6 transform rounded-full bg-white shadow transition ${checked ? "translate-x-5" : "translate-x-1"}`}
-      />
-    </button>
-  );
-}
 
 export default function ManageProfile() {
   const navigate = useNavigate();

@@ -1,8 +1,11 @@
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Card from "../components/Card";
 import Page from "../components/Page";
+import ToggleSwitch from "../components/ToggleSwitch";
 import { useAuth } from "../hooks/useAuth";
 import { isAdminUser } from "../config/admin";
+import { useLocation } from "../contexts/LocationContext";
 
 
 function ActionCard({
@@ -98,6 +101,29 @@ export default function More() {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
   const isAdmin = isAdminUser(currentUser);
+  const { updateLocation, locationPermission } = useLocation();
+
+  const [locationEnabled, setLocationEnabled] = useState(() => {
+    try {
+      const stored = localStorage.getItem('locationEnabled');
+      return stored !== null ? stored === 'true' : false;
+    } catch {
+      return false;
+    }
+  });
+  const [locationHint, setLocationHint] = useState(null);
+  const [isRequestingLocation, setIsRequestingLocation] = useState(false);
+
+  useEffect(() => {
+    if (!locationPermission || locationPermission === 'unknown') return;
+    const enabled = locationPermission === 'granted';
+    setLocationEnabled(enabled);
+    try {
+      localStorage.setItem('locationEnabled', String(enabled));
+    } catch {
+      // ignore
+    }
+  }, [locationPermission]);
 
 
   const handleSignOut = () => {
@@ -107,9 +133,82 @@ export default function More() {
     navigate("/");
   };
 
+  const handleLocationToggle = async () => {
+    setLocationHint(null);
+
+    if (locationEnabled) {
+      setLocationHint('Slå fra i telefonens/browserens indstillinger');
+      return;
+    }
+
+    if (locationPermission === 'denied') {
+      setLocationHint('Slå til i telefonens/browserens indstillinger');
+      return;
+    }
+
+    setIsRequestingLocation(true);
+    await updateLocation({ allowPrompt: true });
+    setIsRequestingLocation(false);
+
+    try {
+      if (navigator?.permissions?.query) {
+        const status = await navigator.permissions.query({ name: 'geolocation' });
+        if (status.state === 'denied') {
+          setLocationHint('Slå til i telefonens/browserens indstillinger');
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   return (
     <Page title="Mere">
       <div className="flex flex-1 flex-col space-y-6">
+        <Card className="px-5 py-6 space-y-4">
+          <div className="space-y-1">
+            <div className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+              Tilladelser
+            </div>
+            <h2 className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>
+              Tilladelser
+            </h2>
+            <p className="text-sm" style={{ color: 'var(--muted)' }}>
+              Forbered tilladelser, så funktioner virker med det samme.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--line)', backgroundColor: 'var(--surface)' }}>
+            <div className="flex items-center justify-between gap-3">
+              <span className="space-y-1">
+                <span className="block text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                  Lokation
+                </span>
+                <span className="block text-xs" style={{ color: 'var(--muted)' }}>
+                  {locationEnabled ? 'Aktiveret' : 'Deaktiveret'}
+                </span>
+              </span>
+              <span className="flex items-center gap-3">
+                {isRequestingLocation ? (
+                  <span className="text-xs" style={{ color: 'var(--muted)' }}>
+                    Henter...
+                  </span>
+                ) : null}
+                <ToggleSwitch
+                  checked={locationEnabled}
+                  onChange={handleLocationToggle}
+                  ariaLabel="Aktiver lokation"
+                />
+              </span>
+            </div>
+            {locationHint ? (
+              <div className="mt-3 text-xs" style={{ color: 'var(--muted)' }}>
+                {locationHint}
+              </div>
+            ) : null}
+          </div>
+        </Card>
+
         <div className="space-y-4">
           {isAdmin && (
             <ActionCard
