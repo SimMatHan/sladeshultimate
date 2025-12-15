@@ -83,23 +83,21 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
 
     const unsubscribe = subscribeToMessages(channelId, (newMessages) => {
       setMessages(newMessages);
-      // Auto-scroll to bottom after a short delay to ensure DOM update
-      setTimeout(() => {
-        if (messagesEndRef.current) {
-          messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-        }
-      }, 100);
+      // Auto-scroll using requestAnimationFrame for better performance
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({
+              behavior: "smooth",
+              block: "end"
+            });
+          }
+        });
+      });
     });
 
     return unsubscribe;
   }, [open, channelId, userId]);
-
-  // Auto-scroll when new messages arrive
-  useEffect(() => {
-    if (messagesEndRef.current && messages.length > 0) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages.length]);
 
   const handleSendMessage = useCallback(async (e) => {
     e?.preventDefault();
@@ -145,15 +143,19 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
       onClose={onClose}
       position="top"
       title="Beskeder"
-      height="min(70vh, 600px)"
+      height="min(60vh, 600px)"
       animationDuration={300}
+      className="!p-0"
     >
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full" style={{ backgroundColor: '#ffffff' }}>
         {/* Messages List */}
         <div
           ref={messagesContainerRef}
-          className="flex-1 overflow-y-auto px-6 py-4"
-          style={{ maxHeight: "calc(70vh - 140px)" }}
+          className="flex-1 min-h-0 overflow-y-auto px-6 pt-4 pb-2 -webkit-overflow-scrolling-touch"
+          style={{
+            overscrollBehavior: 'contain',
+            backgroundColor: '#ffffff'
+          }}
         >
           {messages.length === 0 ? (
             <div className="sheet-empty py-10 text-center text-xs">
@@ -192,7 +194,7 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
 
         {/* Error Message */}
         {error && (
-          <div className="px-6 pb-2">
+          <div className="flex-none px-6 pb-2">
             <div className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2">
               {error}
             </div>
@@ -200,8 +202,14 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
         )}
 
         {/* Input Area */}
-        <div className="px-6 pb-4 pt-2 border-t" style={{ borderColor: 'var(--line)' }}>
-          <form onSubmit={handleSendMessage} className="flex gap-2">
+        <div
+          className="flex-none px-1 pt-4"
+          style={{
+            backgroundColor: '#ffffff',
+            paddingBottom: '0px'
+          }}
+        >
+          <form onSubmit={handleSendMessage} className="flex gap-3">
             <input
               type="text"
               value={messageInput}
@@ -209,17 +217,17 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
               placeholder="Skriv en besked..."
               disabled={isSending}
               maxLength={500}
-              className="flex-1 px-4 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] disabled:opacity-50 disabled:cursor-not-allowed"
               style={{
                 borderColor: 'var(--line)',
-                backgroundColor: 'var(--surface)',
+                backgroundColor: '#ffffff',
                 color: 'var(--ink)'
               }}
             />
             <button
               type="submit"
               disabled={!messageInput.trim() || isSending}
-              className="px-4 py-2 rounded-xl font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-5 py-3 rounded-xl font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               style={{
                 backgroundColor: 'var(--brand, #FF385C)',
                 color: 'white'

@@ -8,15 +8,39 @@ import { SladeshProvider } from './contexts/SladeshContext'
 import App from './App.jsx'
 import './index.css'
 import { initServiceWorkerUpdates } from './utils/serviceWorkerUpdates'
+import { IS_DEVELOPMENT } from './config/env'
 
 /**
  * Try to lock orientation via Screen Orientation API when available.
  * Always fall back to a CSS-based blocker so landscape mode never exposes the UI.
+ *
+ * Dev bypass: simonmathiashansen@gmail.com is exempt from orientation lock in dev mode
  */
 const orientationBlockClass = 'orientation-lock--landscape'
 
+const shouldBypassOrientationLock = () => {
+  if (!IS_DEVELOPMENT) return false
+
+  try {
+    const userDataStr = localStorage.getItem('sladesh:userData')
+    if (!userDataStr) return false
+
+    const userData = JSON.parse(userDataStr)
+    return userData?.email === 'simonmathiashansen@gmail.com'
+  } catch {
+    return false
+  }
+}
+
 const updateLandscapeFallbackClass = () => {
   if (typeof document === 'undefined') return
+
+  // Dev bypass - skip orientation lock for test user
+  if (shouldBypassOrientationLock()) {
+    document.documentElement.classList.remove(orientationBlockClass)
+    return
+  }
+
   const html = document.documentElement
   const isLandscape = window.matchMedia?.('(orientation: landscape)')?.matches
 
@@ -28,6 +52,12 @@ const updateLandscapeFallbackClass = () => {
 }
 
 const lockOrientationToPortrait = async () => {
+  // Dev bypass - skip orientation lock for test user
+  if (shouldBypassOrientationLock()) {
+    updateLandscapeFallbackClass()
+    return
+  }
+
   try {
     if (window.screen?.orientation?.lock) {
       await window.screen.orientation.lock('portrait')

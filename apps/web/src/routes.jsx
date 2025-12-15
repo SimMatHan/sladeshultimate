@@ -25,6 +25,7 @@ import { isAdminUser } from './config/admin'
 import useDisplayMode from './hooks/useDisplayMode'
 import useStandaloneOverscrollBlock from './hooks/useStandaloneOverscrollBlock'
 import DonationPage from './pages/DonationPage'
+import { IS_DEVELOPMENT } from './config/env'
 
 /** Firebase Auth guards - check if user is authenticated */
 function useAuthGuard() {
@@ -123,9 +124,13 @@ function RedirectToAuth({ mode = 'signin' }) {
 
 export default function RoutesView() {
   const { isStandalone, canPromptInstall, handleInstallClick, isIos } = useDisplayMode()
+  const { currentUser } = useAuth()
   useStandaloneOverscrollBlock(isStandalone)
 
-  if (!isStandalone) {
+  // Dev bypass - skip PWA install gate for test user
+  const shouldBypassPwaGate = IS_DEVELOPMENT && currentUser?.email === 'simonmathiashansen@gmail.com'
+
+  if (!isStandalone && !shouldBypassPwaGate) {
     return (
       <InstallPwaGate
         canPromptInstall={canPromptInstall}
