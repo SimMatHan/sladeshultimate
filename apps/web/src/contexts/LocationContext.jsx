@@ -149,60 +149,38 @@ export function LocationProvider({ children }) {
     )
   })
   const [locationError, setLocationError] = useState(null)
+  const [locationPermission, setLocationPermission] = useState('unknown')
+  const [hasRequestedLocation, setHasRequestedLocation] = useState(false)
 
-  // Initialize location based on environment
+  // In mock mode, bootstrap a fake location so UI can render without permissions.
   useEffect(() => {
-    if (USE_MOCK_DATA) {
-      // Use mock location service in development
-      const initialLocation = mockLocationService.getCurrentLocation()
-      setUserLocation(initialLocation)
-      setLocationHistory([initialLocation])
-    } else {
-      // Use browser's Geolocation API in production
-      if ('geolocation' in navigator) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            const location = {
-              lat: position.coords.latitude,
-              lng: position.coords.longitude,
-              timestamp: Date.now(),
-            }
-            setUserLocation(location)
-            setLocationHistory([location])
-            setLocationError(null)
-          },
-          (error) => {
-            console.error('Geolocation error:', error)
-            setLocationError(error.message)
-            // Fallback to a default location (Copenhagen) if geolocation fails
-            const fallbackLocation = {
-              lat: 55.6761,
-              lng: 12.5683,
-              timestamp: Date.now(),
-            }
-            setUserLocation(fallbackLocation)
-            setLocationHistory([fallbackLocation])
-          },
-          {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0
-          }
-        )
-      } else {
-        console.warn('Geolocation is not supported by this browser')
-        setLocationError('Geolokation understøttes ikke')
-        // Fallback to default location
-        const fallbackLocation = {
-          lat: 55.6761,
-          lng: 12.5683,
-          timestamp: Date.now(),
-        }
-        setUserLocation(fallbackLocation)
-        setLocationHistory([fallbackLocation])
-      }
+    if (!USE_MOCK_DATA) return
+    const initialLocation = mockLocationService.getCurrentLocation()
+    setUserLocation(initialLocation)
+    setLocationHistory([initialLocation])
+  }, [])
+
+  const readPermissionState = useCallback(async () => {
+    if (typeof navigator === 'undefined' || !navigator.permissions?.query) {
+      return null
+    }
+    try {
+      const status = await navigator.permissions.query({ name: 'geolocation' })
+      setLocationPermission(status.state)
+      return status.state
+    } catch (error) {
+      console.warn('Unable to read geolocation permission status', error)
+      return null
     }
   }, [])
+
+  // Keep a lightweight read on permission state without prompting for it.
+  useEffect(() => {
+    if (USE_MOCK_DATA) return
+    readPermissionState()
+  }, [readPermissionState])
+
+  // Location permission prompt is handled explicitly in Map.jsx.
 
   // CHANNEL FILTERING: Fetch other users' locations from Firestore, filtered by activeChannelId.
   // Users only appear when they perform actions: check-ins, drinks, or sladesh.
@@ -355,15 +333,41 @@ export function LocationProvider({ children }) {
   // - User tracks a beverage (Home.jsx)
   // - User sends a sladesh (Sladesh.jsx)
   // - User makes a comment (TODO: implement when comments feature is added)
-  const updateLocation = useCallback(() => {
-    if (USE_MOCK_DATA) {
-      // Use mock location service in development
-      const newLocation = mockLocationService.getCurrentLocation()
-      setUserLocation(newLocation)
-      setLocationHistory((prev) => [...prev, newLocation].slice(-50)) // Keep last 50 locations
-    } else {
-      // Use browser's Geolocation API in production
-      if ('geolocation' in navigator) {
+  // allowPrompt: set to true when the UI is allowed to show the permission dialog (Map.jsx only).
+  const updateLocation = useCallback(
+    async ({ allowPrompt = false } = {}) => {
+      if (USE_MOCK_DATA) {
+        const newLocation = mockLocationService.getCurrentLocation()
+        setUserLocation(newLocation)
+        setLocationHistory((prev) => [...prev, newLocation].slice(-50)) // Keep last 50 locations
+        setLocationError(null)
+        return newLocation
+      }
+
+      if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
+        setLocationError('Geolocation is not supported')
+        setLocationPermission('unsupported')
+        return null
+      }
+
+      let permissionState = locationPermission
+      if (!permissionState || permissionState === 'unknown') {
+        const resolved = await readPermissionState()
+        permissionState = resolved || permissionState
+      }
+
+      // Skip actively requesting permission outside the Map view.
+      if (!allowPrompt && permissionState && permissionState !== 'granted') {
+        return userLocation
+      }
+
+      // If we don't know the state and shouldn't prompt, bail quietly.
+      if (!allowPrompt && !permissionState && !userLocation) {
+        return null
+      }
+
+      setHasRequestedLocation(true)
+      return await new Promise((resolve) => {
         navigator.geolocation.getCurrentPosition(
           (position) => {
             const newLocation = {
@@ -374,20 +378,27 @@ export function LocationProvider({ children }) {
             setUserLocation(newLocation)
             setLocationHistory((prev) => [...prev, newLocation].slice(-50))
             setLocationError(null)
+            setLocationPermission('granted')
+            resolve(newLocation)
           },
           (error) => {
             console.error('Geolocation error:', error)
+            if (error.code === error.PERMISSION_DENIED) {
+              setLocationPermission('denied')
+            }
             setLocationError(error.message)
+            resolve(null)
           },
           {
             enableHighAccuracy: true,
             timeout: 10000,
-            maximumAge: 0
+            maximumAge: allowPrompt ? 0 : 60000
           }
         )
-      }
-    }
-  }, [])
+      })
+    },
+    [locationPermission, readPermissionState, userLocation]
+  )
 
   const value = {
     userLocation,
@@ -395,6 +406,8 @@ export function LocationProvider({ children }) {
     updateLocation,
     otherUsers,
     locationError,
+    locationPermission,
+    hasRequestedLocation,
   }
 
   return (
@@ -411,4 +424,3 @@ export function useLocation() {
   }
   return context
 }
-

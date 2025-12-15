@@ -24,7 +24,7 @@ import { useTheme } from "../contexts/ThemeContext";
 import { useChannel } from "../hooks/useChannel";
 import { useAuth } from "../hooks/useAuth";
 import { USE_MOCK_DATA } from "../config/env";
-import { getUser, getSladeshCooldownState, addSladesh, updateUserLocation, getNextResetBoundary, getLatestResetBoundary } from "../services/userService";
+import { getUser, getSladeshCooldownState, addSladesh, updateUserLocation, getNextResetBoundary, getLatestResetBoundary, SLADESH_ACTIVE_ERROR } from "../services/userService";
 import { getCheckedInChannelMembers } from "../services/channelService";
 import { incrementSladeshCount } from "../services/statsService";
 import { resolveMockChannelKey, isMemberOfMockChannel, MOCK_CHANNEL_KEYS } from "../utils/mockChannels";
@@ -272,8 +272,15 @@ export default function Sladesh() {
       profileEmoji: member.profileEmoji || '🍹',
       profileGradient: member.profileGradient || member.avatarGradient || 'from-rose-400 to-orange-500',
       avatarGradient: member.avatarGradient || member.profileGradient,
+      activeSladesh: member.activeSladesh || null,
     }));
   }, [members]);
+
+  // Enforce single active Sladesh per receiver: mark targets with an active lock
+  const isTargetLocked = useCallback((target) => {
+    const status = (target?.activeSladesh?.status || "").toString().toLowerCase();
+    return !!target?.activeSladesh && status !== "completed" && status !== "failed";
+  }, []);
 
   const orbitParticipants = useMemo(() => {
     const source = USE_MOCK_DATA ? MOCK_PARTICIPANTS : eligibleTargets;
@@ -288,6 +295,7 @@ export default function Sladesh() {
       profileEmoji: participant.profileEmoji || '🍹',
       profileGradient: participant.profileGradient || participant.avatarGradient || participant.accent || "from-rose-400 to-orange-500",
       accent: participant.profileGradient || participant.avatarGradient || participant.accent || "from-slate-400 to-indigo-500",
+      activeSladesh: participant.activeSladesh || null,
       radius: 118 + (index % 4) * 6,
       duration: 24 + (index % 5) * 2,
     }));
@@ -446,13 +454,17 @@ export default function Sladesh() {
   const guardAndSetTarget = useCallback(
     (target) => {
       if (membersLoading || isSending) return;
+      if (isTargetLocked(target)) {
+        setStatusMessage({ tone: "error", body: "User is already in an active Sladesh." });
+        return;
+      }
       if (cannotInitiateReason) {
         setStatusMessage({ tone: "info", body: cannotInitiateReason });
         return;
       }
       setPendingTarget(target);
     },
-    [cannotInitiateReason, isSending, membersLoading]
+    [cannotInitiateReason, isSending, isTargetLocked, membersLoading]
   );
 
   const handleRandomSladesh = useCallback(() => {
@@ -460,12 +472,23 @@ export default function Sladesh() {
       setStatusMessage({ tone: "info", body: "Ingen medlemmer er checket ind i denne kanal endnu." });
       return;
     }
-    const randomIndex = Math.floor(Math.random() * eligibleTargets.length);
-    guardAndSetTarget(eligibleTargets[randomIndex]);
-  }, [eligibleTargets, guardAndSetTarget]);
+    const unlockedTargets = eligibleTargets.filter((target) => !isTargetLocked(target));
+    if (!unlockedTargets.length) {
+      setStatusMessage({ tone: "info", body: "User is already in an active Sladesh." });
+      return;
+    }
+    const randomIndex = Math.floor(Math.random() * unlockedTargets.length);
+    guardAndSetTarget(unlockedTargets[randomIndex]);
+  }, [eligibleTargets, guardAndSetTarget, isTargetLocked]);
 
   const handleConfirmSladesh = useCallback(async () => {
     if (!pendingTarget) return;
+
+    if (!USE_MOCK_DATA && isTargetLocked(pendingTarget)) {
+      setStatusMessage({ tone: "error", body: "User is already in an active Sladesh." });
+      setPendingTarget(null);
+      return;
+    }
 
     if (USE_MOCK_DATA) {
       const now = new Date();
@@ -573,7 +596,11 @@ export default function Sladesh() {
     } catch (error) {
       console.error("Error sending sladesh:", error);
       removeChallenge(optimisticChallenge?.id);
-      setStatusMessage({ tone: "error", body: "Kunne ikke sende Sladesh. Prøv igen." });
+      if (error?.code === SLADESH_ACTIVE_ERROR || error?.message === SLADESH_ACTIVE_ERROR) {
+        setStatusMessage({ tone: "error", body: "User is already in an active Sladesh." });
+      } else {
+        setStatusMessage({ tone: "error", body: "Kunne ikke sende Sladesh. Prøv igen." });
+      }
     } finally {
       setIsSending(false);
     }
@@ -586,6 +613,7 @@ export default function Sladesh() {
     updateLocation,
     userLocation,
     userProfile,
+    isTargetLocked,
   ]);
 
   const handleCloseOverlay = useCallback(() => {
@@ -1165,5 +1193,3 @@ function formatResetCountdown(ms) {
   const pad = (value) => value.toString().padStart(2, "0");
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 }
-
-

@@ -301,26 +301,28 @@ export default function AppShell() {
 
     try {
       setIsCheckingIn(true)
-      updateLocation()
-      const venue = 'Nuværende placering'
-      const locationPayload = userLocation || {
-        lat: 55.6761,
-        lng: 12.5683,
-      }
+      const latestLocation = await updateLocation()
+      const locationPayload = latestLocation || userLocation || null
+      const venue = selectedChannel?.name || 'Nuvaerende placering'
 
       await addCheckIn(currentUser.uid, {
         venue,
-        location: {
-          lat: locationPayload.lat,
-          lng: locationPayload.lng,
-        },
+        channelId: selectedChannel?.id || null,
+        location: locationPayload
+          ? {
+              lat: locationPayload.lat,
+              lng: locationPayload.lng,
+            }
+          : null,
       })
 
-      await updateUserLocation(currentUser.uid, {
-        lat: locationPayload.lat,
-        lng: locationPayload.lng,
-        venue,
-      })
+      if (locationPayload) {
+        await updateUserLocation(currentUser.uid, {
+          lat: locationPayload.lat,
+          lng: locationPayload.lng,
+          venue,
+        })
+      }
 
       await incrementCheckInCount()
       persistCheckedIn(true)
@@ -338,7 +340,7 @@ export default function AppShell() {
     } finally {
       setIsCheckingIn(false)
     }
-  }, [currentUser, persistCheckedIn, updateLocation, userLocation])
+  }, [currentUser, persistCheckedIn, selectedChannel, updateLocation, userLocation])
 
   const handleGlobalCheckOut = useCallback(() => {
     persistCheckedIn(false)

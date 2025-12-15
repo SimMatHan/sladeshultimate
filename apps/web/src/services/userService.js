@@ -21,6 +21,9 @@ import { deriveInitials, generateAvatarGradient } from '../config/firestore.sche
 import { normalizePromilleInput } from '../utils/promille'
 import { NON_DRINK_CATEGORY_IDS } from '../constants/drinks'
 
+// Single active Sladesh guard: used as an error code when a receiver is already locked
+export const SLADESH_ACTIVE_ERROR = 'receiver_already_active'
+
 const RESET_BOUNDARY_HOUR = 12 // Check-in/message window resets at local 12:00
 const RESET_TIMEZONE = 'Europe/Copenhagen'
 const DRINK_DAY_START_HOUR = 10
@@ -401,6 +404,7 @@ export async function createUser({ uid, email, fullName, username, displayName =
     sladeshSent: 0,
     sladeshReceived: 0,
     lastSladeshSentAt: null,
+    activeSladesh: null,
     messageCount: 0,
     lastMessagePeriodReset: null,
     lastMessageViewedAt: {},
@@ -654,23 +658,82 @@ export async function recordAchievementUnlock(userId, achievementId, hasUnlocked
  * @param {string} userId - User ID
  * @param {Object} checkInData - Check-in data
  * @param {string} checkInData.venue - Venue name
- * @param {Object} checkInData.location - Location with lat/lng
+ * @param {Object} [checkInData.location] - Optional location with lat/lng
  * @param {string} [checkInData.channelId] - Optional channel ID
  * @returns {Promise<string>} Document ID of the new check-in
  */
 export async function addCheckIn(userId, checkInData) {
-  // Update user's check-in status and location
   const userRef = doc(db, 'users', userId)
+  const checkInsRef = collection(db, 'users', userId, 'checkIns')
+  const timestamp = serverTimestamp()
+  const hasLocation =
+    checkInData.location &&
+    typeof checkInData.location.lat === 'number' &&
+    typeof checkInData.location.lng === 'number'
+  const locationPayload = hasLocation
+    ? {
+        lat: checkInData.location.lat,
+        lng: checkInData.location.lng,
+      }
+    : null
+
+  const checkInDoc = await addDoc(checkInsRef, {
+    venue: checkInData.venue,
+    location: locationPayload,
+    channelId: checkInData.channelId || null,
+    timestamp,
+  })
+
   await updateDoc(userRef, {
     checkInStatus: true,
-    lastCheckIn: serverTimestamp(),
+    lastCheckIn: timestamp,
     lastCheckInVenue: checkInData.venue,
     lastStatusCheckedAt: serverTimestamp(),
-    currentLocation: {
-      ...checkInData.location,
-      venue: checkInData.venue,
-      lastActiveAt: serverTimestamp()
-    }
+    currentLocation: locationPayload
+      ? {
+          ...locationPayload,
+          venue: checkInData.venue,
+          timestamp,
+          lastActiveAt: serverTimestamp()
+        }
+      : null,
+    activeChannelId: checkInData.channelId || null,
+    updatedAt: serverTimestamp(),
+    lastActiveAt: serverTimestamp()
+  })
+
+  return checkInDoc.id
+}
+
+/**
+ * Add a drink log entry with optional location data
+ * @param {string} userId - User ID
+ * @param {Object} logData - Drink log data
+ * @param {string} logData.categoryId - Drink category ID
+ * @param {string} logData.variationName - Drink variation name
+ * @param {Object|null} [logData.location] - Optional location { lat, lng }
+ * @param {string|null} [logData.channelId] - Optional channel ID
+ * @returns {Promise<void>}
+ */
+export async function addDrinkLogEntry(userId, logData) {
+  const drinkLogsRef = collection(db, 'users', userId, 'drinkLogs')
+  const hasLocation =
+    logData.location &&
+    typeof logData.location.lat === 'number' &&
+    typeof logData.location.lng === 'number'
+  const locationPayload = hasLocation
+    ? {
+        lat: logData.location.lat,
+        lng: logData.location.lng,
+      }
+    : null
+
+  await addDoc(drinkLogsRef, {
+    categoryId: logData.categoryId,
+    variationName: logData.variationName,
+    channelId: logData.channelId || null,
+    location: locationPayload,
+    timestamp: serverTimestamp(),
   })
 }
 
@@ -701,8 +764,8 @@ export async function addSladesh(senderId, sladeshData) {
   } = sladeshData
   const deadlineAt = Timestamp.fromMillis(deadlineAtMs ?? Date.now() + 10 * 60 * 1000) // 10 minutes from send time
 
-  // Create challenge document
   const challengesRef = collection(db, 'sladeshChallenges')
+  const challengeRef = challengeId ? doc(challengesRef, challengeId) : doc(challengesRef)
   const payload = {
     senderId,
     senderName: senderName || null,
@@ -717,32 +780,81 @@ export async function addSladesh(senderId, sladeshData) {
     updatedAt: serverTimestamp()
   }
 
-  let challengeDoc
-  if (challengeId) {
-    const docRef = doc(challengesRef, challengeId)
-    await setDoc(docRef, payload)
-    challengeDoc = docRef
-  } else {
-    challengeDoc = await addDoc(challengesRef, payload)
-  }
+  // Atomic guard: ensure receiver only gets one active Sladesh at a time
+  await runTransaction(db, async (transaction) => {
+    const recipientRef = doc(db, 'users', recipientId)
+    const senderRef = doc(db, 'users', senderId)
+    const recipientSnap = await transaction.get(recipientRef)
 
-  // Update sender stats
-  const senderRef = doc(db, 'users', senderId)
-  await updateDoc(senderRef, {
-    sladeshSent: increment(1),
-    lastSladeshSentAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    lastActiveAt: serverTimestamp()
+    if (!recipientSnap.exists()) {
+      throw new Error('recipient_not_found')
+    }
+
+    const activeSladesh = recipientSnap.data().activeSladesh || null
+    const activeStatus = (activeSladesh?.status || '').toString().toLowerCase()
+    const hasActiveLock = !!activeSladesh && activeStatus !== 'completed' && activeStatus !== 'failed'
+
+    if (hasActiveLock && activeSladesh.challengeId !== challengeRef.id) {
+      const error = new Error(SLADESH_ACTIVE_ERROR)
+      error.code = SLADESH_ACTIVE_ERROR
+      throw error
+    }
+
+    transaction.set(challengeRef, payload)
+
+    transaction.update(senderRef, {
+      sladeshSent: increment(1),
+      lastSladeshSentAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      lastActiveAt: serverTimestamp()
+    })
+
+    transaction.update(recipientRef, {
+      sladeshReceived: increment(1),
+      activeSladesh: {
+        challengeId: challengeRef.id,
+        status: 'in_progress',
+        setAt: serverTimestamp(),
+        senderId,
+        recipientId
+      },
+      updatedAt: serverTimestamp(),
+      lastActiveAt: serverTimestamp()
+    })
   })
 
-  // Update recipient stats
-  const recipientRef = doc(db, 'users', recipientId)
-  await updateDoc(recipientRef, {
-    sladeshReceived: increment(1),
-    updatedAt: serverTimestamp()
-  })
+  return challengeRef.id
+}
 
-  return challengeDoc.id
+/**
+ * Clear the receiver's activeSladesh marker when a challenge finishes.
+ * Guarded by challengeId so we don't accidentally unlock a newer challenge.
+ */
+export async function clearActiveSladeshLock(userId, challengeId) {
+  if (!userId || !challengeId) return
+
+  const userRef = doc(db, 'users', userId)
+  await runTransaction(db, async (transaction) => {
+    const userSnap = await transaction.get(userRef)
+    if (!userSnap.exists()) {
+      return
+    }
+
+    const active = userSnap.data().activeSladesh || null
+    if (!active) {
+      return
+    }
+
+    if (active.challengeId && active.challengeId !== challengeId) {
+      return
+    }
+
+    transaction.update(userRef, {
+      activeSladesh: null,
+      updatedAt: serverTimestamp(),
+      lastActiveAt: serverTimestamp()
+    })
+  })
 }
 
 /**
@@ -756,6 +868,7 @@ export async function resetSladeshState(userId) {
     sladeshSent: 0,
     sladeshReceived: 0,
     lastSladeshSentAt: null,
+    activeSladesh: null,
     updatedAt: serverTimestamp(),
     lastActiveAt: serverTimestamp()
   })

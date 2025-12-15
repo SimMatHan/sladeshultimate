@@ -430,7 +430,8 @@ export async function getCheckedInChannelMembers(channelId) {
       profileGradient: data.profileGradient || 'from-rose-400 to-orange-500',
       avatarGradient: data.avatarGradient || data.profileGradient || 'from-slate-400 to-indigo-500',
       checkInStatus: true,
-      currentLocation: data.currentLocation || null
+      currentLocation: data.currentLocation || null,
+      activeSladesh: data.activeSladesh || null
     }
   })
 }

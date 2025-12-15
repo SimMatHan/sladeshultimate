@@ -4,7 +4,7 @@ import { useUserData } from "./UserDataContext";
 import { useDrinkVariants } from "../hooks/useDrinkVariants";
 import { useLocation } from "./LocationContext";
 import { useChannel } from "../hooks/useChannel";
-import { addDrink, removeDrink, resetCurrentRun, updateUserLocation } from "../services/userService";
+import { addDrink, addDrinkLogEntry, removeDrink, resetCurrentRun, updateUserLocation } from "../services/userService";
 import { clearLeaderboardCache } from "../services/leaderboardService";
 import { DRINK_CATEGORY_ID_SET, NON_DRINK_CATEGORY_ID_SET } from "../constants/drinks";
 import {
@@ -158,26 +158,14 @@ export function DrinkLogProvider({ children }) {
       if (!currentUser) return;
       try {
         if (delta > 0) {
+          const locationPromise = updateLocation();
           await addDrink(currentUser.uid, categoryId, variationName);
           if (!isNonDrink && selectedChannel?.id) {
             clearLeaderboardCache(selectedChannel.id);
           }
           try {
-            updateLocation();
-            let locationToSave = userLocation;
-            if (!locationToSave && "geolocation" in navigator) {
-              const position = await new Promise((resolve, reject) => {
-                navigator.geolocation.getCurrentPosition(resolve, reject, {
-                  enableHighAccuracy: true,
-                  timeout: 5000,
-                  maximumAge: 60000,
-                });
-              });
-              locationToSave = {
-                lat: position.coords.latitude,
-                lng: position.coords.longitude,
-              };
-            }
+            const resolvedLocation = await locationPromise;
+            const locationToSave = resolvedLocation || userLocation || null;
             if (locationToSave) {
               const venue = selectedChannel?.name || "Ukendt sted";
               await updateUserLocation(currentUser.uid, {
@@ -186,6 +174,14 @@ export function DrinkLogProvider({ children }) {
                 venue,
               });
             }
+            await addDrinkLogEntry(currentUser.uid, {
+              categoryId,
+              variationName,
+              channelId: selectedChannel?.id || null,
+              location: locationToSave
+                ? { lat: locationToSave.lat, lng: locationToSave.lng }
+                : null,
+            });
           } catch (locationError) {
             debugLog(debugEnabled, txnId, "location update failed", { error: locationError });
           }

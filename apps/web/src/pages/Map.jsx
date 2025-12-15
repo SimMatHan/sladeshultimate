@@ -123,8 +123,10 @@ export default function MapPage() {
   // where('joinedChannelIds', 'array-contains', activeChannelId).
   // Only users from the active channel appear as markers on the map.
   const { selectedChannel } = useChannel()
-  const { userLocation, otherUsers } = useLocation()
+  const { userLocation, otherUsers, updateLocation, locationError, locationPermission, hasRequestedLocation } = useLocation()
   const [skipAutoCenter, setSkipAutoCenter] = useState(false)
+  const [isRequestingLocation, setIsRequestingLocation] = useState(false)
+  const [hasTriedLocation, setHasTriedLocation] = useState(false)
   const mapRef = useRef(null)
   const containerRef = useRef(null)
   const navigate = useNavigate()
@@ -160,6 +162,23 @@ export default function MapPage() {
     }
   }, [])
 
+  useEffect(() => {
+    let isMounted = true
+    const requestLocation = async () => {
+      setIsRequestingLocation(true)
+      setHasTriedLocation(true)
+      await updateLocation({ allowPrompt: true })
+      if (isMounted) {
+        setIsRequestingLocation(false)
+      }
+    }
+
+    requestLocation()
+    return () => {
+      isMounted = false
+    }
+  }, [updateLocation])
+
   const handleCenterOnMe = () => {
     if (userLocation && mapRef.current) {
       mapRef.current.setView([userLocation.lat, userLocation.lng], 15, {
@@ -168,6 +187,20 @@ export default function MapPage() {
       })
     }
   }
+
+  const handleRequestLocation = async () => {
+    setIsRequestingLocation(true)
+    setHasTriedLocation(true)
+    await updateLocation({ allowPrompt: true })
+    setIsRequestingLocation(false)
+  }
+
+  const showLocationNotice = !userLocation && (hasTriedLocation || hasRequestedLocation)
+  const locationMessage = locationError
+    ? locationError
+    : locationPermission === 'denied'
+      ? 'Du har afvist adgang til placering. Tillad adgang for at se din position.'
+      : 'Tillad adgang til din placering for at se dig selv pa kortet.'
 
   return (
     <PageTransition>
@@ -220,6 +253,30 @@ export default function MapPage() {
             ))}
             <TileLayer {...MAP_TILE_LAYER_PROPS} />
           </MapContainer>
+
+          {showLocationNotice && (
+            <div className="absolute left-4 right-4 top-4 z-[1100] rounded-2xl border border-[color:var(--line,#e5e7eb)] bg-white/90 px-4 py-3 shadow-lg backdrop-blur-sm dark:border-slate-700 dark:bg-slate-900/90">
+              <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                Aktiver placering
+              </p>
+              <p className="mt-1 text-xs leading-relaxed" style={{ color: 'var(--muted,#6b7280)' }}>
+                {locationMessage}
+              </p>
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleRequestLocation}
+                  disabled={isRequestingLocation}
+                  className="rounded-xl bg-[color:var(--brand,#FF385C)] px-3 py-2 text-xs font-semibold text-[color:var(--brand-ink,#fff)] shadow-soft disabled:opacity-70"
+                >
+                  {isRequestingLocation ? 'Henter...' : 'Aktiver placering'}
+                </button>
+                <span className="text-[11px]" style={{ color: 'var(--muted,#6b7280)' }}>
+                  Vi beder kun her for at vise din position.
+                </span>
+              </div>
+            </div>
+          )}
 
           {userLocation && (
             <button

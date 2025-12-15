@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef } from 'react'
+import { useCallback, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
@@ -90,8 +90,8 @@ export default function Onboarding() {
   const isLastSlide = index === totalSlides - 1
 
   const safeAreaStyle = {
-    paddingTop: 'calc(24px + env(safe-area-inset-top, 0px))',
-    paddingBottom: 'calc(32px + env(safe-area-inset-bottom, 0px))',
+    paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))',
+    paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))',
     paddingLeft: 'env(safe-area-inset-left, 0px)',
     paddingRight: 'env(safe-area-inset-right, 0px)',
   }
@@ -174,12 +174,12 @@ export default function Onboarding() {
   const primaryLabel = isLastSlide ? 'Kom i gang' : 'Næste'
 
   return (
-    <div className="min-h-screen bg-[color:var(--bg)] text-[color:var(--text)]">
+    <div className="min-h-[100dvh] bg-[color:var(--bg)] text-[color:var(--text)]">
       <div
-        className="mx-auto flex min-h-screen w-full max-w-full flex-col"
+        className="mx-auto flex min-h-[100dvh] w-full max-w-[520px] flex-col overflow-hidden"
         style={safeAreaStyle}
       >
-        <header className="flex items-center justify-end px-6 pb-10">
+        <header className="flex shrink-0 items-center justify-end px-5 pb-6">
           <button
             type="button"
             onClick={handleSkip}
@@ -190,7 +190,7 @@ export default function Onboarding() {
           </button>
         </header>
 
-        <main className="flex flex-1 flex-col">
+        <main className="flex min-h-0 flex-1 overflow-hidden">
           <AnimatePresence mode="wait" custom={direction}>
             <motion.div
               key={id}
@@ -204,17 +204,18 @@ export default function Onboarding() {
               dragConstraints={{ left: 0, right: 0 }}
               dragElastic={0.2}
               onDragEnd={handleDragEnd}
-              className="flex flex-1 flex-col items-center justify-center gap-10 px-6 text-center"
+              className="flex min-h-0 flex-1 flex-col items-center justify-center gap-7 overflow-y-auto px-5 py-4 text-center"
             >
               <div
-                className={`flex h-[220px] w-[220px] items-center justify-center rounded-full shadow-[0_16px_48px_rgba(0,0,0,0.08)] relative cursor-pointer transition-transform active:scale-95`}
+                className={`relative flex shrink-0 items-center justify-center rounded-full shadow-[0_16px_48px_rgba(0,0,0,0.08)] cursor-pointer transition-transform active:scale-95`}
                 onClick={() => id === 'profile' && setIsSheetOpen(true)}
+                style={{ width: 'clamp(160px, 55vw, 200px)', height: 'clamp(160px, 55vw, 200px)' }}
               >
                 <div className={`absolute inset-0 rounded-full bg-gradient-to-br ${id === 'profile' ? selectedGradient : ''} ${id !== 'profile' ? accentBg : ''} opacity-100`} />
                 <span
                   role="img"
                   aria-label={emojiLabel}
-                  className="text-7xl leading-none relative z-10"
+                  className="relative z-10 text-6xl leading-none"
                 >
                   {id === 'profile' ? selectedEmoji : emoji}
                 </span>
@@ -226,11 +227,11 @@ export default function Onboarding() {
                   </div>
                 )}
               </div>
-              <div className="space-y-3">
-                <h1 className="text-3xl font-semibold text-[color:var(--text)]">
+              <div className="space-y-2 max-w-sm">
+                <h1 className="text-2xl font-semibold leading-tight text-[color:var(--text)] sm:text-3xl">
                   {title}
                 </h1>
-                <p className="text-base text-[color:var(--text-muted)]">
+                <p className="text-base leading-relaxed text-[color:var(--text-muted)]">
                   {description}
                 </p>
               </div>
@@ -238,7 +239,7 @@ export default function Onboarding() {
           </AnimatePresence>
         </main>
 
-        <footer className="flex flex-col gap-6 px-6 pt-6">
+        <footer className="flex shrink-0 flex-col gap-4 px-5 pt-4">
           <div
             className="flex items-center justify-center gap-3"
             role="group"

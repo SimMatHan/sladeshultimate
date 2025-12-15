@@ -45,6 +45,13 @@ export const USER_SCHEMA = {
   sladeshSent: 'number',      // Count of sladesh sent
   sladeshReceived: 'number',  // Count of sladesh received
   lastSladeshSentAt: 'timestamp | null', // Last time user sent a sladesh (12h cooldown)
+  activeSladesh: {            // Single source of truth for the receiver's current challenge
+    challengeId: 'string',
+    status: '"in_progress" | "completed" | "failed"',
+    setAt: 'timestamp',
+    senderId: 'string | null',
+    recipientId: 'string | null'
+  },
 
   // Channels
   joinedChannelIds: 'array',    // Array of channel IDs the user has joined

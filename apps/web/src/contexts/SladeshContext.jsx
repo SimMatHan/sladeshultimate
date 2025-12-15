@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useMemo, useCallback, u
 import { collection, doc, getDoc, onSnapshot, query, updateDoc, where, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../hooks/useAuth';
 import { db } from '../firebase';
-import { getLatestResetBoundary, getNextResetBoundary } from '../services/userService';
+import { getLatestResetBoundary, getNextResetBoundary, clearActiveSladeshLock } from '../services/userService';
 
 const SladeshContext = createContext(null);
 
@@ -17,6 +17,7 @@ const STORAGE_KEY = 'sladesh_challenges';
 export function SladeshProvider({ children }) {
     const { currentUser } = useAuth();
     const userNameCacheRef = useRef({});
+    const clearedLocksRef = useRef(new Set());
 
     // Load challenges from localStorage
     const [challenges, setChallenges] = useState(() => {
@@ -229,10 +230,12 @@ export function SladeshProvider({ children }) {
     }, [currentUser, hydrateChallenge]);
 
     const syncChallengeUpdate = useCallback((challengeId, updates) => {
-        updateDoc(doc(db, 'sladeshChallenges', challengeId), {
+        return updateDoc(doc(db, 'sladeshChallenges', challengeId), {
             ...updates,
             updatedAt: serverTimestamp(),
-        }).catch((err) => console.error('[sladesh] Failed to sync challenge update', err));
+        }).catch((err) => {
+            console.error('[sladesh] Failed to sync challenge update', err);
+        });
     }, []);
 
     // Check if app should be locked
@@ -272,22 +275,51 @@ export function SladeshProvider({ children }) {
         setChallenges((prev) =>
             prev.map((c) => (c.id === challengeId ? { ...c, ...updates } : c))
         );
-        syncChallengeUpdate(challengeId, updates);
+        return syncChallengeUpdate(challengeId, updates);
     }, [syncChallengeUpdate]);
 
+    // Single-active-Sladhesh guard: release the receiver lock when a challenge ends
+    const releaseReceiverLock = useCallback(async (challengeId, statusLabel = 'resolved') => {
+        const challenge = challenges.find((c) => c.id === challengeId);
+        const receiverId = challenge?.receiverId;
+        if (!receiverId) return;
+
+        try {
+            clearedLocksRef.current.add(challengeId);
+            await clearActiveSladeshLock(receiverId, challengeId);
+        } catch (err) {
+            console.error(`[sladesh] Failed to clear active sladesh lock (${statusLabel})`, err);
+        }
+    }, [challenges, clearActiveSladeshLock]);
+
     // Mark challenge as failed
-    const failChallenge = useCallback((challengeId) => {
-        updateChallenge(challengeId, { status: SLADESH_STATUS.FAILED });
-    }, [updateChallenge]);
+    const failChallenge = useCallback(async (challengeId) => {
+        await updateChallenge(challengeId, { status: SLADESH_STATUS.FAILED });
+        await releaseReceiverLock(challengeId, 'failed');
+    }, [releaseReceiverLock, updateChallenge]);
 
     // Mark challenge as completed
-    const completeChallenge = useCallback((challengeId, proofAfterImage) => {
-        updateChallenge(challengeId, {
+    const completeChallenge = useCallback(async (challengeId, proofAfterImage) => {
+        await updateChallenge(challengeId, {
             status: SLADESH_STATUS.COMPLETED,
             proofAfterImage,
             completedAt: Date.now(),
         });
-    }, [updateChallenge]);
+        await releaseReceiverLock(challengeId, 'completed');
+    }, [releaseReceiverLock, updateChallenge]);
+
+    // Defensive cleanup: if a resolved challenge comes in via Firestore, clear any lingering receiver lock
+    useEffect(() => {
+        challenges.forEach((challenge) => {
+            if (challenge.status === SLADESH_STATUS.IN_PROGRESS) return;
+            if (!challenge.receiverId || challenge.receiverId !== currentUser?.uid) return;
+            if (clearedLocksRef.current.has(challenge.id)) return;
+            clearedLocksRef.current.add(challenge.id);
+            clearActiveSladeshLock(challenge.receiverId, challenge.id).catch((err) => {
+                console.error('[sladesh] Passive clear of active sladesh lock failed', err);
+            });
+        });
+    }, [challenges, clearActiveSladeshLock, currentUser?.uid]);
 
     const isChallengeInCurrentBlock = useCallback((challenge) => {
         if (!challenge) return false;
