@@ -28,6 +28,7 @@ import SladeshScanner from './SladeshScanner'
 import { useSladesh } from '../contexts/SladeshContext'
 import { CATEGORIES } from '../constants/drinks'
 import { APP_VERSION } from '../appVersion'
+import ThemeDropAnimation from './ThemeDropAnimation'
 
 const CHECK_IN_STORAGE_KEY = 'sladesh:checkedIn'
 const CHECK_IN_GATE_ACTIVATED_KEY = 'sladesh:checkInGateActivated'
@@ -310,9 +311,9 @@ export default function AppShell() {
         channelId: selectedChannel?.id || null,
         location: locationPayload
           ? {
-              lat: locationPayload.lat,
-              lng: locationPayload.lng,
-            }
+            lat: locationPayload.lat,
+            lng: locationPayload.lng,
+          }
           : null,
       })
 
@@ -556,6 +557,8 @@ export default function AppShell() {
           )}
 
           {isLocked && <SladeshScanner />}
+
+          <ThemeDropAnimation />
 
           <AchievementOverlayPortal />
         </AchievementProvider>

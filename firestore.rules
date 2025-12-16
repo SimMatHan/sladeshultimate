@@ -154,6 +154,23 @@ service cloud.firestore {
       }
     }
     
+    // Theme Drops collection
+    match /themeDrops/{themeDropId} {
+      // All authenticated users can read theme drops (they filter by targetUserIds in the app)
+      allow read: if isAuthenticated();
+      
+      // Only admins can create theme drops
+      allow create: if isAdmin() &&
+                      request.resource.data.keys().hasAll(['themeName', 'emojis', 'targetUserIds', 'createdAt', 'createdBy']) &&
+                      request.resource.data.themeName is string &&
+                      request.resource.data.emojis is list &&
+                      request.resource.data.targetUserIds is list &&
+                      request.resource.data.createdBy == request.auth.uid;
+      
+      // No updates or deletes needed for theme drops (they're ephemeral)
+      allow update, delete: if false;
+    }
+    
     // Stats collection
     match /stats/{statId} {
       // Everyone can read stats

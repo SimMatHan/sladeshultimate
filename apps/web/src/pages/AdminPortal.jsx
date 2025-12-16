@@ -9,12 +9,15 @@ import {
   deleteDoc,
   doc,
   updateDoc,
+  getDocs,
+  where,
 } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import Card from "../components/Card";
 import Page from "../components/Page";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { IS_DEVELOPMENT, API_BASE_URL } from "../config/env";
 import { isAdminUser } from "../config/admin";
 import { CATEGORIES } from "../constants/drinks";
 import { resetAchievements, resetSladeshState, getAllUsers, resetSladeshStateForUser } from "../services/userService";
@@ -116,6 +119,20 @@ export default function AdminPortal() {
   const [userResetFeedback, setUserResetFeedback] = useState(null);
   const [isResettingUserSladesh, setIsResettingUserSladesh] = useState(false);
   const [userSearchTerm, setUserSearchTerm] = useState("");
+
+  // Theme Drop state
+  const [themeDropForm, setThemeDropForm] = useState({ themeName: "" });
+  const [themeDropFeedback, setThemeDropFeedback] = useState(null);
+  const [isSendingThemeDrop, setIsSendingThemeDrop] = useState(false);
+
+  // Predefined theme presets
+  const THEME_PRESETS = {
+    winter: { name: "Vintertema", emojis: ["⛷️", "🎿", "❄️", "☃️", "🏔️"] },
+    summer: { name: "Sommertema", emojis: ["☀️", "🏖️", "🌊", "🍹", "🌴"] },
+    halloween: { name: "Halloween", emojis: ["🎃", "👻", "🦇", "🕷️", "💀"] },
+    christmas: { name: "Julefrokost", emojis: ["🎅", "🎄", "🎁", "⭐", "🔔"] },
+    party: { name: "Fest", emojis: ["🎉", "🎊", "🥳", "🎈", "✨"] }
+  };
 
   const handleVariationChange = (field) => (event) => {
     setVariationForm((prev) => ({
@@ -909,6 +926,124 @@ export default function AdminPortal() {
     }
   };
 
+  // Theme Drop handlers
+  const handleThemeDropChange = (field) => (event) => {
+    setThemeDropForm((prev) => ({
+      ...prev,
+      [field]: event.target.value,
+    }));
+  };
+
+  const handleThemeDropSubmit = async (event) => {
+    event.preventDefault();
+    setThemeDropFeedback(null);
+
+    if (!currentUser || !isAdmin) {
+      setThemeDropFeedback({
+        status: "error",
+        message: "Du skal være logget ind som admin for at sende theme drops.",
+      });
+      return;
+    }
+
+    if (!themeDropForm.themeName) {
+      setThemeDropFeedback({
+        status: "error",
+        message: "Vælg et tema først.",
+      });
+      return;
+    }
+
+    const selectedTheme = THEME_PRESETS[themeDropForm.themeName];
+    if (!selectedTheme) {
+      setThemeDropFeedback({
+        status: "error",
+        message: "Ugyldigt tema valgt.",
+      });
+      return;
+    }
+
+    // Confirmation dialog
+    if (!window.confirm(`Er du sikker på, at du vil udløse "${selectedTheme.name}" theme drop for alle checked-in brugere?`)) {
+      return;
+    }
+
+    setIsSendingThemeDrop(true);
+    try {
+      // DEV MODE: Mock implementation - directly create Firestore document
+      if (IS_DEVELOPMENT) {
+        console.log('[AdminPortal] DEV MODE: Using mock theme drop implementation');
+
+        // Find all checked-in users
+        const usersRef = collection(db, 'users');
+        const checkedInQuery = query(usersRef, where('checkInStatus', '==', true));
+        const usersSnapshot = await getDocs(checkedInQuery);
+
+        const targetUserIds = usersSnapshot.docs.map(doc => doc.id);
+
+        // Always include current admin user
+        if (!targetUserIds.includes(currentUser.uid)) {
+          targetUserIds.push(currentUser.uid);
+        }
+
+        console.log('[AdminPortal] DEV MODE: Found target users', { count: targetUserIds.length });
+
+        // Create theme drop document directly in Firestore
+        await addDoc(collection(db, 'themeDrops'), {
+          themeName: selectedTheme.name,
+          emojis: selectedTheme.emojis,
+          targetUserIds,
+          createdAt: serverTimestamp(),
+          createdBy: currentUser.uid,
+        });
+
+        setThemeDropFeedback({
+          status: "success",
+          message: `Theme drop "${selectedTheme.name}" sendt til ${targetUserIds.length} brugere! 🎉 (DEV MODE)`,
+        });
+        setThemeDropForm({ themeName: "" });
+        setIsSendingThemeDrop(false);
+        return;
+      }
+
+      // PRODUCTION MODE: Call API endpoint
+      const auth = getAuth();
+      const token = await auth.currentUser.getIdToken();
+
+      const response = await fetch(`${API_BASE_URL}/api/themeDropBroadcast`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          themeName: selectedTheme.name,
+          emojis: selectedTheme.emojis,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || 'Kunne ikke sende theme drop');
+      }
+
+      setThemeDropFeedback({
+        status: "success",
+        message: `Theme drop "${selectedTheme.name}" sendt til ${result.targetUserCount} checked-in brugere! 🎉`,
+      });
+      setThemeDropForm({ themeName: "" });
+    } catch (error) {
+      console.error("[AdminPortal] Failed to send theme drop", error);
+      setThemeDropFeedback({
+        status: "error",
+        message: error.message || "Kunne ikke sende theme drop.",
+      });
+    } finally {
+      setIsSendingThemeDrop(false);
+    }
+  };
+
   return (
     <Page title="Adminportal">
       <div className="flex flex-col gap-6">
@@ -1647,6 +1782,69 @@ export default function AdminPortal() {
               </div>
             </Card>
           )}
+        </section>
+
+        {/* Theme Drop Section */}
+        <section className="space-y-3">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
+              Theme Drop
+            </div>
+            <p className="text-sm text-[color:var(--muted)]">
+              Udløs en kaskade af emojis over alle checked-in brugeres skærme.
+            </p>
+          </div>
+          <Card className="space-y-4 px-5 py-6">
+            <FeedbackBanner
+              feedback={themeDropFeedback}
+              onDismiss={() => setThemeDropFeedback(null)}
+            />
+            <form className="space-y-4" onSubmit={handleThemeDropSubmit}>
+              <div className="space-y-2">
+                <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
+                  Vælg tema
+                </label>
+                <select
+                  value={themeDropForm.themeName}
+                  onChange={handleThemeDropChange("themeName")}
+                  disabled={!isAdmin}
+                  className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{
+                    borderColor: "var(--line)",
+                    backgroundColor: "var(--subtle)",
+                    color: "var(--ink)",
+                    "--tw-ring-offset-color": "var(--bg)",
+                  }}
+                >
+                  <option value="">Vælg et tema...</option>
+                  {Object.entries(THEME_PRESETS).map(([key, theme]) => (
+                    <option key={key} value={key}>
+                      {theme.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {themeDropForm.themeName && THEME_PRESETS[themeDropForm.themeName] && (
+                <div className="rounded-2xl border px-4 py-3" style={{ borderColor: "var(--line)", backgroundColor: "var(--subtle)" }}>
+                  <div className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)] mb-2">
+                    Emoji preview
+                  </div>
+                  <div className="flex gap-2 text-2xl">
+                    {THEME_PRESETS[themeDropForm.themeName].emojis.map((emoji, index) => (
+                      <span key={index}>{emoji}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={isSendingThemeDrop || !isAdmin || !themeDropForm.themeName}
+                className="w-full rounded-2xl bg-[color:var(--brand,#FF385C)] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSendingThemeDrop ? "Sender..." : "🎉 Udløs Theme Drop"}
+              </button>
+            </form>
+          </Card>
         </section>
 
         {/* Donor Management Section */}

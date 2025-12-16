@@ -7,12 +7,12 @@
 // Defaults to true in development mode, false in production
 const getUseMockData = () => {
   const envValue = import.meta.env.VITE_USE_MOCK_DATA;
-  
+
   // If explicitly set, use that value
   if (envValue !== undefined) {
     return envValue === 'true' || envValue === true;
   }
-  
+
   // Otherwise, default based on mode
   return import.meta.env.MODE === 'development';
 };
@@ -20,4 +20,10 @@ const getUseMockData = () => {
 export const USE_MOCK_DATA = getUseMockData();
 export const IS_DEVELOPMENT = import.meta.env.MODE === 'development';
 export const IS_PRODUCTION = import.meta.env.MODE === 'production';
+
+// API Base URL - in production, API routes are handled by hosting rewrites
+// In development, we use the deployed production URL since serverless functions don't run locally
+export const API_BASE_URL = IS_PRODUCTION
+  ? '' // Use relative paths in production (handled by Firebase Hosting rewrites)
+  : 'https://sladeshultimate-1.web.app'; // Use deployed URL in development
 
