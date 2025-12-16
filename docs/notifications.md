@@ -209,7 +209,7 @@ Notifikationssystemet består af tre hovedkomponenter:
 ```javascript
 {
   title: "Tid til en Sladesh-update?",
-  body: "Log næste drink eller check ind igen for holdet 🍹",
+  body: "Log næste drink 🍹",
   tag: "usage_reminder",
   data: {
     type: "usage_reminder",

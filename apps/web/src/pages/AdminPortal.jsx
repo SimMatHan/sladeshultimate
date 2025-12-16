@@ -1111,6 +1111,41 @@ export default function AdminPortal() {
               >
                 Simuler Sladesh
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  // Simulate a failed Sladesh to test wheel eligibility
+                  const mockFailedChallenge = {
+                    id: crypto.randomUUID(),
+                    senderId: currentUser.uid,
+                    senderName: currentUser.displayName || 'Test User',
+                    receiverId: 'mock-receiver',
+                    receiverName: 'Mock Receiver',
+                    status: 'FAILED',
+                    createdAt: Date.now(),
+                    deadlineAt: Date.now() - 1000,
+                  };
+
+                  // Add to localStorage
+                  try {
+                    const stored = window.localStorage.getItem('sladesh_challenges');
+                    const challenges = stored ? JSON.parse(stored) : [];
+                    challenges.push(mockFailedChallenge);
+                    window.localStorage.setItem('sladesh_challenges', JSON.stringify(challenges));
+
+                    // Clear wheel usage to make eligible
+                    window.localStorage.removeItem('sladesh_wheel_used_at');
+
+                    alert('✅ Failed Sladesh simuleret! Gå til Sladesh-siden for at se "Vil du prøve lykken?" knappen.');
+                    window.location.reload();
+                  } catch (e) {
+                    alert('❌ Fejl: ' + e.message);
+                  }
+                }}
+                className="rounded-2xl border border-purple-200 bg-white px-4 py-2 text-sm font-semibold text-purple-600 shadow-sm transition hover:bg-purple-50"
+              >
+                🎰 Simuler Failed Sladesh (Wheel Test)
+              </button>
             </div>
           </Card>
         </section>

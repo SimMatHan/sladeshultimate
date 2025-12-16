@@ -21,6 +21,7 @@ import NotificationsDebug from './pages/NotificationsDebug'
 import DrinkVariations from './pages/DrinkVariations'
 import Achievements from './pages/Achievements'
 import ProfileDetails from './pages/ProfileDetails'
+import LuckyWheel from './pages/LuckyWheel'
 import { isAdminUser } from './config/admin'
 import useDisplayMode from './hooks/useDisplayMode'
 import useStandaloneOverscrollBlock from './hooks/useStandaloneOverscrollBlock'
@@ -174,6 +175,7 @@ export default function RoutesView() {
         <Route path="leaderboard" element={<Leaderboard />} />
         <Route path="achievements" element={<Achievements />} />
         <Route path="sladesh" element={<Sladesh />} />
+        <Route path="lucky-wheel" element={<LuckyWheel />} />
         <Route path="map" element={<Map />} />
         <Route path="more" element={<More />} />
         <Route path="donation" element={<DonationPage />} />

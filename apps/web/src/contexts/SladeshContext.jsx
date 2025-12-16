@@ -3,6 +3,7 @@ import { collection, doc, getDoc, onSnapshot, query, updateDoc, where, serverTim
 import { useAuth } from '../hooks/useAuth';
 import { db } from '../firebase';
 import { getLatestResetBoundary, getNextResetBoundary, clearActiveSladeshLock, incrementSladeshStats } from '../services/userService';
+import { IS_DEVELOPMENT } from '../config/env';
 
 const SladeshContext = createContext(null);
 
@@ -14,6 +15,7 @@ export const SLADESH_STATUS = {
 };
 
 const STORAGE_KEY = 'sladesh_challenges';
+const WHEEL_USED_KEY = 'sladesh_wheel_used_at';
 
 export function SladeshProvider({ children }) {
     const { currentUser } = useAuth();
@@ -28,6 +30,17 @@ export function SladeshProvider({ children }) {
         } catch (e) {
             console.error('Failed to load sladesh challenges', e);
             return [];
+        }
+    });
+
+    // Track when wheel was last used (per 12h block)
+    const [wheelUsedAt, setWheelUsedAt] = useState(() => {
+        try {
+            const stored = window.localStorage.getItem(WHEEL_USED_KEY);
+            return stored ? new Date(stored) : null;
+        } catch (e) {
+            console.error('Failed to load wheel usage', e);
+            return null;
         }
     });
 
@@ -71,6 +84,19 @@ export function SladeshProvider({ children }) {
             console.error('Failed to save sladesh challenges', e);
         }
     }, [challenges, currentUser]);
+
+    // Persist wheel usage to localStorage
+    useEffect(() => {
+        try {
+            if (wheelUsedAt) {
+                window.localStorage.setItem(WHEEL_USED_KEY, wheelUsedAt.toISOString());
+            } else {
+                window.localStorage.removeItem(WHEEL_USED_KEY);
+            }
+        } catch (e) {
+            console.error('Failed to save wheel usage', e);
+        }
+    }, [wheelUsedAt]);
 
     // Find active challenge for current user (as receiver)
     // Lock screen will stay visible until challenge status changes to COMPLETED or FAILED
@@ -355,6 +381,54 @@ export function SladeshProvider({ children }) {
         return timestampMs >= boundaryMs;
     }, [currentResetBoundary]);
 
+    // Check if wheel is eligible: user has sent a challenge that failed in current block AND hasn't used wheel yet
+    // DEV ONLY: This feature is only available in development mode
+    const isWheelEligible = useMemo(() => {
+        // Feature flag: Wheel is only available in development
+        if (!IS_DEVELOPMENT) {
+            return false;
+        }
+
+        if (!currentUser) return false;
+
+        // DEV MODE: Always eligible for test user (bypass all checks)
+        if (currentUser.email === 'simonmathiashansen@gmail.com') {
+            console.log('[SladeshContext] DEV MODE: Wheel always eligible for test user');
+            return true;
+        }
+
+        // Check if wheel was already used in current block
+        if (wheelUsedAt) {
+            const boundaryMs = currentResetBoundary?.getTime?.();
+            if (boundaryMs && wheelUsedAt.getTime() >= boundaryMs) {
+                return false; // Already used in this block
+            }
+        }
+
+        // Check if user has any failed challenges in current block
+        const failedChallenges = challenges
+            .filter((c) => c.senderId === currentUser.uid)
+            .filter((c) => c.status === SLADESH_STATUS.FAILED || c.status === SLADESH_STATUS.EXPIRED)
+            .filter(isChallengeInCurrentBlock);
+
+        return failedChallenges.length > 0;
+    }, [challenges, currentUser, wheelUsedAt, currentResetBoundary, isChallengeInCurrentBlock]);
+
+    // Mark wheel as used in current block
+    const markWheelAsUsed = useCallback(() => {
+        setWheelUsedAt(new Date());
+    }, []);
+
+    // Reset wheel eligibility at block boundaries
+    useEffect(() => {
+        if (!wheelUsedAt) return;
+        const boundaryMs = currentResetBoundary?.getTime?.();
+        if (boundaryMs && wheelUsedAt.getTime() < boundaryMs) {
+            // Wheel usage was in previous block, reset it
+            setWheelUsedAt(null);
+        }
+    }, [currentResetBoundary, wheelUsedAt]);
+
     // Helper to get the latest challenge where the user is the receiver (for Leaderboard)
     const getUserSladeshStatus = useCallback((userId) => {
         const receivedChallenges = challenges
@@ -387,6 +461,8 @@ export function SladeshProvider({ children }) {
         completeChallenge,
         getUserSladeshStatus,
         debugReceiveSladesh,
+        isWheelEligible,
+        markWheelAsUsed,
     };
 
     return (

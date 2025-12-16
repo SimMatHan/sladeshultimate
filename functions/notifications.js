@@ -75,7 +75,7 @@ const builders = {
     const channelId = context.channelId || context.data?.channelId
     return {
       title: context.title || 'Tid til en Sladesh-update?',
-      body: context.body || 'Log næste drink eller check ind igen for holdet 🍹',
+      body: context.body || 'Log næste drink 🍹',
       tag: context.tag || 'usage_reminder',
       data: {
         type: 'usage_reminder',

@@ -436,6 +436,26 @@ export async function updateUser(userId, updates) {
 }
 
 /**
+ * Grant a Sladesh refill (from lucky wheel win)
+ * Clears the cooldown and increments wheel stats
+ * @param {string} userId - User ID
+ * @returns {Promise<void>}
+ */
+export async function grantSladeshRefill(userId) {
+  const userRef = doc(db, 'users', userId)
+
+  await updateDoc(userRef, {
+    lastSladeshSentAt: null, // Clear cooldown
+    wheelSpins: increment(1),
+    wheelWins: increment(1),
+    updatedAt: serverTimestamp(),
+    lastActiveAt: serverTimestamp()
+  })
+
+  console.log('[userService] Sladesh refill granted via lucky wheel', { userId })
+}
+
+/**
  * Get user document by ID
  * @param {string} userId - User ID
  * @returns {Promise<Object|null>} User document data or null if not found

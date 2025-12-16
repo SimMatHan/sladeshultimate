@@ -17,6 +17,7 @@ function formatDurationUntilReset(targetDate) {
   return "få sekunder";
 }
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import Card from "../components/Card";
 import Page from "../components/Page";
 import { useLocation } from "../contexts/LocationContext";
@@ -121,10 +122,11 @@ export default function Sladesh() {
   // CHANNEL FILTERING: All members shown in the Sladesh orbit are filtered by the active channel.
   // The activeChannelId comes from useChannel() hook, which provides selectedChannel?.id.
   // Only checked-in members of the active channel can receive Sladesh.
+  const navigate = useNavigate();
   const { currentUser } = useAuth();
   const { selectedChannel } = useChannel();
   const { updateLocation, userLocation } = useLocation();
-  const { challenges, sendSladesh, removeChallenge } = useSladesh();
+  const { challenges, sendSladesh, removeChallenge, isWheelEligible } = useSladesh();
 
   const [userProfile, setUserProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(!USE_MOCK_DATA);
@@ -588,12 +590,12 @@ export default function Sladesh() {
       setUserProfile((prev) =>
         prev
           ? {
-              ...prev,
-              lastSladeshSentAt: new Date(),
-            }
+            ...prev,
+            lastSladeshSentAt: new Date(),
+          }
           : {
-              lastSladeshSentAt: new Date(),
-            }
+            lastSladeshSentAt: new Date(),
+          }
       );
 
       console.log("[Sladesh] Successfully sent Sladesh", {
@@ -702,6 +704,25 @@ export default function Sladesh() {
                 Du har opbrugt din Sladesh. Den bliver resat om{" "}
                 <strong>{formatDurationUntilReset(cooldownState.blockEndsAt)}</strong>.
               </p>
+              {isWheelEligible && (
+                <>
+                  <button
+                    onClick={() => navigate('/lucky-wheel')}
+                    className="mt-4 w-full rounded-2xl px-6 py-3 font-semibold text-white transition-all"
+                    style={{
+                      background: 'linear-gradient(135deg, var(--brand) 0%, color-mix(in srgb, var(--brand) 80%, black) 100%)',
+                      boxShadow: '0 4px 12px color-mix(in srgb, var(--brand) 40%, transparent)',
+                    }}
+                  >
+                    🎰 Vil du prøve lykken?
+                  </button>
+                  {USE_MOCK_DATA && currentUser?.email === 'simonmathiashansen@gmail.com' && (
+                    <p className="mt-2 text-xs" style={{ color: 'var(--muted)' }}>
+                      💡 Dev mode: Hjulet er altid tilgængeligt for test
+                    </p>
+                  )}
+                </>
+              )}
             </>
           ) : (
             <>
@@ -712,6 +733,25 @@ export default function Sladesh() {
                 Tryk på en deltager for at sende direkte, eller ram 🤙 i midten for en tilfældig fra{" "}
                 {selectedChannel?.name || "kanalen"}.
               </p>
+
+              {/* DEV MODE: Show wheel button preview even without cooldown */}
+              {USE_MOCK_DATA && currentUser?.email === 'simonmathiashansen@gmail.com' && isWheelEligible && (
+                <div className="mt-4">
+                  <button
+                    onClick={() => navigate('/lucky-wheel')}
+                    className="w-full rounded-2xl px-6 py-3 font-semibold text-white transition-all"
+                    style={{
+                      background: 'linear-gradient(135deg, var(--brand) 0%, color-mix(in srgb, var(--brand) 80%, black) 100%)',
+                      boxShadow: '0 4px 12px color-mix(in srgb, var(--brand) 40%, transparent)',
+                    }}
+                  >
+                    🎰 Vil du prøve lykken?
+                  </button>
+                  <p className="mt-2 text-xs text-center" style={{ color: 'var(--muted)' }}>
+                    💡 Dev mode preview: Sådan ser knappen ud når en Sladesh fejler
+                  </p>
+                </div>
+              )}
             </>
           )}
 
