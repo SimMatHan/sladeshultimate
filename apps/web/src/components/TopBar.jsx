@@ -147,14 +147,14 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
       animationDuration={300}
       className="!p-0"
     >
-      <div className="flex flex-col h-full" style={{ backgroundColor: '#ffffff' }}>
+      <div className="flex flex-col h-full" style={{ backgroundColor: 'var(--surface)' }}>
         {/* Messages List */}
         <div
           ref={messagesContainerRef}
           className="flex-1 min-h-0 overflow-y-auto px-6 pt-4 pb-2 -webkit-overflow-scrolling-touch"
           style={{
             overscrollBehavior: 'contain',
-            backgroundColor: '#ffffff'
+            backgroundColor: 'var(--surface)'
           }}
         >
           {messages.length === 0 ? (
@@ -205,7 +205,7 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
         <div
           className="flex-none px-1 pt-4"
           style={{
-            backgroundColor: '#ffffff',
+            backgroundColor: 'var(--surface)',
             paddingBottom: '0px'
           }}
         >
@@ -220,7 +220,7 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
               className="flex-1 px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] disabled:opacity-50 disabled:cursor-not-allowed"
               style={{
                 borderColor: 'var(--line)',
-                backgroundColor: '#ffffff',
+                backgroundColor: 'var(--surface)',
                 color: 'var(--ink)'
               }}
             />

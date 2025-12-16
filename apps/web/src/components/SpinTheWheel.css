@@ -204,7 +204,7 @@
 .result-message {
     font-size: 1.125rem;
     font-weight: 600;
-    color: var(--ink);
+    color: var(--brand-ink);
     margin: 0 0 1rem;
 }
 

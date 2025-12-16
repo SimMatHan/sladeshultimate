@@ -1208,3 +1208,344 @@ exports.manualWeeklyCleanup = functions
         }
     });
 
+// ===== STRESS BEACON FUNCTIONS =====
+
+/**
+ * Calculate distance between two coordinates in meters using Haversine formula
+ */
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371e3; // Earth's radius in meters
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+        Math.cos(φ1) * Math.cos(φ2) *
+        Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // Distance in meters
+}
+
+/**
+ * Check if user is within beacon radius
+ */
+function isUserWithinBeaconRadius(userLat, userLon, beaconLat, beaconLon, radiusMeters = 100) {
+    const distance = calculateDistance(userLat, userLon, beaconLat, beaconLon);
+    return distance <= radiusMeters;
+}
+
+/**
+ * Send notifications for active stress beacons to nearby users.
+ * Runs every 15 minutes.
+ */
+exports.sendBeaconNotifications = functions
+    .region(DEFAULT_REGION)
+    .pubsub.schedule("*/15 * * * *") // Every 15 minutes
+    .timeZone(CPH_TIMEZONE)
+    .onRun(async () => {
+        const now = admin.firestore.Timestamp.now();
+
+        console.log("[beacons] Starting beacon notification cycle...");
+
+        try {
+            // Get all active beacons that haven't expired
+            const activeBeacons = await db
+                .collection("stressBeacons")
+                .where("active", "==", true)
+                .where("expiresAt", ">", now)
+                .get();
+
+            if (activeBeacons.empty) {
+                console.log("[beacons] No active beacons found");
+                return null;
+            }
+
+            console.log(`[beacons] Found ${activeBeacons.size} active beacons`);
+
+            // Get all users with location data
+            const usersWithLocation = await db
+                .collection("users")
+                .where("currentLocation", "!=", null)
+                .get();
+
+            if (usersWithLocation.empty) {
+                console.log("[beacons] No users with location data found");
+                return null;
+            }
+
+            console.log(`[beacons] Found ${usersWithLocation.size} users with location data`);
+
+            let totalNotifications = 0;
+
+            for (const beaconDoc of activeBeacons.docs) {
+                const beacon = beaconDoc.data();
+                const beaconId = beaconDoc.id;
+                const nearbyUsers = [];
+
+                // Find users within 100m radius
+                for (const userDoc of usersWithLocation.docs) {
+                    const userData = userDoc.data();
+                    const userLocation = userData.currentLocation;
+
+                    if (!userLocation?.lat || !userLocation?.lng) {
+                        continue;
+                    }
+
+                    if (isUserWithinBeaconRadius(
+                        userLocation.lat,
+                        userLocation.lng,
+                        beacon.latitude,
+                        beacon.longitude,
+                        100
+                    )) {
+                        nearbyUsers.push(userDoc);
+                    }
+                }
+
+                if (nearbyUsers.length === 0) {
+                    console.log(`[beacons] No nearby users for beacon ${beaconId}`);
+                    continue;
+                }
+
+                console.log(`[beacons] Found ${nearbyUsers.length} nearby users for beacon ${beaconId}`);
+
+                // Send notifications to nearby users
+                const payload = buildNotificationPayload("stress_beacon", {
+                    beaconId,
+                    creatorName: beacon.creatorName || "En ven",
+                    data: {
+                        beaconId,
+                        createdBy: beacon.createdBy
+                    }
+                });
+
+                const result = await deliverNotificationToUserDocs(nearbyUsers, payload, {
+                    type: "stress_beacon",
+                    beaconId
+                });
+
+                totalNotifications += result.sent;
+
+                // Update beacon with notification stats
+                await beaconDoc.ref.update({
+                    notificationsSent: FieldValue.increment(result.sent),
+                    lastNotificationAt: FieldValue.serverTimestamp()
+                });
+
+                console.log("[beacons] Sent notifications", {
+                    beaconId,
+                    nearbyUsers: nearbyUsers.length,
+                    sent: result.sent,
+                    failed: result.failed,
+                    skipped: result.skipped
+                });
+            }
+
+            console.log("[beacons] Notification cycle completed", {
+                activeBeacons: activeBeacons.size,
+                totalNotifications
+            });
+
+            return null;
+        } catch (error) {
+            console.error("[beacons] Error sending beacon notifications:", error);
+            throw error;
+        }
+    });
+
+/**
+ * Cleanup expired stress beacons.
+ * Runs every hour to deactivate beacons that have passed their expiration time.
+ */
+exports.cleanupExpiredBeacons = functions
+    .region(DEFAULT_REGION)
+    .pubsub.schedule("0 * * * *") // Every hour at minute 0
+    .timeZone(CPH_TIMEZONE)
+    .onRun(async () => {
+        const now = admin.firestore.Timestamp.now();
+
+        console.log("[beacons] Starting cleanup of expired beacons...");
+
+        try {
+            const expiredBeacons = await db
+                .collection("stressBeacons")
+                .where("active", "==", true)
+                .where("expiresAt", "<=", now)
+                .get();
+
+            if (expiredBeacons.empty) {
+                console.log("[beacons] No expired beacons to cleanup");
+                return null;
+            }
+
+            console.log(`[beacons] Found ${expiredBeacons.size} expired beacons to deactivate`);
+
+            const bulkWriter = db.bulkWriter();
+
+            expiredBeacons.docs.forEach((doc) => {
+                bulkWriter.update(doc.ref, {
+                    active: false,
+                    updatedAt: FieldValue.serverTimestamp()
+                });
+            });
+
+            await bulkWriter.close();
+
+            console.log("[beacons] Cleaned up expired beacons", {
+                count: expiredBeacons.size
+            });
+
+            return null;
+        } catch (error) {
+            console.error("[beacons] Error cleaning up expired beacons:", error);
+            throw error;
+        }
+    });
+
+/**
+ * Manual trigger for testing beacon notifications.
+ */
+exports.manualSendBeaconNotifications = functions
+    .region(DEFAULT_REGION)
+    .https.onRequest(async (req, res) => {
+        const now = admin.firestore.Timestamp.now();
+
+        try {
+            const activeBeacons = await db
+                .collection("stressBeacons")
+                .where("active", "==", true)
+                .where("expiresAt", ">", now)
+                .get();
+
+            if (activeBeacons.empty) {
+                return res.status(200).json({
+                    success: true,
+                    message: "No active beacons found",
+                    activeBeacons: 0,
+                    totalNotifications: 0
+                });
+            }
+
+            const usersWithLocation = await db
+                .collection("users")
+                .where("currentLocation", "!=", null)
+                .get();
+
+            let totalNotifications = 0;
+            const beaconResults = [];
+
+            for (const beaconDoc of activeBeacons.docs) {
+                const beacon = beaconDoc.data();
+                const beaconId = beaconDoc.id;
+                const nearbyUsers = [];
+
+                for (const userDoc of usersWithLocation.docs) {
+                    const userData = userDoc.data();
+                    const userLocation = userData.currentLocation;
+
+                    if (!userLocation?.lat || !userLocation?.lng) {
+                        continue;
+                    }
+
+                    if (isUserWithinBeaconRadius(
+                        userLocation.lat,
+                        userLocation.lng,
+                        beacon.latitude,
+                        beacon.longitude,
+                        100
+                    )) {
+                        nearbyUsers.push(userDoc);
+                    }
+                }
+
+                if (nearbyUsers.length > 0) {
+                    const payload = buildNotificationPayload("stress_beacon", {
+                        beaconId,
+                        creatorName: beacon.creatorName || "En ven",
+                        data: { beaconId, createdBy: beacon.createdBy }
+                    });
+
+                    const result = await deliverNotificationToUserDocs(nearbyUsers, payload, {
+                        type: "stress_beacon",
+                        beaconId
+                    });
+
+                    totalNotifications += result.sent;
+
+                    await beaconDoc.ref.update({
+                        notificationsSent: FieldValue.increment(result.sent),
+                        lastNotificationAt: FieldValue.serverTimestamp()
+                    });
+
+                    beaconResults.push({
+                        beaconId,
+                        nearbyUsers: nearbyUsers.length,
+                        sent: result.sent
+                    });
+                }
+            }
+
+            res.status(200).json({
+                success: true,
+                activeBeacons: activeBeacons.size,
+                totalNotifications,
+                beacons: beaconResults
+            });
+        } catch (error) {
+            console.error("[beacons] Manual trigger error:", error);
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+    });
+
+/**
+ * Manual trigger for testing beacon cleanup.
+ */
+exports.manualCleanupExpiredBeacons = functions
+    .region(DEFAULT_REGION)
+    .https.onRequest(async (req, res) => {
+        const now = admin.firestore.Timestamp.now();
+
+        try {
+            const expiredBeacons = await db
+                .collection("stressBeacons")
+                .where("active", "==", true)
+                .where("expiresAt", "<=", now)
+                .get();
+
+            if (expiredBeacons.empty) {
+                return res.status(200).json({
+                    success: true,
+                    message: "No expired beacons to cleanup",
+                    count: 0
+                });
+            }
+
+            const bulkWriter = db.bulkWriter();
+
+            expiredBeacons.docs.forEach((doc) => {
+                bulkWriter.update(doc.ref, {
+                    active: false,
+                    updatedAt: FieldValue.serverTimestamp()
+                });
+            });
+
+            await bulkWriter.close();
+
+            res.status(200).json({
+                success: true,
+                message: `Successfully deactivated ${expiredBeacons.size} expired beacons`,
+                count: expiredBeacons.size
+            });
+        } catch (error) {
+            console.error("[beacons] Manual cleanup error:", error);
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+    });

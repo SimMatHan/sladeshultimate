@@ -17,6 +17,7 @@ import Card from "../components/Card";
 import Page from "../components/Page";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useLocation } from "../contexts/LocationContext";
 import { IS_DEVELOPMENT, API_BASE_URL } from "../config/env";
 import { isAdminUser } from "../config/admin";
 import { CATEGORIES } from "../constants/drinks";
@@ -69,6 +70,7 @@ function FeedbackBanner({ feedback, onDismiss }) {
 
 export default function AdminPortal() {
   const { currentUser } = useAuth();
+  const { userLocation } = useLocation();
   const isAdmin = isAdminUser(currentUser);
 
   const [variationForm, setVariationForm] = useState(initialVariationState);
@@ -124,6 +126,13 @@ export default function AdminPortal() {
   const [themeDropForm, setThemeDropForm] = useState({ themeName: "" });
   const [themeDropFeedback, setThemeDropFeedback] = useState(null);
   const [isSendingThemeDrop, setIsSendingThemeDrop] = useState(false);
+
+  // Stress Beacon state
+  const [beaconForm, setBeaconForm] = useState({ latitude: "", longitude: "" });
+  const [beaconFeedback, setBeaconFeedback] = useState(null);
+  const [isCreatingBeacon, setIsCreatingBeacon] = useState(false);
+  const [activeBeacons, setActiveBeacons] = useState([]);
+  const [beaconsLoading, setBeaconsLoading] = useState(true);
 
   // Predefined theme presets
   const THEME_PRESETS = {
@@ -243,6 +252,11 @@ export default function AdminPortal() {
     }
 
     loadUsers();
+  }, [isAdmin]);
+
+  // Load active beacons
+  useEffect(() => {
+    loadActiveBeacons();
   }, [isAdmin]);
 
   const groupedVariations = useMemo(() => {
@@ -866,6 +880,180 @@ export default function AdminPortal() {
       });
     } finally {
       setIsSendingStressSignal(false);
+    }
+  };
+
+  // Stress Beacon handlers
+  const handleBeaconChange = (field) => (event) => {
+    setBeaconForm((prev) => ({
+      ...prev,
+      [field]: event.target.value,
+    }));
+  };
+
+  const handleUseMyLocation = () => {
+    if (userLocation?.lat && userLocation?.lng) {
+      setBeaconForm({
+        latitude: userLocation.lat.toString(),
+        longitude: userLocation.lng.toString(),
+      });
+      setBeaconFeedback({
+        status: "success",
+        message: "Din lokation er indsat i formularen.",
+      });
+    } else {
+      setBeaconFeedback({
+        status: "error",
+        message: "Kunne ikke finde din lokation. Sørg for at du har givet lokationstilladelse.",
+      });
+    }
+  };
+
+  const handleBeaconSubmit = async (event) => {
+    event.preventDefault();
+    setBeaconFeedback(null);
+
+    if (!currentUser || !isAdmin) {
+      setBeaconFeedback({
+        status: "error",
+        message: "Du skal være logget ind som admin for at oprette beacons.",
+      });
+      return;
+    }
+
+    const lat = parseFloat(beaconForm.latitude);
+    const lng = parseFloat(beaconForm.longitude);
+
+    if (isNaN(lat) || isNaN(lng)) {
+      setBeaconFeedback({
+        status: "error",
+        message: "Latitude og longitude skal være gyldige tal.",
+      });
+      return;
+    }
+
+    if (lat < -90 || lat > 90) {
+      setBeaconFeedback({
+        status: "error",
+        message: "Latitude skal være mellem -90 og 90.",
+      });
+      return;
+    }
+
+    if (lng < -180 || lng > 180) {
+      setBeaconFeedback({
+        status: "error",
+        message: "Longitude skal være mellem -180 og 180.",
+      });
+      return;
+    }
+
+    // Confirmation dialog
+    if (!window.confirm(`Er du sikker på, at du vil oprette en Stress Beacon?\n\nPosition: ${lat}, ${lng}\n\nBeaconen vil sende påmindelser hver 15. minut i 2 timer til brugere inden for 100m.`)) {
+      return;
+    }
+
+    setIsCreatingBeacon(true);
+    try {
+      const auth = getAuth();
+      const token = await auth.currentUser.getIdToken();
+
+      const response = await fetch('/api/createBeacon', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          latitude: lat,
+          longitude: lng,
+          userName: currentUser.displayName || currentUser.email || 'Admin',
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || 'Kunne ikke oprette beacon');
+      }
+
+      setBeaconFeedback({
+        status: "success",
+        message: `Stress Beacon oprettet! Beacon ID: ${result.beaconId}. Udløber om 2 timer.`,
+      });
+      setBeaconForm({ latitude: "", longitude: "" });
+
+      // Reload active beacons
+      loadActiveBeacons();
+    } catch (error) {
+      console.error("[AdminPortal] Failed to create beacon", error);
+      setBeaconFeedback({
+        status: "error",
+        message: error.message || "Kunne ikke oprette beacon.",
+      });
+    } finally {
+      setIsCreatingBeacon(false);
+    }
+  };
+
+  const handleDeactivateBeacon = async (beaconId) => {
+    if (!beaconId) return;
+    if (!window.confirm("Er du sikker på, at du vil deaktivere denne beacon?")) {
+      return;
+    }
+
+    try {
+      await updateDoc(doc(db, "stressBeacons", beaconId), {
+        active: false,
+        updatedAt: serverTimestamp(),
+      });
+
+      setBeaconFeedback({
+        status: "success",
+        message: "Beacon deaktiveret.",
+      });
+
+      // Reload active beacons
+      loadActiveBeacons();
+    } catch (error) {
+      console.error("[AdminPortal] Failed to deactivate beacon", error);
+      setBeaconFeedback({
+        status: "error",
+        message: error.message || "Kunne ikke deaktivere beacon.",
+      });
+    }
+  };
+
+  const loadActiveBeacons = async () => {
+    if (!isAdmin) {
+      setActiveBeacons([]);
+      setBeaconsLoading(false);
+      return;
+    }
+
+    try {
+      const beaconsRef = collection(db, "stressBeacons");
+      const beaconsQuery = query(
+        beaconsRef,
+        where("active", "==", true),
+        orderBy("createdAt", "desc")
+      );
+      const snapshot = await getDocs(beaconsQuery);
+
+      setActiveBeacons(
+        snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data(),
+        }))
+      );
+    } catch (error) {
+      console.error("[AdminPortal] Failed to load active beacons", error);
+      setBeaconFeedback({
+        status: "error",
+        message: error.message || "Kunne ikke indlæse beacons.",
+      });
+    } finally {
+      setBeaconsLoading(false);
     }
   };
 
@@ -2150,6 +2338,145 @@ export default function AdminPortal() {
             </div>
           </Card>
         </section>
+
+        {/* Stress Beacon Management */}
+        {isAdmin && (
+          <section className="space-y-3">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
+                Stress Beacon
+              </div>
+              <p className="text-sm text-[color:var(--muted)]">
+                Opret en Stress Beacon der sender drinkpåmindelser til brugere inden for 100m radius hver 15. minut i 2 timer.
+              </p>
+            </div>
+            <Card className="space-y-4 px-5 py-6">
+              <FeedbackBanner
+                feedback={beaconFeedback}
+                onDismiss={() => setBeaconFeedback(null)}
+              />
+
+              <form className="space-y-4" onSubmit={handleBeaconSubmit}>
+                <button
+                  type="button"
+                  onClick={handleUseMyLocation}
+                  className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold transition hover:bg-[color:var(--subtle)]"
+                  style={{
+                    borderColor: "var(--line)",
+                    color: "var(--ink)",
+                  }}
+                >
+                  📍 Brug Min Lokation
+                </button>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
+                      Latitude
+                    </label>
+                    <input
+                      type="text"
+                      value={beaconForm.latitude}
+                      onChange={handleBeaconChange("latitude")}
+                      placeholder="55.6761"
+                      required
+                      className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1"
+                      style={{
+                        borderColor: "var(--line)",
+                        backgroundColor: "var(--subtle)",
+                        color: "var(--ink)",
+                        "--tw-ring-offset-color": "var(--bg)",
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
+                      Longitude
+                    </label>
+                    <input
+                      type="text"
+                      value={beaconForm.longitude}
+                      onChange={handleBeaconChange("longitude")}
+                      placeholder="12.5683"
+                      required
+                      className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1"
+                      style={{
+                        borderColor: "var(--line)",
+                        backgroundColor: "var(--subtle)",
+                        color: "var(--ink)",
+                        "--tw-ring-offset-color": "var(--bg)",
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isCreatingBeacon}
+                  className="w-full rounded-2xl bg-[color:var(--brand,#FF385C)] px-4 py-3 text-sm font-semibold text-white shadow-sm transition disabled:opacity-60"
+                >
+                  {isCreatingBeacon ? "Opretter..." : "Opret Beacon"}
+                </button>
+              </form>
+
+              {/* Active Beacons List */}
+              {!beaconsLoading && activeBeacons.length > 0 && (
+                <div className="space-y-3">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
+                    Aktive Beacons ({activeBeacons.length})
+                  </div>
+                  <div className="space-y-3">
+                    {activeBeacons.map((beacon) => {
+                      const createdAt = beacon.createdAt?.toDate?.() || new Date();
+                      const expiresAt = beacon.expiresAt?.toDate?.() || new Date();
+                      const now = new Date();
+                      const timeLeft = Math.max(0, Math.floor((expiresAt - now) / 1000 / 60));
+
+                      return (
+                        <div
+                          key={beacon.id}
+                          className="rounded-2xl border px-4 py-3"
+                          style={{
+                            borderColor: "var(--line)",
+                            backgroundColor: "var(--subtle)",
+                          }}
+                        >
+                          <div className="flex flex-col gap-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1">
+                                <div className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+                                  {beacon.creatorName || "Ukendt"}
+                                </div>
+                                <div className="mt-1 text-xs" style={{ color: "var(--muted)" }}>
+                                  📍 {beacon.latitude.toFixed(4)}, {beacon.longitude.toFixed(4)}
+                                </div>
+                                <div className="mt-1 text-xs" style={{ color: "var(--muted)" }}>
+                                  🔔 {beacon.notificationsSent || 0} notifikationer sendt
+                                </div>
+                                <div className="mt-1 text-xs font-semibold" style={{ color: timeLeft > 30 ? "var(--success)" : "var(--warning)" }}>
+                                  ⏱️ {timeLeft > 0 ? `${timeLeft} min tilbage` : "Udløbet"}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleDeactivateBeacon(beacon.id)}
+                                className="rounded-2xl border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+                              >
+                                Deaktivér
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </Card>
+          </section>
+        )}
       </div >
     </Page >
   );

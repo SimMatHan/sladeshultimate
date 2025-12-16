@@ -152,6 +152,23 @@ const builders = {
         ...context.data
       }
     }
+  },
+
+  stress_beacon: (context = {}) => {
+    const beaconId = context.beaconId || context.data?.beaconId
+    const creatorName = context.creatorName || context.data?.creatorName || 'En ven'
+    return {
+      title: context.title || 'Husk at logge din drink! 🍺',
+      body: context.body || 'En Stress Beacon i nærheden minder dig om at logge din øl eller drink',
+      tag: context.tag || `beacon_${beaconId || 'reminder'}`,
+      data: {
+        type: 'stress_beacon',
+        beaconId,
+        creatorName,
+        url: context.data?.url || '/home',
+        ...context.data
+      }
+    }
   }
 }
 

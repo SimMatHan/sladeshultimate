@@ -180,5 +180,30 @@ service cloud.firestore {
       // For now, allow authenticated users to update (should be restricted in production)
       allow write: if isAuthenticated();
     }
+    
+    // Stress Beacons collection
+    match /stressBeacons/{beaconId} {
+      // Anyone can read active beacons
+      allow read: if isAuthenticated() && resource.data.active == true;
+      
+      // Authenticated users can create beacons
+      allow create: if isAuthenticated() &&
+                      request.resource.data.createdBy == request.auth.uid &&
+                      request.resource.data.active == true &&
+                      request.resource.data.expiresAt > request.time &&
+                      request.resource.data.keys().hasAll(['createdBy', 'creatorName', 'latitude', 'longitude', 'createdAt', 'expiresAt', 'active']) &&
+                      request.resource.data.latitude is number &&
+                      request.resource.data.longitude is number &&
+                      request.resource.data.latitude >= -90 && request.resource.data.latitude <= 90 &&
+                      request.resource.data.longitude >= -180 && request.resource.data.longitude <= 180;
+      
+      // Only creator can update their own beacons
+      allow update: if isAuthenticated() &&
+                       resource.data.createdBy == request.auth.uid;
+      
+      // Only creator can delete their own beacons
+      allow delete: if isAuthenticated() &&
+                       resource.data.createdBy == request.auth.uid;
+    }
   }
 }
