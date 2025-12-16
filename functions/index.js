@@ -16,6 +16,7 @@ const DRINK_MILESTONES = [5, 10, 15, 20, 25, 30];
 // Fixed reminder times: 14:00, 16:00, 18:00, 20:00, 22:00, 00:00, and 02:00 local time
 const REMINDER_TIMES = [14, 16, 18, 20, 22, 0, 2];
 const USAGE_REMINDER_CRON = "0 14,16,18,20,22,0,2 * * *"; // Run at 14:00, 16:00, 18:00, 20:00, 22:00, 00:00, and 02:00
+const DRINK_DAY_START_HOUR = 10; // Drink day resets at 10:00 local time
 
 /**
  * Resets the checkInStatus field for all users to false and clears currentLocation.
@@ -297,6 +298,117 @@ exports.manualDeleteOldNotifications = functions
             res.status(500).json({
                 success: false,
                 error: error.message || "Error deleting old notification items."
+            });
+        }
+    });
+
+/**
+ * Resets drink day data for all users.
+ * This resets drinkVariations and currentRunDrinkCount while preserving
+ * lifetime stats (totalDrinks, drinkTypes, allTimeDrinkVariations).
+ */
+async function resetAllUsersDrinkDay() {
+    console.log("[drinkReset] Starting drink day reset...");
+
+    // Calculate the boundary timestamp for 10:00 today in Copenhagen time
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: CPH_TIMEZONE,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+    });
+
+    const parts = formatter.formatToParts(now);
+    const extracted = {};
+    parts.forEach(part => {
+        if (part.type !== "literal") {
+            extracted[part.type] = part.value;
+        }
+    });
+
+    const year = parseInt(extracted.year, 10);
+    const month = parseInt(extracted.month, 10);
+    const day = parseInt(extracted.day, 10);
+
+    // Create boundary at 10:00 today Copenhagen time
+    // We need to convert Copenhagen time to UTC
+    const boundaryLocal = new Date(year, month - 1, day, DRINK_DAY_START_HOUR, 0, 0, 0);
+    const boundaryTimestamp = admin.firestore.Timestamp.fromDate(boundaryLocal);
+
+    console.log(`[drinkReset] Resetting drink day data with boundary: ${boundaryLocal.toISOString()}`);
+
+    const usersRef = db.collection("users");
+    const snapshot = await usersRef.get();
+
+    if (snapshot.empty) {
+        console.log("[drinkReset] No users found to reset.");
+        return { resetCount: 0 };
+    }
+
+    const bulkWriter = db.bulkWriter();
+    let resetCount = 0;
+
+    snapshot.docs.forEach((doc) => {
+        bulkWriter.update(doc.ref, {
+            currentRunDrinkCount: 0,
+            drinkVariations: {},
+            lastDrinkDayStart: boundaryTimestamp,
+            updatedAt: FieldValue.serverTimestamp()
+        });
+        resetCount++;
+    });
+
+    await bulkWriter.close();
+    console.log(`[drinkReset] Successfully reset drink day data for ${resetCount} users.`);
+
+    return { resetCount };
+}
+
+/**
+ * Scheduled function that runs every day at 10:00 Europe/Copenhagen time.
+ * Resets drink day data (drinkVariations and currentRunDrinkCount) for all users.
+ */
+exports.resetDrinkDay = functions
+    .region(DEFAULT_REGION)
+    .pubsub.schedule("0 10 * * *") // Every day at 10:00
+    .timeZone(CPH_TIMEZONE)
+    .onRun(async (context) => {
+        console.log("[drinkReset] Running scheduled reset of drink day data...");
+        try {
+            const result = await resetAllUsersDrinkDay();
+            console.log(`[drinkReset] Scheduled reset completed. Reset ${result.resetCount} users.`);
+            return null;
+        } catch (error) {
+            console.error("[drinkReset] Error resetting drink day data:", error);
+            throw error;
+        }
+    });
+
+/**
+ * Manual trigger for development and testing purposes.
+ * Can be called via HTTP to manually trigger the drink day reset.
+ */
+exports.manualResetDrinkDay = functions
+    .region(DEFAULT_REGION)
+    .https.onRequest(async (req, res) => {
+        try {
+            console.log("[drinkReset] Running manual reset of drink day data...");
+            const result = await resetAllUsersDrinkDay();
+            res.status(200).json({
+                success: true,
+                message: `Successfully reset drink day data for ${result.resetCount} users.`,
+                resetCount: result.resetCount
+            });
+        } catch (error) {
+            console.error("[drinkReset] Manual reset error:", error);
+            res.status(500).json({
+                success: false,
+                error: error.message || "Error resetting drink day data."
             });
         }
     });
