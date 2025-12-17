@@ -154,7 +154,7 @@ function MessagesPanel({ open, onClose, channelId, userId, userName }) {
           className="flex-1 min-h-0 overflow-y-auto px-6 pt-4 pb-2 -webkit-overflow-scrolling-touch"
           style={{
             overscrollBehavior: 'contain',
-            backgroundColor: 'var(--surface)'
+            backgroundColor: 'var(--bg)'
           }}
         >
           {messages.length === 0 ? (
@@ -337,7 +337,7 @@ function ChannelOverlay({ open, onClose, channels, selectedChannelId, onSelectCh
                     <div>
                       <div className="flex items-center gap-2">
                         <div className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
-                        {channel.name}
+                          {channel.name}
                         </div>
                         {isActive ? (
                           <span
