@@ -310,7 +310,7 @@ exports.manualDeleteOldNotifications = functions
 async function resetAllUsersDrinkDay() {
     console.log("[drinkReset] Starting drink day reset...");
 
-    // Calculate the boundary timestamp for 10:00 today in Copenhagen time
+    // Get current time in Copenhagen timezone
     const now = new Date();
     const formatter = new Intl.DateTimeFormat("en-US", {
         timeZone: CPH_TIMEZONE,
@@ -334,13 +334,68 @@ async function resetAllUsersDrinkDay() {
     const year = parseInt(extracted.year, 10);
     const month = parseInt(extracted.month, 10);
     const day = parseInt(extracted.day, 10);
+    const hour = parseInt(extracted.hour, 10);
+    const minute = parseInt(extracted.minute, 10);
+    const second = parseInt(extracted.second, 10);
+
+    console.log(`[drinkReset] Current Copenhagen time: ${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`);
 
     // Create boundary at 10:00 today Copenhagen time
-    // We need to convert Copenhagen time to UTC
-    const boundaryLocal = new Date(year, month - 1, day, DRINK_DAY_START_HOUR, 0, 0, 0);
-    const boundaryTimestamp = admin.firestore.Timestamp.fromDate(boundaryLocal);
+    // We need to properly convert Copenhagen time to UTC
+    // Copenhagen is UTC+1 in winter (CET) and UTC+2 in summer (CEST)
 
-    console.log(`[drinkReset] Resetting drink day data with boundary: ${boundaryLocal.toISOString()}`);
+    // Create an ISO string for 10:00 Copenhagen time today
+    const copenhagenDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(DRINK_DAY_START_HOUR).padStart(2, '0')}:00:00`;
+
+    // Parse this as a date in Copenhagen timezone by creating a temporary formatter
+    // and using it to get the UTC equivalent
+    const tempDate = new Date(copenhagenDateStr);
+    const tempFormatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: CPH_TIMEZONE,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+    });
+
+    // Calculate offset by comparing what time it shows in Copenhagen vs UTC
+    const utcFormatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: "UTC",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+    });
+
+    // Create a date object for 10:00 today in Copenhagen
+    // We'll use a more reliable approach: create the date in UTC and adjust
+    const utcDate = new Date(Date.UTC(year, month - 1, day, DRINK_DAY_START_HOUR, 0, 0, 0));
+
+    // Get what this UTC time appears as in Copenhagen
+    const cphParts = formatter.formatToParts(utcDate);
+    const cphExtracted = {};
+    cphParts.forEach(part => {
+        if (part.type !== "literal") {
+            cphExtracted[part.type] = part.value;
+        }
+    });
+    const cphHour = parseInt(cphExtracted.hour, 10);
+
+    // Calculate the offset (how many hours ahead Copenhagen is)
+    const offset = cphHour - DRINK_DAY_START_HOUR;
+
+    // Adjust to get the correct UTC time for 10:00 Copenhagen
+    const boundaryUTC = new Date(Date.UTC(year, month - 1, day, DRINK_DAY_START_HOUR - offset, 0, 0, 0));
+    const boundaryTimestamp = admin.firestore.Timestamp.fromDate(boundaryUTC);
+
+    console.log(`[drinkReset] Timezone offset: UTC${offset >= 0 ? '+' : ''}${offset}`);
+    console.log(`[drinkReset] Boundary (10:00 Copenhagen): ${boundaryUTC.toISOString()}`);
+    console.log(`[drinkReset] Resetting drink day data for all users...`);
 
     const usersRef = db.collection("users");
     const snapshot = await usersRef.get();
@@ -365,6 +420,7 @@ async function resetAllUsersDrinkDay() {
 
     await bulkWriter.close();
     console.log(`[drinkReset] Successfully reset drink day data for ${resetCount} users.`);
+    console.log(`[drinkReset] Reset completed at: ${new Date().toISOString()}`);
 
     return { resetCount };
 }
