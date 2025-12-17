@@ -26,10 +26,20 @@ function ensureEnv() {
     throw new Error(`Missing Web Push env vars: ${missing.join(', ')}`)
   }
   if (!vapidConfigured) {
+    // Sanitize VAPID keys to remove any hidden whitespace characters
+    // This handles issues from Vercel dashboard or .env files
+    const publicKey = process.env.VAPID_PUBLIC_KEY.replace(/\s+/g, '')
+    const privateKey = process.env.VAPID_PRIVATE_KEY.replace(/\s+/g, '')
+
+    // Validate that keys are not empty after sanitization
+    if (!publicKey || !privateKey) {
+      throw new Error('VAPID keys are empty after removing whitespace')
+    }
+
     webpush.setVapidDetails(
       'mailto:notifications@sladeshultimate.app',
-      process.env.VAPID_PUBLIC_KEY,
-      process.env.VAPID_PRIVATE_KEY
+      publicKey,
+      privateKey
     )
     vapidConfigured = true
   }

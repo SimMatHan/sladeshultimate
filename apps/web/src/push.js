@@ -20,13 +20,64 @@ const PUSH_UNSUPPORTED = {
   notification: typeof Notification === 'undefined'
 }
 
+/**
+ * Converts a Base64 URL-safe encoded string to Uint8Array for VAPID key usage.
+ * Robust against common encoding issues in production environments.
+ * 
+ * @param {string} base64String - The Base64 URL-safe encoded VAPID public key
+ * @returns {Uint8Array} - The decoded key as a Uint8Array
+ * @throws {Error} - If the input is invalid or cannot be decoded
+ */
 function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
-  const rawData = atob(base64)
-  const outputArray = new Uint8Array(rawData.length)
-  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i)
-  return outputArray
+  // Validate input
+  if (!base64String || typeof base64String !== 'string') {
+    throw new Error('VAPID public key must be a non-empty string')
+  }
+
+  // Sanitize: Remove all whitespace characters (spaces, newlines, tabs, etc.)
+  // This handles common issues from .env files or copy-paste errors
+  const sanitized = base64String.replace(/\s+/g, '')
+
+  // Validate that we have a non-empty string after sanitization
+  if (!sanitized) {
+    throw new Error('VAPID public key is empty after removing whitespace')
+  }
+
+  // Validate Base64 URL-safe format (only valid characters: A-Z, a-z, 0-9, -, _)
+  const base64UrlPattern = /^[A-Za-z0-9_-]+$/
+  if (!base64UrlPattern.test(sanitized)) {
+    throw new Error(
+      'VAPID public key contains invalid characters. Expected Base64 URL-safe format (A-Z, a-z, 0-9, -, _)'
+    )
+  }
+
+  try {
+    // Add padding if needed (Base64 strings should be divisible by 4)
+    const padding = '='.repeat((4 - (sanitized.length % 4)) % 4)
+
+    // Convert from URL-safe Base64 to standard Base64
+    const base64 = (sanitized + padding)
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+
+    // Decode Base64 to binary string
+    const rawData = atob(base64)
+
+    // Convert binary string to Uint8Array
+    const outputArray = new Uint8Array(rawData.length)
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i)
+    }
+
+    return outputArray
+  } catch (error) {
+    // Provide helpful error message for debugging
+    throw new Error(
+      `Failed to decode VAPID public key: ${error.message}. ` +
+      `Key length: ${sanitized.length}. ` +
+      `Ensure the key is properly Base64 URL-encoded.`
+    )
+  }
 }
 
 const hasLocalStorage = () => {
@@ -121,6 +172,18 @@ export const areNotificationsEnabled = () => {
 const ensureEnvConfigured = () => {
   if (!VAPID_PUBLIC_KEY) {
     throw new Error('VITE_VAPID_PUBLIC_KEY is missing. Add it to .env.local')
+  }
+
+  // Validate VAPID key format early to catch configuration issues
+  try {
+    // Test decode the key to ensure it's valid
+    urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+  } catch (error) {
+    console.error('[push] VAPID_PUBLIC_KEY validation failed:', error.message)
+    throw new Error(
+      `Invalid VITE_VAPID_PUBLIC_KEY format: ${error.message}. ` +
+      `Check your .env.local file for hidden characters or incorrect encoding.`
+    )
   }
 }
 
