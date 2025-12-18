@@ -1,44 +1,20 @@
 import { useEffect, useState } from 'react';
-import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
-import { db } from '../firebase';
-import { useAuth } from '../hooks/useAuth';
 import './ThemeDropAnimation.css';
 
-export default function ThemeDropAnimation() {
-    const { currentUser } = useAuth();
+export default function ThemeDropAnimation({ themeName, emojis, trigger }) {
     const [activeEmojis, setActiveEmojis] = useState([]);
 
     useEffect(() => {
-        if (!currentUser) return;
+        if (!trigger || !emojis || emojis.length === 0) return;
 
-        // Listen to theme drops where current user is in targetUserIds
-        const themeDropsRef = collection(db, 'themeDrops');
-        const themeDropsQuery = query(
-            themeDropsRef,
-            orderBy('createdAt', 'desc'),
-            limit(1)
-        );
-
-        const unsubscribe = onSnapshot(themeDropsQuery, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
-                if (change.type === 'added') {
-                    const data = change.doc.data();
-
-                    // Check if current user is in targetUserIds
-                    if (data.targetUserIds && data.targetUserIds.includes(currentUser.uid)) {
-                        console.log('[ThemeDropAnimation] Triggering theme drop', {
-                            themeName: data.themeName,
-                            emojiCount: data.emojis?.length
-                        });
-
-                        triggerAnimation(data.emojis || [], data.themeName);
-                    }
-                }
-            });
+        console.log('[ThemeDropAnimation] Triggering theme drop', {
+            themeName,
+            emojiCount: emojis.length,
+            trigger
         });
 
-        return () => unsubscribe();
-    }, [currentUser]);
+        triggerAnimation(emojis, themeName);
+    }, [trigger, emojis, themeName]);
 
     const triggerAnimation = (emojis, themeName) => {
         if (!emojis || emojis.length === 0) return;
@@ -115,3 +91,4 @@ export default function ThemeDropAnimation() {
         </div>
     );
 }
+

@@ -409,12 +409,24 @@ async function resetAllUsersDrinkDay() {
     let resetCount = 0;
 
     snapshot.docs.forEach((doc) => {
+        // Reset user document fields
         bulkWriter.update(doc.ref, {
             currentRunDrinkCount: 0,
             drinkVariations: {},
             lastDrinkDayStart: boundaryTimestamp,
             updatedAt: FieldValue.serverTimestamp()
         });
+
+        // Also reset the currentRun collection (for cross-device sync)
+        const currentRunRef = doc.ref.collection("currentRun").doc("state");
+        bulkWriter.set(currentRunRef, {
+            schemaVersion: 1,
+            currentRunId: `run-${Date.now()}-${doc.id}`,
+            events: [],
+            lastPersistedAt: Date.now(),
+            updatedAt: FieldValue.serverTimestamp()
+        });
+
         resetCount++;
     });
 

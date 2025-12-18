@@ -167,7 +167,12 @@ export default function MapPage() {
     const requestLocation = async () => {
       setIsRequestingLocation(true)
       setHasTriedLocation(true)
-      await updateLocation({ allowPrompt: true })
+
+      // Check if permission is already granted
+      // If so, get location silently. Otherwise, prompt the user.
+      const shouldPrompt = locationPermission !== 'granted'
+
+      await updateLocation({ allowPrompt: shouldPrompt })
       if (isMounted) {
         setIsRequestingLocation(false)
       }
@@ -177,7 +182,7 @@ export default function MapPage() {
     return () => {
       isMounted = false
     }
-  }, [updateLocation])
+  }, []) // Only run on mount, not when locationPermission changes
 
   const handleCenterOnMe = () => {
     if (userLocation && mapRef.current) {

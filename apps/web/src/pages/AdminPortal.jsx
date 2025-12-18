@@ -11,6 +11,7 @@ import {
   updateDoc,
   getDocs,
   where,
+  setDoc,
 } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import Card from "../components/Card";
@@ -1152,73 +1153,30 @@ export default function AdminPortal() {
     }
 
     // Confirmation dialog
-    if (!window.confirm(`Er du sikker på, at du vil udløse "${selectedTheme.name}" theme drop for alle checked-in brugere?`)) {
+    if (!window.confirm(`Er du sikker på, at du vil udløse "${selectedTheme.name}" theme drop for alle aktive brugere?`)) {
       return;
     }
 
     setIsSendingThemeDrop(true);
     try {
-      // DEV MODE: Mock implementation - directly create Firestore document
-      if (IS_DEVELOPMENT) {
-        console.log('[AdminPortal] DEV MODE: Using mock theme drop implementation');
-
-        // Find all checked-in users
-        const usersRef = collection(db, 'users');
-        const checkedInQuery = query(usersRef, where('checkInStatus', '==', true));
-        const usersSnapshot = await getDocs(checkedInQuery);
-
-        const targetUserIds = usersSnapshot.docs.map(doc => doc.id);
-
-        // Always include current admin user
-        if (!targetUserIds.includes(currentUser.uid)) {
-          targetUserIds.push(currentUser.uid);
-        }
-
-        console.log('[AdminPortal] DEV MODE: Found target users', { count: targetUserIds.length });
-
-        // Create theme drop document directly in Firestore
-        await addDoc(collection(db, 'themeDrops'), {
-          themeName: selectedTheme.name,
-          emojis: selectedTheme.emojis,
-          targetUserIds,
-          createdAt: serverTimestamp(),
-          createdBy: currentUser.uid,
-        });
-
-        setThemeDropFeedback({
-          status: "success",
-          message: `Theme drop "${selectedTheme.name}" sendt til ${targetUserIds.length} brugere! 🎉 (DEV MODE)`,
-        });
-        setThemeDropForm({ themeName: "" });
-        setIsSendingThemeDrop(false);
-        return;
-      }
-
-      // PRODUCTION MODE: Call API endpoint
-      const auth = getAuth();
-      const token = await auth.currentUser.getIdToken();
-
-      const response = await fetch(`${API_BASE_URL}/api/themeDropBroadcast`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          themeName: selectedTheme.name,
-          emojis: selectedTheme.emojis,
-        }),
+      // Update the settings/theme_event document
+      // All active users listening to this document will see the update
+      const themeEventRef = doc(db, 'settings', 'theme_event');
+      await setDoc(themeEventRef, {
+        themeName: selectedTheme.name,
+        emojis: selectedTheme.emojis,
+        timestamp: serverTimestamp(),
+        triggeredBy: currentUser.uid,
       });
 
-      const result = await response.json();
-
-      if (!response.ok || !result.ok) {
-        throw new Error(result.error || 'Kunne ikke sende theme drop');
-      }
+      console.log('[AdminPortal] Theme drop triggered', {
+        themeName: selectedTheme.name,
+        emojiCount: selectedTheme.emojis.length
+      });
 
       setThemeDropFeedback({
         status: "success",
-        message: `Theme drop "${selectedTheme.name}" sendt til ${result.targetUserCount} checked-in brugere! 🎉`,
+        message: `Theme drop "${selectedTheme.name}" sendt til alle aktive brugere! 🎉`,
       });
       setThemeDropForm({ themeName: "" });
     } catch (error) {

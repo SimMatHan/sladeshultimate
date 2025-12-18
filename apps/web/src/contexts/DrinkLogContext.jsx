@@ -4,7 +4,7 @@ import { useUserData } from "./UserDataContext";
 import { useDrinkVariants } from "../hooks/useDrinkVariants";
 import { useLocation } from "./LocationContext";
 import { useChannel } from "../hooks/useChannel";
-import { addDrink, addDrinkLogEntry, removeDrink, resetCurrentRun, updateUserLocation } from "../services/userService";
+import { addDrink, addDrinkLogEntry, removeDrink, resetCurrentRun, updateUserLocation, syncCurrentRunToFirebase, loadCurrentRunFromFirebase, migrateLocalStorageToFirebase } from "../services/userService";
 import { clearLeaderboardCache } from "../services/leaderboardService";
 import { DRINK_CATEGORY_ID_SET, NON_DRINK_CATEGORY_ID_SET } from "../constants/drinks";
 import {
@@ -52,7 +52,7 @@ const bootstrapState = () => {
     const raw = window.localStorage.getItem(DRINK_STORAGE_KEY);
     const parsed = parseStoredState(raw);
     const txnId = createTxnId();
-    debugLog(debugEnabled, txnId, "localStorage read", {
+    debugLog(debugEnabled, txnId, "localStorage read (initial)", {
       key: DRINK_STORAGE_KEY,
       bytes: raw ? raw.length : 0,
       parsed: Boolean(parsed),
@@ -89,9 +89,59 @@ export function DrinkLogProvider({ children }) {
     derivedRef.current = derived;
   }, [derived]);
 
+  // Firebase hydration: Load from Firebase on mount, migrate localStorage if needed
   useEffect(() => {
-    setHasHydrated(true);
-  }, []);
+    let isMounted = true;
+
+    const hydrateFromFirebase = async () => {
+      if (!currentUser) {
+        setHasHydrated(true);
+        return;
+      }
+
+      try {
+        const txnId = createTxnId();
+
+        // Load from Firebase
+        const firebaseState = await loadCurrentRunFromFirebase(currentUser.uid);
+
+        if (!isMounted) return;
+
+        if (firebaseState) {
+          // Firebase has data, use it
+          debugLog(debugEnabled, txnId, "Hydrating from Firebase", {
+            runId: firebaseState.currentRunId,
+            eventCount: firebaseState.events?.length || 0
+          });
+
+          dispatch({ type: "HYDRATE", payload: firebaseState, ts: Date.now() });
+        } else {
+          // No Firebase data, check if we need to migrate localStorage
+          const localState = bootstrapState();
+
+          if (localState.events && localState.events.length > 0) {
+            debugLog(debugEnabled, txnId, "Migrating localStorage to Firebase", {
+              eventCount: localState.events.length
+            });
+
+            await migrateLocalStorageToFirebase(currentUser.uid, localState);
+          }
+        }
+      } catch (error) {
+        console.error('[DrinkLogContext] Firebase hydration failed', error);
+      } finally {
+        if (isMounted) {
+          setHasHydrated(true);
+        }
+      }
+    };
+
+    hydrateFromFirebase();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser, debugEnabled]);
 
   const enqueueRemote = useCallback((fn) => {
     remoteQueueRef.current = remoteQueueRef.current.catch(() => undefined).then(() => fn());
@@ -128,6 +178,8 @@ export function DrinkLogProvider({ children }) {
       try {
         const payload = { ...engineState, lastPersistedAt: Date.now() };
         const serialized = serializeState(payload);
+
+        // Persist to localStorage (for offline support)
         window.localStorage.setItem(DRINK_STORAGE_KEY, serialized);
         debugLog(debugEnabled, lastActionIdRef.current || createTxnId(), "localStorage write", {
           key: DRINK_STORAGE_KEY,
@@ -135,6 +187,13 @@ export function DrinkLogProvider({ children }) {
           events: payload.events.length,
           runId: payload.currentRunId,
         });
+
+        // Also sync to Firebase (for cross-device sync)
+        if (currentUser) {
+          syncCurrentRunToFirebase(currentUser.uid, payload).catch(error => {
+            console.error('[DrinkLogContext] Firebase sync failed', error);
+          });
+        }
       } catch (error) {
         debugLog(debugEnabled, lastActionIdRef.current || createTxnId(), "localStorage write failed", { error });
       }
@@ -144,7 +203,7 @@ export function DrinkLogProvider({ children }) {
         clearTimeout(persistTimerRef.current);
       }
     };
-  }, [engineState, hasHydrated, debugEnabled]);
+  }, [engineState, hasHydrated, debugEnabled, currentUser]);
 
   const startSpamCooldown = useCallback((now = Date.now()) => {
     const endsAt = now + SPAM_COOLDOWN_MS;

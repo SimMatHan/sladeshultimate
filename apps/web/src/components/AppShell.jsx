@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation as useRouteLocation } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
+import { doc, onSnapshot } from 'firebase/firestore'
 import TopBar from './TopBar'
 import TabBar from './TabBar'
 import DonationBanner from './DonationBanner'
@@ -29,11 +30,13 @@ import { useSladesh } from '../contexts/SladeshContext'
 import { CATEGORIES } from '../constants/drinks'
 import { APP_VERSION } from '../appVersion'
 import ThemeDropAnimation from './ThemeDropAnimation'
+import { db } from '../firebase'
 
 const CHECK_IN_STORAGE_KEY = 'sladesh:checkedIn'
 const CHECK_IN_GATE_ACTIVATED_KEY = 'sladesh:checkInGateActivated'
 const LAST_SEEN_APP_VERSION_KEY = 'sladesh:lastSeenAppVersion'
 const DONATION_BANNER_DISMISSED_KEY = 'sladesh:donationBannerDismissed'
+const LAST_THEME_DROP_TIMESTAMP_KEY = 'sladesh:lastThemeDropTimestamp'
 const DONATION_SESSION_DURATION_MS = 5 * 60 * 1000
 
 const PAGE_TITLES = {
@@ -96,6 +99,11 @@ export default function AppShell() {
     isEnabled: !donationBannerDismissed,
   })
   const { isLocked } = useSladesh()
+  const [themeDropState, setThemeDropState] = useState({
+    themeName: null,
+    emojis: null,
+    trigger: 0
+  })
   const blockingOverlayVisible =
     (!checkedIn && showCheckInGate) || showSuccessOverlay || showNotificationPrompt || showVersionPopup || isLocked
   const showChannelLoader = isChannelSwitching || (!selectedChannel && channelsLoading)
@@ -207,6 +215,57 @@ export default function AppShell() {
     }
 
     syncSubscription()
+  }, [currentUser])
+
+  // Listen to theme event changes from Firestore
+  useEffect(() => {
+    if (!currentUser) return
+
+    const themeEventRef = doc(db, 'settings', 'theme_event')
+    const unsubscribe = onSnapshot(themeEventRef, (docSnapshot) => {
+      if (!docSnapshot.exists()) return
+
+      const data = docSnapshot.data()
+      if (!data.themeName || !data.emojis || !data.timestamp) return
+
+      // Get timestamp as milliseconds
+      const eventTimestamp = data.timestamp?.toMillis?.()
+      if (!eventTimestamp) return
+
+      // Check if we've already seen this event
+      try {
+        const lastSeenTimestamp = localStorage.getItem(LAST_THEME_DROP_TIMESTAMP_KEY)
+        if (lastSeenTimestamp && parseInt(lastSeenTimestamp, 10) >= eventTimestamp) {
+          console.log('[AppShell] Theme event already seen, skipping', {
+            lastSeen: new Date(parseInt(lastSeenTimestamp, 10)),
+            current: new Date(eventTimestamp)
+          })
+          return
+        }
+
+        // Store the new timestamp
+        localStorage.setItem(LAST_THEME_DROP_TIMESTAMP_KEY, eventTimestamp.toString())
+      } catch (error) {
+        console.warn('[AppShell] Failed to check/store theme drop timestamp', error)
+      }
+
+      console.log('[AppShell] New theme event detected', {
+        themeName: data.themeName,
+        emojiCount: data.emojis.length,
+        timestamp: new Date(eventTimestamp)
+      })
+
+      // Trigger the animation by updating state
+      setThemeDropState({
+        themeName: data.themeName,
+        emojis: data.emojis,
+        trigger: eventTimestamp
+      })
+    }, (error) => {
+      console.error('[AppShell] Error listening to theme events', error)
+    })
+
+    return () => unsubscribe()
   }, [currentUser])
 
   useEffect(() => {
@@ -558,7 +617,11 @@ export default function AppShell() {
 
           {isLocked && <SladeshScanner />}
 
-          <ThemeDropAnimation />
+          <ThemeDropAnimation
+            themeName={themeDropState.themeName}
+            emojis={themeDropState.emojis}
+            trigger={themeDropState.trigger}
+          />
 
           <AchievementOverlayPortal />
         </AchievementProvider>

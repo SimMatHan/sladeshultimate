@@ -17,12 +17,12 @@ const mockLocationService = {
     // Base location: Copenhagen city center
     const baseLat = 55.6761
     const baseLng = 12.5683
-    
+
     // Add small random variation (simulating movement within ~500m radius)
     const variation = 0.005 // ~500m
     const lat = baseLat + (Math.random() - 0.5) * variation
     const lng = baseLng + (Math.random() - 0.5) * variation
-    
+
     return {
       lat,
       lng,
@@ -36,7 +36,7 @@ const generateMockUsers = () => {
   const baseLat = 55.6761
   const baseLng = 12.5683
   const variation = 0.01 // ~1km radius for other users
-  
+
   return [
     {
       id: 'sara-holm',
@@ -201,7 +201,7 @@ export function LocationProvider({ children }) {
         const usersRef = collection(db, 'users')
         const now = Date.now()
         const boundaryStart = getLatestResetBoundary(new Date()).getTime()
-        
+
         // CHANNEL FILTERING: Query filters users by activeChannelId using array-contains.
         // Only users who have activeChannelId in their joinedChannelIds array are returned.
         const channelQuery = query(
@@ -214,12 +214,12 @@ export function LocationProvider({ children }) {
 
         querySnapshot.forEach((docSnap) => {
           const userData = docSnap.data()
-          
+
           // Skip current user
           if (currentUser && docSnap.id === currentUser.uid) {
             return
           }
-          
+
           // Check if user has valid currentLocation
           if (
             !userData.currentLocation ||
@@ -269,8 +269,8 @@ export function LocationProvider({ children }) {
 
           // Only include users with recent actions (check-ins within the current window, other actions within 12 hours)
           if (lastActionType && lastActionTimestamp) {
-            const locationTimestamp = userData.currentLocation.timestamp?.toMillis 
-              ? userData.currentLocation.timestamp.toMillis() 
+            const locationTimestamp = userData.currentLocation.timestamp?.toMillis
+              ? userData.currentLocation.timestamp.toMillis()
               : (userData.currentLocation.timestamp?.seconds ? userData.currentLocation.timestamp.seconds * 1000 : Date.now())
 
             userMap.set(docSnap.id, {
@@ -350,10 +350,52 @@ export function LocationProvider({ children }) {
         return null
       }
 
+      // Check current permission state before attempting to get location
       let permissionState = locationPermission
       if (!permissionState || permissionState === 'unknown') {
         const resolved = await readPermissionState()
         permissionState = resolved || permissionState
+      }
+
+      // If permission is already granted, get location silently without prompting
+      if (permissionState === 'granted') {
+        // Mark that we've seen the permission (it was granted previously)
+        try {
+          localStorage.setItem('hasSeenGeoPermission', 'true')
+        } catch (e) {
+          // Ignore localStorage errors
+        }
+
+        setHasRequestedLocation(true)
+        return await new Promise((resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              const newLocation = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude,
+                timestamp: Date.now(),
+              }
+              setUserLocation(newLocation)
+              setLocationHistory((prev) => [...prev, newLocation].slice(-50))
+              setLocationError(null)
+              setLocationPermission('granted')
+              resolve(newLocation)
+            },
+            (error) => {
+              console.error('Geolocation error:', error)
+              if (error.code === error.PERMISSION_DENIED) {
+                setLocationPermission('denied')
+              }
+              setLocationError(error.message)
+              resolve(null)
+            },
+            {
+              enableHighAccuracy: true,
+              timeout: 10000,
+              maximumAge: 60000 // Use cached position if available
+            }
+          )
+        })
       }
 
       // Skip actively requesting permission outside the Map view.
@@ -364,6 +406,19 @@ export function LocationProvider({ children }) {
       // If we don't know the state and shouldn't prompt, bail quietly.
       if (!allowPrompt && !permissionState && !userLocation) {
         return null
+      }
+
+      // Only prompt if explicitly allowed and not already denied
+      if (permissionState === 'denied') {
+        setLocationError('Du har afvist adgang til placering')
+        return null
+      }
+
+      // Mark that we're about to show the permission prompt
+      try {
+        localStorage.setItem('hasSeenGeoPermission', 'true')
+      } catch (e) {
+        // Ignore localStorage errors
       }
 
       setHasRequestedLocation(true)
@@ -392,7 +447,7 @@ export function LocationProvider({ children }) {
           {
             enableHighAccuracy: true,
             timeout: 10000,
-            maximumAge: allowPrompt ? 0 : 60000
+            maximumAge: 0 // Force fresh position when prompting
           }
         )
       })

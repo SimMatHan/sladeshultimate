@@ -330,7 +330,10 @@ async function fetchUserSnapshot(userRef) {
 // Reset the current drink run manually (used by UI reset action)
 export async function resetCurrentRun(userId, now = new Date()) {
   const userRef = doc(db, 'users', userId)
+  const currentRunRef = doc(db, 'users', userId, 'currentRun', 'state')
   const boundary = Timestamp.fromDate(getLatestDrinkDayBoundary(now))
+
+  // Reset user document fields
   await updateDoc(userRef, {
     currentRunDrinkCount: 0,
     drinkVariations: {},
@@ -339,6 +342,20 @@ export async function resetCurrentRun(userId, now = new Date()) {
     updatedAt: serverTimestamp(),
     lastActiveAt: serverTimestamp()
   })
+
+  // Also reset the currentRun collection (for cross-device sync)
+  try {
+    await setDoc(currentRunRef, {
+      schemaVersion: 1,
+      currentRunId: `run-${Date.now()}`,
+      events: [],
+      lastPersistedAt: Date.now(),
+      updatedAt: serverTimestamp()
+    })
+    console.info('[resetCurrentRun] Reset currentRun collection', { userId })
+  } catch (error) {
+    console.error('[resetCurrentRun] Failed to reset currentRun collection', { userId, error })
+  }
 }
 
 function normalizeUsername(username = '') {
@@ -1120,3 +1137,119 @@ export async function cleanupSladeshTimestamp(userId) {
 
   return { cleaned: false, oldValue: userData.lastSladeshSentAt }
 }
+
+/**
+ * Sync current run state to Firebase
+ * @param {string} userId - User ID
+ * @param {Object} state - Current run state from drinkEngine
+ * @returns {Promise<void>}
+ */
+export async function syncCurrentRunToFirebase(userId, state) {
+  if (!userId || !state) {
+    console.warn('[syncCurrentRunToFirebase] Missing userId or state')
+    return
+  }
+
+  const currentRunRef = doc(db, 'users', userId, 'currentRun', 'state')
+
+  try {
+    await setDoc(currentRunRef, {
+      schemaVersion: state.schemaVersion,
+      currentRunId: state.currentRunId,
+      events: state.events || [],
+      lastPersistedAt: state.lastPersistedAt || null,
+      updatedAt: serverTimestamp()
+    }, { merge: true })
+
+    console.info('[syncCurrentRunToFirebase] Synced current run to Firebase', {
+      userId,
+      runId: state.currentRunId,
+      eventCount: state.events?.length || 0
+    })
+  } catch (error) {
+    console.error('[syncCurrentRunToFirebase] Failed to sync', { userId, error })
+    throw error
+  }
+}
+
+/**
+ * Load current run state from Firebase
+ * @param {string} userId - User ID
+ * @returns {Promise<Object|null>} Current run state or null if not found
+ */
+export async function loadCurrentRunFromFirebase(userId) {
+  if (!userId) {
+    console.warn('[loadCurrentRunFromFirebase] Missing userId')
+    return null
+  }
+
+  const currentRunRef = doc(db, 'users', userId, 'currentRun', 'state')
+
+  try {
+    const snapshot = await getDoc(currentRunRef)
+
+    if (!snapshot.exists()) {
+      console.info('[loadCurrentRunFromFirebase] No current run found in Firebase', { userId })
+      return null
+    }
+
+    const data = snapshot.data()
+    console.info('[loadCurrentRunFromFirebase] Loaded current run from Firebase', {
+      userId,
+      runId: data.currentRunId,
+      eventCount: data.events?.length || 0,
+      source: snapshot.metadata?.fromCache ? 'cache' : 'server'
+    })
+
+    return {
+      schemaVersion: data.schemaVersion,
+      currentRunId: data.currentRunId,
+      events: data.events || [],
+      lastPersistedAt: data.lastPersistedAt || null
+    }
+  } catch (error) {
+    console.error('[loadCurrentRunFromFirebase] Failed to load', { userId, error })
+    return null
+  }
+}
+
+/**
+ * Migrate localStorage state to Firebase (one-time migration)
+ * @param {string} userId - User ID
+ * @param {Object} localState - State from localStorage
+ * @returns {Promise<boolean>} True if migration succeeded
+ */
+export async function migrateLocalStorageToFirebase(userId, localState) {
+  if (!userId || !localState) {
+    console.warn('[migrateLocalStorageToFirebase] Missing userId or localState')
+    return false
+  }
+
+  try {
+    // Check if Firebase already has data
+    const existingState = await loadCurrentRunFromFirebase(userId)
+
+    if (existingState && existingState.events && existingState.events.length > 0) {
+      console.info('[migrateLocalStorageToFirebase] Firebase already has data, skipping migration', {
+        userId,
+        firebaseEvents: existingState.events.length,
+        localEvents: localState.events?.length || 0
+      })
+      return false
+    }
+
+    // Migrate localStorage to Firebase
+    await syncCurrentRunToFirebase(userId, localState)
+
+    console.info('[migrateLocalStorageToFirebase] Successfully migrated localStorage to Firebase', {
+      userId,
+      eventCount: localState.events?.length || 0
+    })
+
+    return true
+  } catch (error) {
+    console.error('[migrateLocalStorageToFirebase] Migration failed', { userId, error })
+    return false
+  }
+}
+

@@ -59,6 +59,11 @@ service cloud.firestore {
         allow read: if isAuthenticated();
         allow create, update, delete: if isOwner(userId);
       }
+
+      match /drinkLogs/{logId} {
+        allow read: if isAuthenticated();
+        allow create, update, delete: if isOwner(userId);
+      }
       
       match /sladesh/{sladeshId} {
         allow read: if isAuthenticated();
@@ -70,6 +75,12 @@ service cloud.firestore {
 
       // Web push subscriptions per user/device
       match /pushSubscriptions/{subscriptionId} {
+        allow read: if isOwner(userId);
+        allow create, update, delete: if isOwner(userId);
+      }
+
+      // Current run state (for cross-device drink sync)
+      match /currentRun/{docId} {
         allow read: if isOwner(userId);
         allow create, update, delete: if isOwner(userId);
       }
@@ -154,22 +165,16 @@ service cloud.firestore {
       }
     }
     
-    // Theme Drops collection
-    match /themeDrops/{themeDropId} {
-      // All authenticated users can read theme drops (they filter by targetUserIds in the app)
+    
+    // Settings collection (for global app settings like theme events)
+    match /settings/{documentId} {
+      // All authenticated users can read settings
       allow read: if isAuthenticated();
       
-      // Only admins can create theme drops
-      allow create: if isAdmin() &&
-                      request.resource.data.keys().hasAll(['themeName', 'emojis', 'targetUserIds', 'createdAt', 'createdBy']) &&
-                      request.resource.data.themeName is string &&
-                      request.resource.data.emojis is list &&
-                      request.resource.data.targetUserIds is list &&
-                      request.resource.data.createdBy == request.auth.uid;
-      
-      // No updates or deletes needed for theme drops (they're ephemeral)
-      allow update, delete: if false;
+      // Only admins can write to settings
+      allow write: if isAdmin();
     }
+    
     
     // Stats collection
     match /stats/{statId} {
