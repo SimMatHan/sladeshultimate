@@ -1618,6 +1618,8 @@ exports.manualCleanupExpiredBeacons = functions
         }
     });
 
+
+
 // ============================================================================
 // ADMIN ENDPOINTS
 // ============================================================================
@@ -1634,7 +1636,7 @@ let vapidConfigured = false;
 function ensureVapidConfig() {
     const missing = REQUIRED_VAPID_ENVS.filter((key) => !process.env[key]);
     if (missing.length) {
-        throw new Error(`Missing Web Push env vars: ${missing.join(", ")}`);
+        throw new Error('Missing Web Push env vars: ' + missing.join(", "));
     }
     if (!vapidConfigured) {
         const publicKey = process.env.VAPID_PUBLIC_KEY.replace(/\s+/g, "");
@@ -1664,7 +1666,6 @@ function isAdminUser(email) {
 exports.adminBroadcast = functions
     .region(DEFAULT_REGION)
     .https.onRequest(async (req, res) => {
-        // Set CORS headers
         res.set("Access-Control-Allow-Origin", "*");
         res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
         res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -1680,7 +1681,6 @@ exports.adminBroadcast = functions
         }
 
         try {
-            // Verify admin authentication
             const authHeader = req.headers.authorization;
             if (!authHeader || !authHeader.startsWith("Bearer ")) {
                 return res.status(403).json({ ok: false, error: "Unauthorized - Admin access required" });
@@ -1702,12 +1702,10 @@ exports.adminBroadcast = functions
                 return res.status(403).json({ ok: false, error: "Unauthorized - Admin access required" });
             }
 
-            // Ensure VAPID is configured
             ensureVapidConfig();
 
             const { channelId, title, message } = req.body;
 
-            // Validate input
             if (!channelId || !title || !message) {
                 return res.status(400).json({
                     ok: false,
@@ -1721,14 +1719,12 @@ exports.adminBroadcast = functions
                 adminEmail: decodedToken.email
             });
 
-            // Get channel info
             const channelDoc = await db.collection("channels").doc(channelId).get();
             if (!channelDoc.exists) {
                 return res.status(404).json({ ok: false, error: "Channel not found" });
             }
             const channelName = channelDoc.data().name || "din kanal";
 
-            // Get all users in the channel
             const usersSnapshot = await db
                 .collection("users")
                 .where("joinedChannelIds", "array-contains", channelId)
@@ -1750,14 +1746,13 @@ exports.adminBroadcast = functions
                 userCount: usersSnapshot.size
             });
 
-            // Build notification payload
             const payload = buildNotificationPayload("stress_signal", {
                 title,
                 body: message,
                 channelId,
                 channelName,
                 data: {
-                    url: /home?channel=
+                    url: "/home?channel=" + channelId
                 }
             });
 
@@ -1765,18 +1760,14 @@ exports.adminBroadcast = functions
             let failed = 0;
             let cleaned = 0;
 
-            // Send to all users in the channel
             for (const userDoc of usersSnapshot.docs) {
                 const userId = userDoc.id;
-
-                // Get user's push subscriptions
                 const subsSnapshot = await userDoc.ref.collection("pushSubscriptions").get();
 
                 if (subsSnapshot.empty) {
                     continue;
                 }
 
-                // Send to each subscription
                 for (const subDoc of subsSnapshot.docs) {
                     const subscription = {
                         endpoint: subDoc.get("endpoint"),
@@ -1784,7 +1775,6 @@ exports.adminBroadcast = functions
                     };
 
                     if (!subscription.endpoint || !subscription.keys) {
-                        // Invalid subscription, clean it up
                         await subDoc.ref.delete().catch(() => { });
                         cleaned++;
                         continue;
@@ -1794,7 +1784,6 @@ exports.adminBroadcast = functions
                         await webpush.sendNotification(subscription, JSON.stringify(payload));
                         sent++;
 
-                        // Update last used timestamp
                         await subDoc.ref.update({
                             lastUsedAt: FieldValue.serverTimestamp()
                         }).catch(() => { });
@@ -1808,7 +1797,6 @@ exports.adminBroadcast = functions
 
                         failed++;
 
-                        // Clean up dead subscriptions
                         if (isUnrecoverablePushError(error)) {
                             await subDoc.ref.delete().catch(() => { });
                             cleaned++;
@@ -1830,7 +1818,7 @@ exports.adminBroadcast = functions
                 sent,
                 failed,
                 cleaned,
-                message: Broadcast sent to  subscriptions
+                message: "Broadcast sent to " + sent + " subscriptions"
             });
         } catch (error) {
             console.error("[adminBroadcast] Handler error", error);
@@ -1845,7 +1833,6 @@ exports.adminBroadcast = functions
 exports.createBeacon = functions
     .region(DEFAULT_REGION)
     .https.onRequest(async (req, res) => {
-        // Set CORS headers
         res.set("Access-Control-Allow-Origin", "*");
         res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
         res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -1861,7 +1848,6 @@ exports.createBeacon = functions
         }
 
         try {
-            // Verify authentication
             const authHeader = req.headers.authorization;
             if (!authHeader || !authHeader.startsWith("Bearer ")) {
                 return res.status(401).json({ ok: false, error: "Unauthorized - Authentication required" });
@@ -1879,7 +1865,6 @@ exports.createBeacon = functions
             const { latitude, longitude, userName } = req.body;
             const userId = decodedToken.uid;
 
-            // Validate input
             if (typeof latitude !== "number" || typeof longitude !== "number") {
                 return res.status(400).json({
                     ok: false,
@@ -1887,7 +1872,6 @@ exports.createBeacon = functions
                 });
             }
 
-            // Validate coordinate ranges
             if (latitude < -90 || latitude > 90) {
                 return res.status(400).json({
                     ok: false,
@@ -1911,10 +1895,9 @@ exports.createBeacon = functions
 
             const now = admin.firestore.Timestamp.now();
             const expiresAt = admin.firestore.Timestamp.fromMillis(
-                now.toMillis() + 2 * 60 * 60 * 1000 // 2 hours from now
+                now.toMillis() + 2 * 60 * 60 * 1000
             );
 
-            // Create beacon document
             const beaconRef = await db.collection("stressBeacons").add({
                 createdBy: userId,
                 creatorName: userName || decodedToken.name || decodedToken.email || "En bruger",
