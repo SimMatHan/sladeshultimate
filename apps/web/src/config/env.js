@@ -21,7 +21,7 @@ export const USE_MOCK_DATA = getUseMockData();
 export const IS_DEVELOPMENT = import.meta.env.MODE === 'development';
 export const IS_PRODUCTION = import.meta.env.MODE === 'production';
 
-// API Base URL - Points to Vercel deployment for serverless functions
-// Use absolute URL in both production and development since API is on separate domain
-export const API_BASE_URL = 'https://sladeshultimate-api.vercel.app';
+// API Base URL - Points to Firebase Functions for admin endpoints
+// Firebase Functions have automatic access to Firebase Admin credentials
+export const API_BASE_URL = 'https://europe-west1-sladeshultimate-1.cloudfunctions.net';
 

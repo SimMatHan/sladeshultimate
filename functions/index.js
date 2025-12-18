@@ -1617,3 +1617,330 @@ exports.manualCleanupExpiredBeacons = functions
             });
         }
     });
+
+// ============================================================================
+// ADMIN ENDPOINTS
+// ============================================================================
+
+const webpush = require("web-push");
+
+// Admin user email
+const ADMIN_EMAIL = "simonmathiashansen@gmail.com";
+
+// VAPID configuration
+const REQUIRED_VAPID_ENVS = ["VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY"];
+let vapidConfigured = false;
+
+function ensureVapidConfig() {
+    const missing = REQUIRED_VAPID_ENVS.filter((key) => !process.env[key]);
+    if (missing.length) {
+        throw new Error(Missing Web Push env vars: );
+    }
+    if (!vapidConfigured) {
+        const publicKey = process.env.VAPID_PUBLIC_KEY.replace(/\s+/g, "");
+        const privateKey = process.env.VAPID_PRIVATE_KEY.replace(/\s+/g, "");
+
+        if (!publicKey || !privateKey) {
+            throw new Error("VAPID keys are empty after removing whitespace");
+        }
+
+        webpush.setVapidDetails(
+            "mailto:notifications@sladeshultimate.app",
+            publicKey,
+            privateKey
+        );
+        vapidConfigured = true;
+    }
+}
+
+function isAdminUser(email) {
+    return email && email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+}
+
+/**
+ * Admin endpoint to broadcast notifications to all users in a channel.
+ * Requires admin authentication.
+ */
+exports.adminBroadcast = functions
+    .region(DEFAULT_REGION)
+    .https.onRequest(async (req, res) => {
+        // Set CORS headers
+        res.set("Access-Control-Allow-Origin", "*");
+        res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+        res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+        if (req.method === "OPTIONS") {
+            res.status(204).send("");
+            return;
+        }
+
+        if (req.method !== "POST") {
+            res.status(405).json({ ok: false, error: "Method Not Allowed" });
+            return;
+        }
+
+        try {
+            // Verify admin authentication
+            const authHeader = req.headers.authorization;
+            if (!authHeader || !authHeader.startsWith("Bearer ")) {
+                return res.status(403).json({ ok: false, error: "Unauthorized - Admin access required" });
+            }
+
+            const token = authHeader.split("Bearer ")[1];
+            let decodedToken;
+            try {
+                decodedToken = await admin.auth().verifyIdToken(token);
+            } catch (error) {
+                console.error("[adminBroadcast] Token verification failed", error);
+                return res.status(403).json({ ok: false, error: "Unauthorized - Admin access required" });
+            }
+
+            if (!isAdminUser(decodedToken.email)) {
+                console.warn("[adminBroadcast] Unauthorized access attempt", {
+                    email: decodedToken.email || "unknown"
+                });
+                return res.status(403).json({ ok: false, error: "Unauthorized - Admin access required" });
+            }
+
+            // Ensure VAPID is configured
+            ensureVapidConfig();
+
+            const { channelId, title, message } = req.body;
+
+            // Validate input
+            if (!channelId || !title || !message) {
+                return res.status(400).json({
+                    ok: false,
+                    error: "Missing required fields: channelId, title, message"
+                });
+            }
+
+            console.log("[adminBroadcast] Processing broadcast", {
+                channelId,
+                title,
+                adminEmail: decodedToken.email
+            });
+
+            // Get channel info
+            const channelDoc = await db.collection("channels").doc(channelId).get();
+            if (!channelDoc.exists) {
+                return res.status(404).json({ ok: false, error: "Channel not found" });
+            }
+            const channelName = channelDoc.data().name || "din kanal";
+
+            // Get all users in the channel
+            const usersSnapshot = await db
+                .collection("users")
+                .where("joinedChannelIds", "array-contains", channelId)
+                .get();
+
+            if (usersSnapshot.empty) {
+                console.log("[adminBroadcast] No users in channel", { channelId });
+                return res.status(200).json({
+                    ok: true,
+                    sent: 0,
+                    failed: 0,
+                    cleaned: 0,
+                    message: "No users in channel"
+                });
+            }
+
+            console.log("[adminBroadcast] Found users in channel", {
+                channelId,
+                userCount: usersSnapshot.size
+            });
+
+            // Build notification payload
+            const payload = buildNotificationPayload("stress_signal", {
+                title,
+                body: message,
+                channelId,
+                channelName,
+                data: {
+                    url: /home?channel=
+                }
+            });
+
+            let sent = 0;
+            let failed = 0;
+            let cleaned = 0;
+
+            // Send to all users in the channel
+            for (const userDoc of usersSnapshot.docs) {
+                const userId = userDoc.id;
+
+                // Get user's push subscriptions
+                const subsSnapshot = await userDoc.ref.collection("pushSubscriptions").get();
+
+                if (subsSnapshot.empty) {
+                    continue;
+                }
+
+                // Send to each subscription
+                for (const subDoc of subsSnapshot.docs) {
+                    const subscription = {
+                        endpoint: subDoc.get("endpoint"),
+                        keys: subDoc.get("keys")
+                    };
+
+                    if (!subscription.endpoint || !subscription.keys) {
+                        // Invalid subscription, clean it up
+                        await subDoc.ref.delete().catch(() => { });
+                        cleaned++;
+                        continue;
+                    }
+
+                    try {
+                        await webpush.sendNotification(subscription, JSON.stringify(payload));
+                        sent++;
+
+                        // Update last used timestamp
+                        await subDoc.ref.update({
+                            lastUsedAt: FieldValue.serverTimestamp()
+                        }).catch(() => { });
+                    } catch (error) {
+                        console.error("[adminBroadcast] Push send error", {
+                            userId,
+                            subscriptionId: subDoc.id,
+                            error: error.message,
+                            statusCode: error.statusCode
+                        });
+
+                        failed++;
+
+                        // Clean up dead subscriptions
+                        if (isUnrecoverablePushError(error)) {
+                            await subDoc.ref.delete().catch(() => { });
+                            cleaned++;
+                        }
+                    }
+                }
+            }
+
+            console.log("[adminBroadcast] Broadcast completed", {
+                channelId,
+                sent,
+                failed,
+                cleaned,
+                totalUsers: usersSnapshot.size
+            });
+
+            res.status(200).json({
+                ok: true,
+                sent,
+                failed,
+                cleaned,
+                message: Broadcast sent to  subscriptions
+            });
+        } catch (error) {
+            console.error("[adminBroadcast] Handler error", error);
+            res.status(500).json({ ok: false, error: error.message || "Internal Server Error" });
+        }
+    });
+
+/**
+ * Admin endpoint to create a stress beacon.
+ * Requires admin authentication.
+ */
+exports.createBeacon = functions
+    .region(DEFAULT_REGION)
+    .https.onRequest(async (req, res) => {
+        // Set CORS headers
+        res.set("Access-Control-Allow-Origin", "*");
+        res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+        res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+        if (req.method === "OPTIONS") {
+            res.status(204).send("");
+            return;
+        }
+
+        if (req.method !== "POST") {
+            res.status(405).json({ ok: false, error: "Method Not Allowed" });
+            return;
+        }
+
+        try {
+            // Verify authentication
+            const authHeader = req.headers.authorization;
+            if (!authHeader || !authHeader.startsWith("Bearer ")) {
+                return res.status(401).json({ ok: false, error: "Unauthorized - Authentication required" });
+            }
+
+            const token = authHeader.split("Bearer ")[1];
+            let decodedToken;
+            try {
+                decodedToken = await admin.auth().verifyIdToken(token);
+            } catch (error) {
+                console.error("[createBeacon] Token verification failed", error);
+                return res.status(401).json({ ok: false, error: "Unauthorized - Authentication required" });
+            }
+
+            const { latitude, longitude, userName } = req.body;
+            const userId = decodedToken.uid;
+
+            // Validate input
+            if (typeof latitude !== "number" || typeof longitude !== "number") {
+                return res.status(400).json({
+                    ok: false,
+                    error: "Invalid coordinates: latitude and longitude must be numbers"
+                });
+            }
+
+            // Validate coordinate ranges
+            if (latitude < -90 || latitude > 90) {
+                return res.status(400).json({
+                    ok: false,
+                    error: "Invalid latitude: must be between -90 and 90"
+                });
+            }
+
+            if (longitude < -180 || longitude > 180) {
+                return res.status(400).json({
+                    ok: false,
+                    error: "Invalid longitude: must be between -180 and 180"
+                });
+            }
+
+            console.log("[createBeacon] Creating beacon", {
+                userId,
+                latitude,
+                longitude,
+                userName
+            });
+
+            const now = admin.firestore.Timestamp.now();
+            const expiresAt = admin.firestore.Timestamp.fromMillis(
+                now.toMillis() + 2 * 60 * 60 * 1000 // 2 hours from now
+            );
+
+            // Create beacon document
+            const beaconRef = await db.collection("stressBeacons").add({
+                createdBy: userId,
+                creatorName: userName || decodedToken.name || decodedToken.email || "En bruger",
+                latitude,
+                longitude,
+                createdAt: now,
+                expiresAt,
+                active: true,
+                notificationsSent: 0,
+                lastNotificationAt: null
+            });
+
+            console.log("[createBeacon] Beacon created successfully", {
+                beaconId: beaconRef.id,
+                userId,
+                expiresAt: expiresAt.toDate().toISOString()
+            });
+
+            res.status(200).json({
+                ok: true,
+                beaconId: beaconRef.id,
+                expiresAt: expiresAt.toMillis(),
+                message: "Stress Beacon created successfully"
+            });
+        } catch (error) {
+            console.error("[createBeacon] Handler error", error);
+            res.status(500).json({ ok: false, error: error.message || "Internal Server Error" });
+        }
+    });

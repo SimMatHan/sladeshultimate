@@ -3,8 +3,11 @@ const { buildNotificationPayload } = require('../lib/notificationTemplates')
 const admin = require('firebase-admin')
 
 // Initialize Firebase Admin if not already initialized
+// On Vercel, we don't need credentials - Firebase will auto-detect the project
 if (!admin.apps.length) {
-    admin.initializeApp()
+    admin.initializeApp({
+        projectId: process.env.FIREBASE_PROJECT_ID || 'sladeshultimate-1'
+    })
 }
 
 const db = admin.firestore()
