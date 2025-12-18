@@ -188,26 +188,26 @@ service cloud.firestore {
     
     // Stress Beacons collection
     match /stressBeacons/{beaconId} {
-      // Anyone can read active beacons
-      allow read: if isAuthenticated() && resource.data.active == true;
+      // All authenticated users can read beacons (both active and staged)
+      allow read: if isAuthenticated();
       
-      // Authenticated users can create beacons
-      allow create: if isAuthenticated() &&
+      // Only admin can create beacons (staged or active)
+      allow create: if isAdmin() &&
                       request.resource.data.createdBy == request.auth.uid &&
-                      request.resource.data.active == true &&
-                      request.resource.data.expiresAt > request.time &&
-                      request.resource.data.keys().hasAll(['createdBy', 'creatorName', 'latitude', 'longitude', 'createdAt', 'expiresAt', 'active']) &&
-                      request.resource.data.latitude is number &&
-                      request.resource.data.longitude is number &&
-                      request.resource.data.latitude >= -90 && request.resource.data.latitude <= 90 &&
-                      request.resource.data.longitude >= -180 && request.resource.data.longitude <= 180;
+                      request.resource.data.keys().hasAll(['location', 'active', 'createdBy', 'createdAt', 'updatedAt']) &&
+                      request.resource.data.location.keys().hasAll(['lat', 'lng']) &&
+                      request.resource.data.location.lat is number &&
+                      request.resource.data.location.lng is number &&
+                      request.resource.data.location.lat >= -90 && request.resource.data.location.lat <= 90 &&
+                      request.resource.data.location.lng >= -180 && request.resource.data.location.lng <= 180 &&
+                      request.resource.data.active is bool;
       
-      // Only creator can update their own beacons
-      allow update: if isAuthenticated() &&
+      // Only admin can update beacons
+      allow update: if isAdmin() &&
                        resource.data.createdBy == request.auth.uid;
       
-      // Only creator can delete their own beacons
-      allow delete: if isAuthenticated() &&
+      // Only admin can delete beacons
+      allow delete: if isAdmin() &&
                        resource.data.createdBy == request.auth.uid;
     }
   }

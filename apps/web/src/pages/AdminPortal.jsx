@@ -849,7 +849,7 @@ export default function AdminPortal() {
       const auth = getAuth();
       const token = await auth.currentUser.getIdToken();
 
-      const response = await fetch('/api/adminBroadcast', {
+      const response = await fetch(`${API_BASE_URL}/api/adminBroadcast`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -862,9 +862,31 @@ export default function AdminPortal() {
         }),
       });
 
+      // Handle non-OK responses with better error logging
+      if (!response.ok) {
+        const rawText = await response.text();
+        console.error('[AdminPortal] Stress Signal API error', {
+          status: response.status,
+          statusText: response.statusText,
+          url: response.url,
+          rawResponse: rawText.substring(0, 500)
+        });
+
+        // Try to parse as JSON, fallback to generic error
+        let errorMessage = 'Kunne ikke sende stress signal';
+        try {
+          const errorData = JSON.parse(rawText);
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          errorMessage = `API returnerede HTML i stedet for JSON. Status: ${response.status}`;
+        }
+
+        throw new Error(errorMessage);
+      }
+
       const result = await response.json();
 
-      if (!response.ok || !result.ok) {
+      if (!result.ok) {
         throw new Error(result.error || 'Kunne ikke sende stress signal');
       }
 
@@ -959,7 +981,7 @@ export default function AdminPortal() {
       const auth = getAuth();
       const token = await auth.currentUser.getIdToken();
 
-      const response = await fetch('/api/createBeacon', {
+      const response = await fetch(`${API_BASE_URL}/api/createBeacon`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -972,9 +994,31 @@ export default function AdminPortal() {
         }),
       });
 
+      // Handle non-OK responses with better error logging
+      if (!response.ok) {
+        const rawText = await response.text();
+        console.error('[AdminPortal] Create Beacon API error', {
+          status: response.status,
+          statusText: response.statusText,
+          url: response.url,
+          rawResponse: rawText.substring(0, 500)
+        });
+
+        // Try to parse as JSON, fallback to generic error
+        let errorMessage = 'Kunne ikke oprette beacon';
+        try {
+          const errorData = JSON.parse(rawText);
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          errorMessage = `API returnerede HTML i stedet for JSON. Status: ${response.status}`;
+        }
+
+        throw new Error(errorMessage);
+      }
+
       const result = await response.json();
 
-      if (!response.ok || !result.ok) {
+      if (!result.ok) {
         throw new Error(result.error || 'Kunne ikke oprette beacon');
       }
 

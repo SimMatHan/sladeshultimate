@@ -21,9 +21,7 @@ export const USE_MOCK_DATA = getUseMockData();
 export const IS_DEVELOPMENT = import.meta.env.MODE === 'development';
 export const IS_PRODUCTION = import.meta.env.MODE === 'production';
 
-// API Base URL - in production, API routes are handled by hosting rewrites
-// In development, we use the deployed production URL since serverless functions don't run locally
-export const API_BASE_URL = IS_PRODUCTION
-  ? '' // Use relative paths in production (handled by Firebase Hosting rewrites)
-  : 'https://sladeshultimate-1.web.app'; // Use deployed URL in development
+// API Base URL - Points to Vercel deployment for serverless functions
+// Use absolute URL in both production and development since API is on separate domain
+export const API_BASE_URL = 'https://sladeshultimate-api.vercel.app';
 

@@ -1,12 +1,15 @@
 import { useEffect, useState, useRef, useMemo } from 'react'
-import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import { useNavigate } from 'react-router-dom'
 import { useLocation } from '../contexts/LocationContext'
 import { useChannel } from '../hooks/useChannel'
+import { useAuth } from '../hooks/useAuth'
 import PageTransition from '../components/PageTransition'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { MAP_TILE_LAYER_PROPS } from '../utils/mapTiles'
+import { db } from '../firebase'
+import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, where, serverTimestamp, Timestamp } from 'firebase/firestore'
 
 // Fix for default marker icons in react-leaflet
 delete L.Icon.Default.prototype._getIconUrl
@@ -42,6 +45,22 @@ const otherUserIcon = (gradient) => {
     iconSize: [28, 28],
     iconAnchor: [14, 14],
     popupAnchor: [0, -14],
+  })
+}
+
+// Custom stress beacon marker icon (orange/red warning)
+const beaconIcon = (isActive) => {
+  const color = isActive ? '#FF385C' : '#FFA500'
+  return new L.Icon({
+    iconUrl: 'data:image/svg+xml;base64,' + btoa(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
+        <circle cx="18" cy="18" r="14" fill="${color}" stroke="white" stroke-width="3" opacity="0.9"/>
+        <path d="M18 10 L18 20 M18 24 L18 26" stroke="white" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+    `),
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
+    popupAnchor: [0, -18],
   })
 }
 
@@ -116,6 +135,27 @@ function MapInstanceSetter({ mapRef }) {
   return null
 }
 
+// Component to handle map clicks for beacon placement
+function MapClickHandler({ onClick, enabled }) {
+  const map = useMap()
+
+  useEffect(() => {
+    if (!enabled || !onClick) return
+
+    const handleClick = (e) => {
+      onClick(e)
+    }
+
+    map.on('click', handleClick)
+
+    return () => {
+      map.off('click', handleClick)
+    }
+  }, [map, onClick, enabled])
+
+  return null
+}
+
 export default function MapPage() {
   // CHANNEL FILTERING: All users shown on the map are filtered by the active channel.
   // The activeChannelId comes from useChannel() hook via LocationContext.
@@ -124,12 +164,21 @@ export default function MapPage() {
   // Only users from the active channel appear as markers on the map.
   const { selectedChannel } = useChannel()
   const { userLocation, otherUsers, updateLocation, locationError, locationPermission, hasRequestedLocation } = useLocation()
+  const { currentUser } = useAuth()
   const [skipAutoCenter, setSkipAutoCenter] = useState(false)
   const [isRequestingLocation, setIsRequestingLocation] = useState(false)
   const [hasTriedLocation, setHasTriedLocation] = useState(false)
   const mapRef = useRef(null)
   const containerRef = useRef(null)
   const navigate = useNavigate()
+
+  // Stress Beacon state
+  const [beacons, setBeacons] = useState([])
+  const [stagedBeacon, setStagedBeacon] = useState(null) // Beacon being placed/moved by admin
+  const [isPlacingBeacon, setIsPlacingBeacon] = useState(false)
+
+  // Check if current user is admin
+  const isAdmin = currentUser?.email === 'simonmathiashansen@gmail.com'
 
   const visibleUsers = useMemo(
     () => otherUsers.filter((user) => user.checkedIn !== false),
@@ -184,6 +233,122 @@ export default function MapPage() {
     }
   }, []) // Only run on mount, not when locationPermission changes
 
+  // Listen to active beacons in realtime
+  useEffect(() => {
+    const beaconsRef = collection(db, 'stressBeacons')
+    const beaconsQuery = query(beaconsRef, where('active', '==', true))
+
+    const unsubscribe = onSnapshot(beaconsQuery, (snapshot) => {
+      const activeBeacons = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }))
+      setBeacons(activeBeacons)
+    }, (error) => {
+      console.error('[Map] Failed to load beacons', error)
+    })
+
+    return () => unsubscribe()
+  }, [])
+
+  // Listen to staged beacons (admin only)
+  useEffect(() => {
+    if (!isAdmin) return
+
+    const beaconsRef = collection(db, 'stressBeacons')
+    const stagedQuery = query(beaconsRef, where('active', '==', false))
+
+    const unsubscribe = onSnapshot(stagedQuery, (snapshot) => {
+      if (snapshot.docs.length > 0) {
+        const staged = snapshot.docs[0]
+        const data = staged.data()
+        setStagedBeacon({
+          id: staged.id,
+          lat: data.location.lat,
+          lng: data.location.lng
+        })
+      } else {
+        setStagedBeacon(null)
+      }
+    }, (error) => {
+      console.error('[Map] Failed to load staged beacons', error)
+    })
+
+    return () => unsubscribe()
+  }, [isAdmin])
+
+  // Beacon handlers (admin only)
+  const handleMapClick = async (e) => {
+    if (!isAdmin || !mapRef.current) return
+
+    const { lat, lng } = e.latlng
+
+    // Create a new staged beacon
+    try {
+      const beaconRef = await addDoc(collection(db, 'stressBeacons'), {
+        location: { lat, lng },
+        active: false,
+        expiresAt: null,
+        createdBy: currentUser.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      })
+
+      setStagedBeacon({ id: beaconRef.id, lat, lng })
+    } catch (error) {
+      console.error('[Map] Failed to create staged beacon', error)
+    }
+  }
+
+  const handleBeaconDragEnd = async (beaconId, e) => {
+    if (!isAdmin) return
+
+    const { lat, lng } = e.target.getLatLng()
+
+    try {
+      await updateDoc(doc(db, 'stressBeacons', beaconId), {
+        location: { lat, lng },
+        updatedAt: serverTimestamp()
+      })
+    } catch (error) {
+      console.error('[Map] Failed to update beacon position', error)
+    }
+  }
+
+  const handleStartBeacon = async (beaconId) => {
+    if (!isAdmin) return
+
+    try {
+      const now = new Date()
+      const expiresAt = Timestamp.fromDate(new Date(now.getTime() + 2 * 60 * 60 * 1000)) // 2 hours
+
+      await updateDoc(doc(db, 'stressBeacons', beaconId), {
+        active: true,
+        expiresAt,
+        updatedAt: serverTimestamp()
+      })
+
+      setStagedBeacon(null)
+    } catch (error) {
+      console.error('[Map] Failed to start beacon', error)
+    }
+  }
+
+  const handleStopBeacon = async (beaconId) => {
+    if (!isAdmin) return
+
+    if (!window.confirm('Er du sikker på, at du vil stoppe denne beacon?')) {
+      return
+    }
+
+    try {
+      await deleteDoc(doc(db, 'stressBeacons', beaconId))
+      setStagedBeacon(null)
+    } catch (error) {
+      console.error('[Map] Failed to stop beacon', error)
+    }
+  }
+
   const handleCenterOnMe = () => {
     if (userLocation && mapRef.current) {
       mapRef.current.setView([userLocation.lat, userLocation.lng], 15, {
@@ -232,6 +397,7 @@ export default function MapPage() {
           >
             <MapResizeHandler />
             <MapInstanceSetter mapRef={mapRef} />
+            <MapClickHandler onClick={handleMapClick} enabled={isAdmin && !stagedBeacon} />
             {userLocation && (
               <>
                 <MapCenterHandler
@@ -256,6 +422,110 @@ export default function MapPage() {
                 }}
               />
             ))}
+
+            {/* Active Beacons - visible to all users */}
+            {beacons.map((beacon) => (
+              <Marker
+                key={beacon.id}
+                position={[beacon.location.lat, beacon.location.lng]}
+                icon={beaconIcon(true)}
+                draggable={isAdmin}
+                eventHandlers={isAdmin ? {
+                  dragend: (e) => handleBeaconDragEnd(beacon.id, e)
+                } : {}}
+              >
+                {isAdmin && (
+                  <Popup>
+                    <div style={{ padding: '8px', minWidth: '200px' }}>
+                      <h3 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 'bold' }}>
+                        Aktiv Stress Beacon
+                      </h3>
+                      <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#666' }}>
+                        Position: {beacon.location.lat.toFixed(5)}, {beacon.location.lng.toFixed(5)}
+                      </p>
+                      <button
+                        onClick={() => handleStopBeacon(beacon.id)}
+                        style={{
+                          width: '100%',
+                          padding: '8px',
+                          backgroundColor: '#FF385C',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          fontWeight: '600'
+                        }}
+                      >
+                        Stop Beacon
+                      </button>
+                    </div>
+                  </Popup>
+                )}
+              </Marker>
+            ))}
+
+            {/* Staged Beacon - only visible to admin */}
+            {isAdmin && stagedBeacon && (
+              <Marker
+                key={`staged-${stagedBeacon.id}`}
+                position={[stagedBeacon.lat, stagedBeacon.lng]}
+                icon={beaconIcon(false)}
+                draggable={true}
+                eventHandlers={{
+                  dragend: (e) => handleBeaconDragEnd(stagedBeacon.id, e)
+                }}
+              >
+                <Popup>
+                  <div style={{ padding: '8px', minWidth: '200px' }}>
+                    <h3 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 'bold' }}>
+                      Ny Stress Beacon
+                    </h3>
+                    <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#666' }}>
+                      Position: {stagedBeacon.lat.toFixed(5)}, {stagedBeacon.lng.toFixed(5)}
+                    </p>
+                    <p style={{ margin: '0 0 12px 0', fontSize: '11px', color: '#999' }}>
+                      Træk markøren for at justere position. Klik "Start" for at aktivere beaconen.
+                    </p>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        onClick={() => handleStartBeacon(stagedBeacon.id)}
+                        style={{
+                          flex: 1,
+                          padding: '8px',
+                          backgroundColor: '#10B981',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          fontWeight: '600'
+                        }}
+                      >
+                        Start
+                      </button>
+                      <button
+                        onClick={() => handleStopBeacon(stagedBeacon.id)}
+                        style={{
+                          flex: 1,
+                          padding: '8px',
+                          backgroundColor: '#EF4444',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          fontWeight: '600'
+                        }}
+                      >
+                        Slet
+                      </button>
+                    </div>
+                  </div>
+                </Popup>
+              </Marker>
+            )}
+
             <TileLayer {...MAP_TILE_LAYER_PROPS} />
           </MapContainer>
 

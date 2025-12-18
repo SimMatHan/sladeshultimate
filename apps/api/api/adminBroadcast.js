@@ -13,7 +13,9 @@ const db = admin.firestore()
 const ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'https://sladeshultimate-1.web.app',
-    'https://sladeshultimate-1.firebaseapp.com'
+    'https://sladeshultimate-1.firebaseapp.com',
+    'https://sladeshapp.dk',
+    'https://www.sladeshapp.dk'
 ]
 
 const REQUIRED_ENVS = ['VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY']
