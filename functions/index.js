@@ -1634,7 +1634,7 @@ let vapidConfigured = false;
 function ensureVapidConfig() {
     const missing = REQUIRED_VAPID_ENVS.filter((key) => !process.env[key]);
     if (missing.length) {
-        throw new Error(Missing Web Push env vars: );
+        throw new Error(`Missing Web Push env vars: ${missing.join(", ")}`);
     }
     if (!vapidConfigured) {
         const publicKey = process.env.VAPID_PUBLIC_KEY.replace(/\s+/g, "");
