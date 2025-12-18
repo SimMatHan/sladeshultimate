@@ -5,6 +5,7 @@
   "main": "index.js",
   "license": "MIT",
   "dependencies": {
+    "firebase-admin": "^13.6.0",
     "web-push": "^3.6.7"
   }
 }
