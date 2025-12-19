@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { doc, onSnapshot } from 'firebase/firestore'
+import { db } from '../firebase'
 import { useAuth } from '../hooks/useAuth'
-import { getUser } from '../services/userService'
+import { getUser, ensureFreshCheckInStatus } from '../services/userService'
 
 const UserDataContext = createContext(null)
 
@@ -37,10 +39,57 @@ export function UserDataProvider({ children }) {
     }
   }, [currentUser])
 
-  // Fetch user data when currentUser changes
+  // Initial fetch when currentUser changes
   useEffect(() => {
     fetchUserData()
   }, [fetchUserData])
+
+  // REALTIME UPDATES: Subscribe to user document changes for live currentRunDrinkCount updates
+  // This ensures Home.jsx shows the same realtime data as Leaderboard.jsx and ProfileDetails.jsx
+  useEffect(() => {
+    if (!currentUser) return
+
+    console.log('[UserDataContext] Setting up realtime listener for user:', currentUser.uid)
+
+    const userRef = doc(db, 'users', currentUser.uid)
+
+    const unsubscribe = onSnapshot(
+      userRef,
+      async (docSnap) => {
+        if (!docSnap.exists()) {
+          console.warn('[UserDataContext] User document not found:', currentUser.uid)
+          return
+        }
+
+        let data = docSnap.data()
+
+        // Refresh check-in status to ensure it's current
+        try {
+          data = await ensureFreshCheckInStatus(currentUser.uid, data)
+        } catch (statusError) {
+          console.warn('[UserDataContext] Unable to refresh check-in status:', statusError)
+        }
+
+        console.log('[UserDataContext] Realtime update received:', {
+          userId: currentUser.uid,
+          currentRunDrinkCount: data.currentRunDrinkCount,
+          totalDrinks: data.totalDrinks
+        })
+
+        setUserData({ id: currentUser.uid, ...data })
+        setError(null)
+      },
+      (err) => {
+        console.error('[UserDataContext] Realtime listener error:', err)
+        setError(err)
+      }
+    )
+
+    return () => {
+      console.log('[UserDataContext] Cleaning up realtime listener for user:', currentUser.uid)
+      unsubscribe()
+    }
+  }, [currentUser])
 
   // Refresh function that can be called manually
   // silent: if true, doesn't set loading state (prevents UI reload/buffering)
@@ -69,4 +118,3 @@ export function useUserData() {
   }
   return context
 }
-

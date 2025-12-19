@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { getUser } from '../services/userService';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase';
+import { getUser, ensureFreshCheckInStatus } from '../services/userService';
 import { ACHIEVEMENTS } from '../config/achievements';
 import { USE_MOCK_DATA } from '../config/env';
 import { DRINK_CATEGORY_ID_SET } from '../constants/drinks';
@@ -156,6 +158,64 @@ export default function ProfileDetails() {
     };
 
     fetchProfile();
+  }, [userId]);
+
+  // REALTIME UPDATES: Subscribe to user document changes for live currentRunDrinkCount updates
+  // This ensures ProfileDetails.jsx shows the same realtime data as Leaderboard.jsx and Home.jsx
+  useEffect(() => {
+    if (!userId || USE_MOCK_DATA) return;
+
+    console.log('[ProfileDetails] Setting up realtime listener for user:', userId);
+
+    const userRef = doc(db, 'users', userId);
+
+    // Subscribe to user document changes
+    const unsubscribe = onSnapshot(
+      userRef,
+      async (docSnap) => {
+        if (!docSnap.exists()) {
+          console.warn('[ProfileDetails] User document not found:', userId);
+          return;
+        }
+
+        let userData = docSnap.data();
+
+        // Refresh check-in status to ensure it's current (same as leaderboardService)
+        try {
+          userData = await ensureFreshCheckInStatus(userId, userData);
+        } catch (statusError) {
+          console.warn('[ProfileDetails] Unable to refresh check-in status:', statusError);
+        }
+
+        console.log('[ProfileDetails] Realtime update received:', {
+          userId,
+          currentRunDrinkCount: userData.currentRunDrinkCount,
+          totalDrinks: userData.totalDrinks
+        });
+
+        // Update profile with fresh data from Firestore
+        setProfile((prev) => ({
+          ...prev,
+          ...userData,
+          id: userId,
+          name: userData.fullName,
+          username: userData.username,
+          initials: userData.initials,
+          profileEmoji: userData.profileEmoji,
+          profileGradient: userData.avatarGradient || userData.profileGradient,
+          profileImageUrl: userData.profileImageUrl,
+        }));
+      },
+      (error) => {
+        console.error('[ProfileDetails] Realtime listener error:', error);
+      }
+    );
+
+    // Cleanup: unsubscribe when component unmounts or userId changes
+    return () => {
+      console.log('[ProfileDetails] Cleaning up realtime listener for user:', userId);
+      unsubscribe();
+    };
   }, [userId]);
 
   // Build drink breakdown
@@ -387,6 +447,51 @@ export default function ProfileDetails() {
               </p>
             </div>
           )}
+        </div>
+
+        {/* Nuværende Run Section - REALTIME UPDATES */}
+        <div className="w-full space-y-3 pt-4">
+          <h2 className="text-xs font-bold uppercase tracking-widest text-left pl-1" style={{ color: 'var(--muted)' }}>
+            Nuværende Run
+          </h2>
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--subtle)] p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs uppercase font-semibold tracking-wide" style={{ color: "var(--muted)" }}>
+                  Drinks i dag
+                </p>
+                <p className="text-3xl font-bold tabular-nums" style={{ color: "var(--ink)" }}>
+                  {Number(currentRun).toLocaleString('da-DK')}
+                </p>
+              </div>
+              <span className="text-[11px] font-semibold rounded-full px-3 py-1.5 bg-[var(--brand)] text-white">
+                Live opdateret
+              </span>
+            </div>
+
+            {/* Current Run Drink Types Breakdown */}
+            {currentRunBreakdown.length > 0 && (
+              <div className="space-y-2 pt-2 border-t border-[var(--line)]">
+                <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+                  Drink typer i dag
+                </p>
+                <div className="space-y-2">
+                  {currentRunBreakdown.map((item) => {
+                    const percentage = currentRun ? Math.round((item.count / currentRun) * 100) : 0;
+                    return (
+                      <div key={item.id} className="flex items-center justify-between text-sm">
+                        <span className="font-medium text-[var(--ink)]">{item.label}</span>
+                        <div className="flex items-center gap-2 tabular-nums">
+                          <span className="text-xs font-medium text-[var(--muted)]">{percentage}%</span>
+                          <span className="font-bold text-[var(--ink)]">{item.count}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
       {/* Drink Breakdown */}

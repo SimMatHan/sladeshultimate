@@ -66,7 +66,7 @@ const bootstrapState = () => {
 
 export function DrinkLogProvider({ children }) {
   const { currentUser } = useAuth();
-  const { refreshUserData } = useUserData();
+  const { userData, refreshUserData } = useUserData();
   const { variantsByCategory } = useDrinkVariants();
   const { userLocation, updateLocation } = useLocation();
   const { selectedChannel } = useChannel();
@@ -378,7 +378,11 @@ export function DrinkLogProvider({ children }) {
   const value = {
     variantCounts: derived.variantCounts,
     categoryTotals: derived.categoryTotals,
-    currentRunDrinkCount: derived.currentRunDrinkCount,
+    // SYNC FIX: Use Firestore currentRunDrinkCount as source of truth instead of local calculation
+    // This ensures Home.jsx, Leaderboard.jsx, and ProfileDetails.jsx all show identical values from Firestore
+    // Local derived.currentRunDrinkCount is kept for optimistic UI updates during logging
+    // but we display the authoritative Firestore value to ensure consistency across all views
+    currentRunDrinkCount: userData?.currentRunDrinkCount ?? derived.currentRunDrinkCount,
     totalDrinks: derived.totalDrinks,
     adjustVariantCount,
     resetRun,
