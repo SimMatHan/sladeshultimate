@@ -400,7 +400,6 @@ export async function createUser({ uid, email, fullName, username, displayName =
     drinkVariations: {},
     allTimeDrinkVariations: {},
     currentRunDrinkCount: 0,
-    currentRunDrinkTypes: {},
     achievements: {},
     totalRunResets: 0,
     lastDrinkDayStart: null,
