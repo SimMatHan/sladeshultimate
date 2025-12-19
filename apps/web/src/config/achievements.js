@@ -34,4 +34,11 @@ export const ACHIEVEMENTS = [
     description: 'Five wines deep and still aging gracefully.',
     image: '/assets/achievements/likefinewine.png',
   },
+  {
+    id: 'top_donor',
+    type: 'manual',
+    title: 'Top Donor',
+    description: 'Du har doneret til Sladesh App, mange tak for dit bidrag',
+    image: '/assets/achievements/topdonor.jpeg',
+  },
 ]

@@ -87,7 +87,7 @@ export function AchievementProvider({ children }) {
 
     const now = new Date()
     const latestDrinkDayBoundary = getLatestDrinkDayBoundary(now)
-    
+
     // Check if last unlock was after the current drink day boundary
     return lastUnlockedDate.getTime() >= latestDrinkDayBoundary.getTime()
   }, [userData?.achievements, normalizeToDate])
@@ -147,6 +147,11 @@ export function AchievementProvider({ children }) {
     if (!currentUser) return
 
     const checkAchievement = (achievement) => {
+      // Skip manual achievements (e.g., top_donor) - these are only unlocked by admin action
+      if (achievement.type === 'manual') {
+        return
+      }
+
       if (!userData && achievement.type !== 'run_drinks') {
         return
       }

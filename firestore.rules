@@ -47,6 +47,11 @@ service cloud.firestore {
           isAuthenticated() &&
           request.resource.data.keys().hasOnly(['sladeshReceived', 'updatedAt']) &&
           request.resource.data.sladeshReceived == ((resource.data.sladeshReceived == null ? 0 : resource.data.sladeshReceived) + 1)
+        ) ||
+        (
+          // Allow admin to update achievements
+          isAdmin() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['achievements', 'updatedAt', 'lastActiveAt'])
         );
       
       // User subcollections

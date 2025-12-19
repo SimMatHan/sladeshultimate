@@ -22,7 +22,7 @@ import { useLocation } from "../contexts/LocationContext";
 import { IS_DEVELOPMENT, API_BASE_URL } from "../config/env";
 import { isAdminUser } from "../config/admin";
 import { CATEGORIES } from "../constants/drinks";
-import { resetAchievements, resetSladeshState, getAllUsers, resetSladeshStateForUser } from "../services/userService";
+import { resetAchievements, resetSladeshState, getAllUsers, resetSladeshStateForUser, recordAchievementUnlock } from "../services/userService";
 import { useSladesh } from "../contexts/SladeshContext";
 import { subscribeToDonors, addDonor, updateDonor, deleteDonor } from "../services/donorService";
 
@@ -128,6 +128,12 @@ export default function AdminPortal() {
   const [themeDropForm, setThemeDropForm] = useState({ themeName: "" });
   const [themeDropFeedback, setThemeDropFeedback] = useState(null);
   const [isSendingThemeDrop, setIsSendingThemeDrop] = useState(false);
+
+  // Top Donor Achievement state
+  const [selectedTopDonorUser, setSelectedTopDonorUser] = useState(null);
+  const [topDonorFeedback, setTopDonorFeedback] = useState(null);
+  const [isGrantingTopDonor, setIsGrantingTopDonor] = useState(false);
+
 
   // Stress Beacon state
   const [beaconForm, setBeaconForm] = useState({ latitude: "", longitude: "" });
@@ -1244,6 +1250,58 @@ export default function AdminPortal() {
     }
   };
 
+  // Top Donor Achievement handler
+  const handleGrantTopDonor = async () => {
+    setTopDonorFeedback(null);
+
+    if (!currentUser || !isAdmin) {
+      setTopDonorFeedback({
+        status: "error",
+        message: "Du skal være logget ind som admin for at tildele achievements.",
+      });
+      return;
+    }
+
+    if (!selectedTopDonorUser) {
+      setTopDonorFeedback({
+        status: "error",
+        message: "Vælg en bruger først.",
+      });
+      return;
+    }
+
+    const userName = selectedTopDonorUser.fullName || selectedTopDonorUser.displayName || 'Ukendt bruger';
+
+    // Confirmation dialog
+    if (!window.confirm(`Er du sikker på, at du vil tildele "Top Donor" achievement til ${userName}?`)) {
+      return;
+    }
+
+    setIsGrantingTopDonor(true);
+    try {
+      // Check if user already has the achievement
+      const hasUnlockedBefore = !!selectedTopDonorUser.achievements?.top_donor;
+
+      await recordAchievementUnlock(selectedTopDonorUser.id, 'top_donor', hasUnlockedBefore);
+
+      setTopDonorFeedback({
+        status: "success",
+        message: hasUnlockedBefore
+          ? `"Top Donor" achievement opdateret for ${userName}! 🏆`
+          : `"Top Donor" achievement tildelt til ${userName}! 🏆`,
+      });
+      setSelectedTopDonorUser(null);
+    } catch (error) {
+      console.error("[AdminPortal] Failed to grant Top Donor achievement", error);
+      setTopDonorFeedback({
+        status: "error",
+        message: error.message || "Kunne ikke tildele achievement.",
+      });
+    } finally {
+      setIsGrantingTopDonor(false);
+    }
+  };
+
   return (
     <Page title="Adminportal">
       <div className="flex flex-col gap-6">
@@ -2354,6 +2412,93 @@ export default function AdminPortal() {
                   </div>
                 );
               })}
+            </div>
+          </Card>
+        </section>
+
+        {/* Top Donor Achievement Section */}
+        <section className="space-y-3">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
+              Top Donor Achievement
+            </div>
+            <p className="text-sm text-[color:var(--muted)]">
+              Tildel "Top Donor" achievement til brugere der har doneret til Sladesh App.
+            </p>
+          </div>
+          <Card className="space-y-4 px-5 py-6">
+            <FeedbackBanner
+              feedback={topDonorFeedback}
+              onDismiss={() => setTopDonorFeedback(null)}
+            />
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
+                  Vælg bruger
+                </label>
+                {usersLoading ? (
+                  <div className="text-sm text-[color:var(--muted)]">Indlæser brugere...</div>
+                ) : (
+                  <select
+                    value={selectedTopDonorUser?.id || ""}
+                    onChange={(e) => {
+                      const user = users.find(u => u.id === e.target.value);
+                      setSelectedTopDonorUser(user || null);
+                    }}
+                    disabled={!isAdmin || usersLoading}
+                    className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60"
+                    style={{
+                      borderColor: "var(--line)",
+                      backgroundColor: "var(--subtle)",
+                      color: "var(--ink)",
+                      "--tw-ring-offset-color": "var(--bg)",
+                    }}
+                  >
+                    <option value="">Vælg en bruger...</option>
+                    {users.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.fullName} {user.achievements?.top_donor ? '🏆' : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              {selectedTopDonorUser && (
+                <div className="rounded-2xl border px-4 py-3" style={{ borderColor: "var(--line)", backgroundColor: "var(--subtle)" }}>
+                  <div className="flex items-center gap-3">
+                    {selectedTopDonorUser.avatarGradient && (
+                      <div
+                        className="w-12 h-12 rounded-full flex items-center justify-center shrink-0"
+                        style={{
+                          background: `linear-gradient(${selectedTopDonorUser.avatarGradient.angle}deg, ${selectedTopDonorUser.avatarGradient.from}, ${selectedTopDonorUser.avatarGradient.to})`,
+                        }}
+                      >
+                        <span className="text-sm font-bold text-white">
+                          {selectedTopDonorUser.initials || '?'}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <div className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+                        {selectedTopDonorUser.fullName}
+                      </div>
+                      {selectedTopDonorUser.achievements?.top_donor && (
+                        <div className="text-xs" style={{ color: "var(--muted)" }}>
+                          Har allerede Top Donor achievement (×{selectedTopDonorUser.achievements.top_donor.count || 1})
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={handleGrantTopDonor}
+                disabled={isGrantingTopDonor || !isAdmin || !selectedTopDonorUser}
+                className="w-full rounded-2xl bg-[color:var(--brand,#FF385C)] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isGrantingTopDonor ? "Tildeler..." : "🏆 Tildel Top Donor Achievement"}
+              </button>
             </div>
           </Card>
         </section>
