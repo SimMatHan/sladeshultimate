@@ -109,9 +109,7 @@ export default function AdminPortal() {
   const [donorEditingId, setDonorEditingId] = useState(null);
   const [donorEditingForm, setDonorEditingForm] = useState({ userId: "", amount: "", date: "", message: "" });
   const [isUpdatingDonor, setIsUpdatingDonor] = useState(false);
-  const [donorUserSearch, setDonorUserSearch] = useState("");
   const [selectedDonorUser, setSelectedDonorUser] = useState(null);
-  const [showDonorUserDropdown, setShowDonorUserDropdown] = useState(false);
 
   // Stress Signal state
   const [stressSignalForm, setStressSignalForm] = useState({ channelId: "", title: "", message: "" });
@@ -265,18 +263,6 @@ export default function AdminPortal() {
 
     loadUsers();
   }, [isAdmin]);
-
-  // Close donor user dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (showDonorUserDropdown && !event.target.closest('.donor-user-dropdown-container')) {
-        setShowDonorUserDropdown(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showDonorUserDropdown]);
 
   // Load active beacons
   useEffect(() => {
@@ -736,11 +722,20 @@ export default function AdminPortal() {
 
     setIsSavingDonor(true);
     try {
+      // Generate fallback initials if missing
+      const userName = selectedDonorUser.fullName || selectedDonorUser.displayName || 'Ukendt';
+      const userInitials = selectedDonorUser.initials || userName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+      const userAvatarGradient = selectedDonorUser.avatarGradient || {
+        angle: 135,
+        from: '#FF385C',
+        to: '#FF6B9D'
+      };
+
       await addDonor({
         userId: selectedDonorUser.id,
-        userName: selectedDonorUser.fullName || selectedDonorUser.displayName,
-        userInitials: selectedDonorUser.initials,
-        userAvatarGradient: selectedDonorUser.avatarGradient,
+        userName,
+        userInitials,
+        userAvatarGradient,
         amount: donorForm.amount,
         date: donorForm.date,
         message: donorForm.message,
@@ -753,7 +748,6 @@ export default function AdminPortal() {
       });
       setDonorForm({ userId: "", amount: "", date: "", message: "" });
       setSelectedDonorUser(null);
-      setDonorUserSearch("");
     } catch (error) {
       console.error("[AdminPortal] Failed to create donor", error);
       setDonorFeedback({
@@ -2108,108 +2102,32 @@ export default function AdminPortal() {
                 <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
                   Vælg bruger
                 </label>
-                <div className="relative donor-user-dropdown-container">
-                  <input
-                    type="text"
-                    value={donorUserSearch}
+                {usersLoading ? (
+                  <div className="text-sm text-[color:var(--muted)]">Indlæser brugere...</div>
+                ) : (
+                  <select
+                    value={selectedDonorUser?.id || ""}
                     onChange={(e) => {
-                      setDonorUserSearch(e.target.value);
-                      setShowDonorUserDropdown(true);
+                      const user = users.find(u => u.id === e.target.value);
+                      setSelectedDonorUser(user || null);
                     }}
-                    onFocus={() => setShowDonorUserDropdown(true)}
-                    placeholder={selectedDonorUser ? selectedDonorUser.fullName : "Søg efter bruger..."}
-                    className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1"
+                    disabled={!isAdmin || usersLoading}
+                    className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60"
                     style={{
                       borderColor: "var(--line)",
                       backgroundColor: "var(--subtle)",
                       color: "var(--ink)",
                       "--tw-ring-offset-color": "var(--bg)",
                     }}
-                  />
-                  {selectedDonorUser && (
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none">
-                      <div
-                        className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
-                        style={{
-                          background: `linear-gradient(${selectedDonorUser.avatarGradient.angle}deg, ${selectedDonorUser.avatarGradient.from}, ${selectedDonorUser.avatarGradient.to})`,
-                        }}
-                      >
-                        <span className="text-xs font-bold text-white">
-                          {selectedDonorUser.initials}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                  {selectedDonorUser && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedDonorUser(null);
-                        setDonorUserSearch("");
-                      }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--muted)] hover:text-[color:var(--ink)]"
-                    >
-                      ✕
-                    </button>
-                  )}
-                  {showDonorUserDropdown && !selectedDonorUser && users.length > 0 && (
-                    <div
-                      className="absolute z-10 w-full mt-1 rounded-2xl border shadow-lg max-h-60 overflow-y-auto"
-                      style={{
-                        borderColor: "var(--line)",
-                        backgroundColor: "var(--surface)",
-                      }}
-                    >
-                      {users
-                        .filter((user) =>
-                          user.fullName?.toLowerCase().includes(donorUserSearch.toLowerCase()) ||
-                          user.username?.toLowerCase().includes(donorUserSearch.toLowerCase()) ||
-                          user.email?.toLowerCase().includes(donorUserSearch.toLowerCase())
-                        )
-                        .slice(0, 10)
-                        .map((user) => (
-                          <button
-                            key={user.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedDonorUser(user);
-                              setDonorUserSearch("");
-                              setShowDonorUserDropdown(false);
-                            }}
-                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[color:var(--subtle)] transition-colors text-left"
-                          >
-                            <div
-                              className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-                              style={{
-                                background: `linear-gradient(${user.avatarGradient.angle}deg, ${user.avatarGradient.from}, ${user.avatarGradient.to})`,
-                              }}
-                            >
-                              <span className="text-xs font-bold text-white">
-                                {user.initials}
-                              </span>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-semibold text-[color:var(--ink)]">
-                                {user.fullName}
-                              </div>
-                              <div className="text-xs text-[color:var(--muted)]">
-                                {user.email}
-                              </div>
-                            </div>
-                          </button>
-                        ))}
-                      {users.filter((user) =>
-                        user.fullName?.toLowerCase().includes(donorUserSearch.toLowerCase()) ||
-                        user.username?.toLowerCase().includes(donorUserSearch.toLowerCase()) ||
-                        user.email?.toLowerCase().includes(donorUserSearch.toLowerCase())
-                      ).length === 0 && (
-                          <div className="px-4 py-3 text-sm text-center text-[color:var(--muted)]">
-                            Ingen brugere fundet
-                          </div>
-                        )}
-                    </div>
-                  )}
-                </div>
+                  >
+                    <option value="">Vælg en bruger...</option>
+                    {users.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.fullName}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
