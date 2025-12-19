@@ -68,6 +68,37 @@ export function AchievementProvider({ children }) {
         return userData?.drinkTypes?.[drinkType] || 0
       }
 
+      // Category diversity: check how many required categories user has logged
+      if (type === 'category_diversity') {
+        const requiredCategories = achievement.requiredCategories || []
+        const userCategories = Object.keys(userData?.drinkTypes || {})
+          .filter(cat => (userData.drinkTypes[cat] || 0) > 0)
+
+        // Return number of required categories that user has covered
+        return requiredCategories.filter(cat => userCategories.includes(cat)).length
+      }
+
+      // Run specific variation: check count of specific variation in current run
+      if (type === 'run_specific_variation') {
+        const category = achievement.category
+        const variation = achievement.variation
+        return userData?.drinkVariations?.[category]?.[variation] || 0
+      }
+
+      // Specific drink count: check all-time count for a specific variation (case-insensitive)
+      if (type === 'specific_drink_count') {
+        const category = achievement.category
+        const targetVariation = (achievement.variation || '').toLowerCase()
+        const categoryVariations = userData?.allTimeDrinkVariations?.[category] || {}
+
+        // Find matching key case-insensitively
+        const actualKey = Object.keys(categoryVariations).find(
+          key => key.toLowerCase() === targetVariation
+        )
+
+        return actualKey ? categoryVariations[actualKey] : 0
+      }
+
       return null
     },
     [currentRunDrinkCount, userData?.drinkTypes, userData?.totalDrinks, userData?.totalRunResets]
@@ -189,6 +220,24 @@ export function AchievementProvider({ children }) {
       // Thresholds and variation scopes live in config/achievements.js; keep unlock logic data-driven.
       if (achievement.type === 'run_drinks') {
         if (previousValue < achievement.threshold && currentValue >= achievement.threshold) {
+          unlockAchievement(achievement)
+        }
+      } else if (achievement.type === 'category_diversity') {
+        // Category diversity: unlock when all required categories are covered
+        const requiredCount = achievement.requiredCategories?.length || 0
+
+        // Unlock if we just completed all categories (previously incomplete, now complete)
+        if (previousValue < requiredCount && currentValue >= requiredCount) {
+          unlockAchievement(achievement)
+        }
+      } else if (achievement.type === 'run_specific_variation') {
+        // Run specific variation: unlock when count exceeds threshold (count > threshold)
+        if (currentValue > achievement.threshold && previousValue <= achievement.threshold) {
+          unlockAchievement(achievement)
+        }
+      } else if (achievement.type === 'specific_drink_count') {
+        // Specific drink count: unlock when all-time count reaches threshold
+        if (currentValue >= achievement.threshold && previousValue < achievement.threshold) {
           unlockAchievement(achievement)
         }
       } else {
