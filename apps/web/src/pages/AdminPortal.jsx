@@ -24,7 +24,7 @@ import { isAdminUser } from "../config/admin";
 import { CATEGORIES } from "../constants/drinks";
 import { resetAchievements, resetSladeshState, getAllUsers, resetSladeshStateForUser } from "../services/userService";
 import { useSladesh } from "../contexts/SladeshContext";
-import { getDonors, addDonor, updateDonor, deleteDonor } from "../services/donorService";
+import { subscribeToDonors, addDonor, updateDonor, deleteDonor } from "../services/donorService";
 
 const DRINK_CATEGORIES = CATEGORIES.map(({ id, name }) => ({
   value: id,
@@ -103,12 +103,15 @@ export default function AdminPortal() {
   // Donor state
   const [donors, setDonors] = useState([]);
   const [donorsLoading, setDonorsLoading] = useState(true);
-  const [donorForm, setDonorForm] = useState({ name: "", amount: "", date: "", message: "" });
+  const [donorForm, setDonorForm] = useState({ userId: "", amount: "", date: "", message: "" });
   const [donorFeedback, setDonorFeedback] = useState(null);
   const [isSavingDonor, setIsSavingDonor] = useState(false);
   const [donorEditingId, setDonorEditingId] = useState(null);
-  const [donorEditingForm, setDonorEditingForm] = useState({ name: "", amount: "", date: "", message: "" });
+  const [donorEditingForm, setDonorEditingForm] = useState({ userId: "", amount: "", date: "", message: "" });
   const [isUpdatingDonor, setIsUpdatingDonor] = useState(false);
+  const [donorUserSearch, setDonorUserSearch] = useState("");
+  const [selectedDonorUser, setSelectedDonorUser] = useState(null);
+  const [showDonorUserDropdown, setShowDonorUserDropdown] = useState(false);
 
   // Stress Signal state
   const [stressSignalForm, setStressSignalForm] = useState({ channelId: "", title: "", message: "" });
@@ -217,16 +220,24 @@ export default function AdminPortal() {
     return () => unsubscribe();
   }, [isAdmin]);
 
-  // Load donors from localStorage
+  // Subscribe to real-time donor updates from Firestore
   useEffect(() => {
-    try {
-      const donorList = getDonors();
-      setDonors(donorList);
-    } catch (error) {
-      console.error('[AdminPortal] Failed to load donors', error);
-    } finally {
-      setDonorsLoading(false);
-    }
+    const unsubscribe = subscribeToDonors(
+      (donorList) => {
+        setDonors(donorList);
+        setDonorsLoading(false);
+      },
+      (error) => {
+        console.error('[AdminPortal] Failed to load donors', error);
+        setDonorFeedback({
+          status: "error",
+          message: error.message || "Kunne ikke indlæse donorer.",
+        });
+        setDonorsLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
   }, []);
 
   // Load all users for Sladesh management
@@ -254,6 +265,18 @@ export default function AdminPortal() {
 
     loadUsers();
   }, [isAdmin]);
+
+  // Close donor user dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showDonorUserDropdown && !event.target.closest('.donor-user-dropdown-container')) {
+        setShowDonorUserDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showDonorUserDropdown]);
 
   // Load active beacons
   useEffect(() => {
@@ -678,16 +701,16 @@ export default function AdminPortal() {
   const startEditingDonor = (donor) => {
     setDonorEditingId(donor.id);
     setDonorEditingForm({
-      name: donor.name ?? "",
+      userId: donor.userId ?? "",
       amount: donor.amount?.toString() ?? "",
-      date: donor.date ?? "",
+      date: donor.date instanceof Date ? donor.date.toISOString().split('T')[0] : donor.date ?? "",
       message: donor.message ?? "",
     });
   };
 
   const cancelEditingDonor = () => {
     setDonorEditingId(null);
-    setDonorEditingForm({ name: "", amount: "", date: "", message: "" });
+    setDonorEditingForm({ userId: "", amount: "", date: "", message: "" });
     setIsUpdatingDonor(false);
   };
 
@@ -703,32 +726,34 @@ export default function AdminPortal() {
       return;
     }
 
-    if (!donorForm.name.trim() || !donorForm.amount || !donorForm.date) {
+    if (!selectedDonorUser || !donorForm.amount || !donorForm.date) {
       setDonorFeedback({
         status: "error",
-        message: "Navn, beløb og dato er påkrævet.",
+        message: "Bruger, beløb og dato er påkrævet.",
       });
       return;
     }
 
     setIsSavingDonor(true);
     try {
-      addDonor({
-        name: donorForm.name,
+      await addDonor({
+        userId: selectedDonorUser.id,
+        userName: selectedDonorUser.fullName || selectedDonorUser.displayName,
+        userInitials: selectedDonorUser.initials,
+        userAvatarGradient: selectedDonorUser.avatarGradient,
         amount: donorForm.amount,
         date: donorForm.date,
         message: donorForm.message,
+        createdBy: currentUser.uid,
       });
-
-      // Reload donors
-      const donorList = getDonors();
-      setDonors(donorList);
 
       setDonorFeedback({
         status: "success",
         message: "Donor oprettet.",
       });
-      setDonorForm({ name: "", amount: "", date: "", message: "" });
+      setDonorForm({ userId: "", amount: "", date: "", message: "" });
+      setSelectedDonorUser(null);
+      setDonorUserSearch("");
     } catch (error) {
       console.error("[AdminPortal] Failed to create donor", error);
       setDonorFeedback({
@@ -745,26 +770,21 @@ export default function AdminPortal() {
 
     if (!donorEditingId) return;
 
-    if (!donorEditingForm.name.trim() || !donorEditingForm.amount || !donorEditingForm.date) {
+    if (!donorEditingForm.amount || !donorEditingForm.date) {
       setDonorFeedback({
         status: "error",
-        message: "Navn, beløb og dato er påkrævet.",
+        message: "Beløb og dato er påkrævet.",
       });
       return;
     }
 
     setIsUpdatingDonor(true);
     try {
-      updateDonor(donorEditingId, {
-        name: donorEditingForm.name,
+      await updateDonor(donorEditingId, {
         amount: donorEditingForm.amount,
         date: donorEditingForm.date,
         message: donorEditingForm.message,
       });
-
-      // Reload donors
-      const donorList = getDonors();
-      setDonors(donorList);
 
       setDonorFeedback({
         status: "success",
@@ -789,11 +809,7 @@ export default function AdminPortal() {
     }
 
     try {
-      deleteDonor(donorId);
-
-      // Reload donors
-      const donorList = getDonors();
-      setDonors(donorList);
+      await deleteDonor(donorId);
 
       setDonorFeedback({
         status: "success",
@@ -2090,22 +2106,110 @@ export default function AdminPortal() {
             <form className="space-y-4" onSubmit={handleDonorSubmit}>
               <div className="space-y-2">
                 <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
-                  Navn
+                  Vælg bruger
                 </label>
-                <input
-                  type="text"
-                  value={donorForm.name}
-                  onChange={handleDonorChange("name")}
-                  required
-                  placeholder="fx Simon Hansen"
-                  className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1"
-                  style={{
-                    borderColor: "var(--line)",
-                    backgroundColor: "var(--subtle)",
-                    color: "var(--ink)",
-                    "--tw-ring-offset-color": "var(--bg)",
-                  }}
-                />
+                <div className="relative donor-user-dropdown-container">
+                  <input
+                    type="text"
+                    value={donorUserSearch}
+                    onChange={(e) => {
+                      setDonorUserSearch(e.target.value);
+                      setShowDonorUserDropdown(true);
+                    }}
+                    onFocus={() => setShowDonorUserDropdown(true)}
+                    placeholder={selectedDonorUser ? selectedDonorUser.fullName : "Søg efter bruger..."}
+                    className="w-full rounded-2xl border px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1"
+                    style={{
+                      borderColor: "var(--line)",
+                      backgroundColor: "var(--subtle)",
+                      color: "var(--ink)",
+                      "--tw-ring-offset-color": "var(--bg)",
+                    }}
+                  />
+                  {selectedDonorUser && (
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none">
+                      <div
+                        className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
+                        style={{
+                          background: `linear-gradient(${selectedDonorUser.avatarGradient.angle}deg, ${selectedDonorUser.avatarGradient.from}, ${selectedDonorUser.avatarGradient.to})`,
+                        }}
+                      >
+                        <span className="text-xs font-bold text-white">
+                          {selectedDonorUser.initials}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  {selectedDonorUser && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedDonorUser(null);
+                        setDonorUserSearch("");
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--muted)] hover:text-[color:var(--ink)]"
+                    >
+                      ✕
+                    </button>
+                  )}
+                  {showDonorUserDropdown && !selectedDonorUser && users.length > 0 && (
+                    <div
+                      className="absolute z-10 w-full mt-1 rounded-2xl border shadow-lg max-h-60 overflow-y-auto"
+                      style={{
+                        borderColor: "var(--line)",
+                        backgroundColor: "var(--surface)",
+                      }}
+                    >
+                      {users
+                        .filter((user) =>
+                          user.fullName?.toLowerCase().includes(donorUserSearch.toLowerCase()) ||
+                          user.username?.toLowerCase().includes(donorUserSearch.toLowerCase()) ||
+                          user.email?.toLowerCase().includes(donorUserSearch.toLowerCase())
+                        )
+                        .slice(0, 10)
+                        .map((user) => (
+                          <button
+                            key={user.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedDonorUser(user);
+                              setDonorUserSearch("");
+                              setShowDonorUserDropdown(false);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[color:var(--subtle)] transition-colors text-left"
+                          >
+                            <div
+                              className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                              style={{
+                                background: `linear-gradient(${user.avatarGradient.angle}deg, ${user.avatarGradient.from}, ${user.avatarGradient.to})`,
+                              }}
+                            >
+                              <span className="text-xs font-bold text-white">
+                                {user.initials}
+                              </span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-semibold text-[color:var(--ink)]">
+                                {user.fullName}
+                              </div>
+                              <div className="text-xs text-[color:var(--muted)]">
+                                {user.email}
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      {users.filter((user) =>
+                        user.fullName?.toLowerCase().includes(donorUserSearch.toLowerCase()) ||
+                        user.username?.toLowerCase().includes(donorUserSearch.toLowerCase()) ||
+                        user.email?.toLowerCase().includes(donorUserSearch.toLowerCase())
+                      ).length === 0 && (
+                          <div className="px-4 py-3 text-sm text-center text-[color:var(--muted)]">
+                            Ingen brugere fundet
+                          </div>
+                        )}
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -2204,24 +2308,6 @@ export default function AdminPortal() {
                   >
                     {isEditing ? (
                       <form className="space-y-3" onSubmit={handleUpdateDonor}>
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
-                            Navn
-                          </label>
-                          <input
-                            type="text"
-                            value={donorEditingForm.name}
-                            onChange={handleDonorEditChange("name")}
-                            required
-                            className="w-full rounded-2xl border px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--brand,#FF385C)] focus:ring-offset-1"
-                            style={{
-                              borderColor: "var(--line)",
-                              backgroundColor: "var(--surface)",
-                              color: "var(--ink)",
-                              "--tw-ring-offset-color": "var(--bg)",
-                            }}
-                          />
-                        </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-2">
                             <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
@@ -2300,13 +2386,26 @@ export default function AdminPortal() {
                       </form>
                     ) : (
                       <div className="flex flex-col gap-3">
-                        <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3">
+                          {/* User Avatar */}
+                          {donor.userAvatarGradient && (
+                            <div
+                              className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
+                              style={{
+                                background: `linear-gradient(${donor.userAvatarGradient.angle}deg, ${donor.userAvatarGradient.from}, ${donor.userAvatarGradient.to})`,
+                              }}
+                            >
+                              <span className="text-sm font-bold text-white">
+                                {donor.userInitials || '?'}
+                              </span>
+                            </div>
+                          )}
                           <div className="flex-1">
                             <div className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
-                              {donor.name}
+                              {donor.userName}
                             </div>
                             <div className="mt-1 text-xs" style={{ color: "var(--muted)" }}>
-                              {new Intl.NumberFormat('da-DK', { style: 'currency', currency: 'DKK', minimumFractionDigits: 0 }).format(donor.amount)} • {new Intl.DateTimeFormat('da-DK', { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(donor.date))}
+                              {new Intl.NumberFormat('da-DK', { style: 'currency', currency: 'DKK', minimumFractionDigits: 0 }).format(donor.amount)} • {new Intl.DateTimeFormat('da-DK', { year: 'numeric', month: 'short', day: 'numeric' }).format(donor.date instanceof Date ? donor.date : new Date(donor.date))}
                             </div>
                             {donor.message && (
                               <div className="mt-1 text-xs italic text-[color:var(--muted)]">

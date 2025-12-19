@@ -1,23 +1,32 @@
 import { useEffect, useState } from "react";
 import Card from "../components/Card";
 import Page from "../components/Page";
-import { getDonors } from "../services/donorService";
+import { subscribeToDonors } from "../services/donorService";
 
 const MOBILEPAY_URL = "https://qr.mobilepay.dk/box/f921fbf7-b760-4f56-b911-9279fb3240e4/pay-in";
 
 export default function DonationPage() {
   const [donors, setDonors] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    try {
-      const donorList = getDonors();
-      setDonors(donorList);
-    } catch (error) {
-      console.error('[DonationPage] Failed to load donors', error);
-    } finally {
-      setLoading(false);
-    }
+    // Subscribe to real-time donor updates
+    const unsubscribe = subscribeToDonors(
+      (donorList) => {
+        setDonors(donorList);
+        setLoading(false);
+        setError(null);
+      },
+      (err) => {
+        console.error('[DonationPage] Failed to load donors', err);
+        setError(err.message || 'Kunne ikke indlæse donorer');
+        setLoading(false);
+      }
+    );
+
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
   }, []);
 
   const formatAmount = (amount) => {
@@ -29,8 +38,8 @@ export default function DonationPage() {
     }).format(amount);
   };
 
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
+  const formatDate = (dateValue) => {
+    const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
     return new Intl.DateTimeFormat('da-DK', {
       year: 'numeric',
       month: 'short',
@@ -92,6 +101,12 @@ export default function DonationPage() {
             <div className="text-center py-4 text-sm" style={{ color: 'var(--muted)' }}>
               Indlæser...
             </div>
+          ) : error ? (
+            <div className="rounded-2xl border border-dashed px-4 py-6 text-center" style={{ borderColor: 'var(--line)' }}>
+              <p className="text-sm" style={{ color: 'var(--muted)' }}>
+                {error}
+              </p>
+            </div>
           ) : donors.length === 0 ? (
             <div className="rounded-2xl border border-dashed px-4 py-6 text-center" style={{ borderColor: 'var(--line)' }}>
               <p className="text-sm" style={{ color: 'var(--muted)' }}>
@@ -106,10 +121,24 @@ export default function DonationPage() {
                   className="rounded-2xl border px-4 py-3 space-y-2"
                   style={{ borderColor: 'var(--line)', backgroundColor: 'var(--subtle)' }}
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    {/* User Avatar */}
+                    {donor.userAvatarGradient && (
+                      <div
+                        className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
+                        style={{
+                          background: `linear-gradient(${donor.userAvatarGradient.angle}deg, ${donor.userAvatarGradient.from}, ${donor.userAvatarGradient.to})`,
+                        }}
+                      >
+                        <span className="text-sm font-bold text-white">
+                          {donor.userInitials || '?'}
+                        </span>
+                      </div>
+                    )}
+
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
-                        {donor.name}
+                        {donor.userName}
                       </div>
                       <div className="text-xs" style={{ color: 'var(--muted)' }}>
                         {formatDate(donor.date)}

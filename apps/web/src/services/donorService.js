@@ -1,158 +1,173 @@
 /**
  * Donor Service
  * 
- * Manages donor data using localStorage with a Firestore-ready structure.
- * Easy to migrate to Firestore later by swapping the storage implementation.
+ * Manages donor data using Firestore with real-time updates.
+ * Stores donations with user references (uid) for solid data anchoring.
  */
 
-const STORAGE_KEY = 'sladesh_donors';
-
-/**
- * Generate a unique ID (mimics Firestore auto-generated IDs)
- */
-function generateId() {
-  return `donor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-}
-
-/**
- * Get current timestamp in ISO format (Firestore-compatible)
- */
-function getTimestamp() {
-  return new Date().toISOString();
-}
+import {
+  collection,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  query,
+  orderBy,
+  serverTimestamp,
+  getDoc,
+} from 'firebase/firestore';
+import { db } from '../firebase';
 
 /**
- * Load donors from localStorage
+ * Subscribe to real-time donor updates
+ * @param {Function} callback - Called with sorted donor array on each update
+ * @param {Function} onError - Called on error
+ * @returns {Function} Unsubscribe function
  */
-function loadDonors() {
-  try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch (error) {
-    console.error('[donorService] Failed to load donors from localStorage', error);
-    return [];
-  }
-}
+export function subscribeToDonors(callback, onError) {
+  const donorsRef = collection(db, 'donations');
+  const q = query(donorsRef, orderBy('amount', 'desc'), orderBy('date', 'desc'));
 
-/**
- * Save donors to localStorage
- */
-function saveDonors(donors) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(donors));
-  } catch (error) {
-    console.error('[donorService] Failed to save donors to localStorage', error);
-    throw new Error('Kunne ikke gemme donor-data');
-  }
-}
-
-/**
- * Get all donors, sorted by amount (highest first)
- * @returns {Array} Array of donor objects
- */
-export function getDonors() {
-  const donors = loadDonors();
-  // Sort by amount (highest first), then by date (newest first)
-  return donors.sort((a, b) => {
-    if (b.amount !== a.amount) {
-      return b.amount - a.amount;
+  const unsubscribe = onSnapshot(
+    q,
+    (snapshot) => {
+      const donors = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+        // Convert Firestore Timestamps to Date objects for display
+        date: docSnap.data().date?.toDate?.() || new Date(docSnap.data().date),
+        createdAt: docSnap.data().createdAt?.toDate?.() || new Date(docSnap.data().createdAt),
+        updatedAt: docSnap.data().updatedAt?.toDate?.() || new Date(docSnap.data().updatedAt),
+      }));
+      
+      console.info('[donorService] Real-time update received', { count: donors.length });
+      callback(donors);
+    },
+    (error) => {
+      console.error('[donorService] Real-time listener error', error);
+      if (onError) {
+        onError(error);
+      }
     }
-    return new Date(b.date) - new Date(a.date);
-  });
+  );
+
+  return unsubscribe;
 }
 
 /**
- * Add a new donor
- * @param {Object} donor - Donor data { name, amount, date, message? }
- * @returns {Object} The created donor with id and timestamps
+ * Add a new donor with user reference
+ * @param {Object} donorData - Donor data
+ * @param {string} donorData.userId - User's Firebase UID
+ * @param {string} donorData.userName - User's display name (cached)
+ * @param {string} donorData.userInitials - User's initials (cached)
+ * @param {Object} donorData.userAvatarGradient - User's avatar gradient (cached)
+ * @param {number} donorData.amount - Donation amount in DKK
+ * @param {string|Date} donorData.date - Donation date
+ * @param {string} [donorData.message] - Optional message
+ * @param {string} donorData.createdBy - Admin UID who created this donation
+ * @returns {Promise<string>} Document ID of the created donation
  */
-export function addDonor(donor) {
-  if (!donor.name || !donor.amount || !donor.date) {
-    throw new Error('Navn, beløb og dato er påkrævet');
+export async function addDonor(donorData) {
+  const { userId, userName, userInitials, userAvatarGradient, amount, date, message, createdBy } = donorData;
+
+  if (!userId || !userName || !amount || !date || !createdBy) {
+    throw new Error('userId, userName, amount, date og createdBy er påkrævet');
   }
 
-  const donors = loadDonors();
-  const newDonor = {
-    id: generateId(),
-    name: donor.name.trim(),
-    amount: parseFloat(donor.amount),
-    date: donor.date,
-    message: donor.message?.trim() || null,
-    createdAt: getTimestamp(),
-    updatedAt: getTimestamp(),
+  const donorsRef = collection(db, 'donations');
+  const payload = {
+    userId,
+    userName,
+    userInitials,
+    userAvatarGradient,
+    amount: parseFloat(amount),
+    date: date instanceof Date ? date : new Date(date),
+    message: message?.trim() || null,
+    createdBy,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
   };
 
-  donors.push(newDonor);
-  saveDonors(donors);
+  const docRef = await addDoc(donorsRef, payload);
+  console.info('[donorService] Donor created', { id: docRef.id, userId, userName, amount });
   
-  console.info('[donorService] Donor created', { id: newDonor.id, name: newDonor.name });
-  return newDonor;
+  return docRef.id;
 }
 
 /**
  * Update an existing donor
- * @param {string} id - Donor ID
+ * @param {string} donorId - Donor document ID
  * @param {Object} updates - Fields to update
- * @returns {Object} The updated donor
+ * @returns {Promise<void>}
  */
-export function updateDonor(id, updates) {
-  const donors = loadDonors();
-  const index = donors.findIndex(d => d.id === id);
-  
-  if (index === -1) {
-    throw new Error('Donor ikke fundet');
+export async function updateDonor(donorId, updates) {
+  if (!donorId) {
+    throw new Error('Donor ID er påkrævet');
   }
 
-  const updatedDonor = {
-    ...donors[index],
-    ...updates,
-    id: donors[index].id, // Preserve original ID
-    createdAt: donors[index].createdAt, // Preserve creation timestamp
-    updatedAt: getTimestamp(),
-  };
-
-  // Ensure amount is a number
+  const donorRef = doc(db, 'donations', donorId);
+  
+  // Ensure amount is a number if being updated
+  const sanitizedUpdates = { ...updates };
   if (updates.amount !== undefined) {
-    updatedDonor.amount = parseFloat(updates.amount);
+    sanitizedUpdates.amount = parseFloat(updates.amount);
   }
-
-  // Trim strings
-  if (updates.name) {
-    updatedDonor.name = updates.name.trim();
-  }
-  if (updates.message !== undefined) {
-    updatedDonor.message = updates.message?.trim() || null;
-  }
-
-  donors[index] = updatedDonor;
-  saveDonors(donors);
   
-  console.info('[donorService] Donor updated', { id, updates: Object.keys(updates) });
-  return updatedDonor;
+  // Trim message if being updated
+  if (updates.message !== undefined) {
+    sanitizedUpdates.message = updates.message?.trim() || null;
+  }
+
+  // Convert date to Date object if being updated
+  if (updates.date && !(updates.date instanceof Date)) {
+    sanitizedUpdates.date = new Date(updates.date);
+  }
+
+  sanitizedUpdates.updatedAt = serverTimestamp();
+
+  await updateDoc(donorRef, sanitizedUpdates);
+  console.info('[donorService] Donor updated', { id: donorId, updates: Object.keys(updates) });
 }
 
 /**
  * Delete a donor
- * @param {string} id - Donor ID
+ * @param {string} donorId - Donor document ID
+ * @returns {Promise<void>}
  */
-export function deleteDonor(id) {
-  const donors = loadDonors();
-  const filtered = donors.filter(d => d.id !== id);
-  
-  if (filtered.length === donors.length) {
-    throw new Error('Donor ikke fundet');
+export async function deleteDonor(donorId) {
+  if (!donorId) {
+    throw new Error('Donor ID er påkrævet');
   }
 
-  saveDonors(filtered);
-  console.info('[donorService] Donor deleted', { id });
+  const donorRef = doc(db, 'donations', donorId);
+  await deleteDoc(donorRef);
+  console.info('[donorService] Donor deleted', { id: donorId });
 }
 
 /**
  * Get a single donor by ID
- * @param {string} id - Donor ID
- * @returns {Object|null} The donor or null if not found
+ * @param {string} donorId - Donor document ID
+ * @returns {Promise<Object|null>} The donor or null if not found
  */
-export function getDonorById(id) {
-  const donors = loadDonors();
-  return donors.find(d => d.id === id) || null;
+export async function getDonorById(donorId) {
+  if (!donorId) {
+    return null;
+  }
+
+  const donorRef = doc(db, 'donations', donorId);
+  const donorSnap = await getDoc(donorRef);
+
+  if (!donorSnap.exists()) {
+    return null;
+  }
+
+  const data = donorSnap.data();
+  return {
+    id: donorSnap.id,
+    ...data,
+    date: data.date?.toDate?.() || new Date(data.date),
+    createdAt: data.createdAt?.toDate?.() || new Date(data.createdAt),
+    updatedAt: data.updatedAt?.toDate?.() || new Date(data.updatedAt),
+  };
 }

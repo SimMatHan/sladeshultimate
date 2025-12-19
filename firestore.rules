@@ -206,9 +206,30 @@ service cloud.firestore {
       allow update: if isAdmin() &&
                        resource.data.createdBy == request.auth.uid;
       
-      // Only admin can delete beacons
-      allow delete: if isAdmin() &&
-                       resource.data.createdBy == request.auth.uid;
+    // Only admin can delete beacons
+    allow delete: if isAdmin() &&
+                     resource.data.createdBy == request.auth.uid;
+    }
+    
+    // Donations collection (Top Donors)
+    match /donations/{donationId} {
+      // All authenticated users can read donations (for DonationPage)
+      allow read: if isAuthenticated();
+      
+      // Only admins can create donations
+      allow create: if isAdmin() &&
+                       request.resource.data.keys().hasAll(['userId', 'userName', 'amount', 'date', 'createdBy', 'createdAt', 'updatedAt']) &&
+                       request.resource.data.userId is string &&
+                       request.resource.data.userName is string &&
+                       request.resource.data.amount is number &&
+                       request.resource.data.amount > 0 &&
+                       request.resource.data.createdBy == request.auth.uid;
+      
+      // Only admins can update donations
+      allow update: if isAdmin();
+      
+      // Only admins can delete donations
+      allow delete: if isAdmin();
     }
   }
 }
