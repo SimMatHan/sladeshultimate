@@ -128,8 +128,8 @@ export default function RoutesView() {
   const { currentUser } = useAuth()
   useStandaloneOverscrollBlock(isStandalone)
 
-  // Admin bypass - skip PWA install gate for admin user (works in dev and production)
-  const shouldBypassPwaGate = currentUser?.email === 'simonmathiashansen@gmail.com'
+  // Bypass PWA install gate in development mode or for admin user
+  const shouldBypassPwaGate = IS_DEVELOPMENT || currentUser?.email === 'simonmathiashansen@gmail.com'
 
   if (!isStandalone && !shouldBypassPwaGate) {
     return (

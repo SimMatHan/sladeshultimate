@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import { doc, onSnapshot } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../hooks/useAuth'
-import { getUser, ensureFreshCheckInStatus } from '../services/userService'
+import { getUser } from '../services/userService'
 
 const UserDataContext = createContext(null)
 
@@ -55,20 +55,13 @@ export function UserDataProvider({ children }) {
 
     const unsubscribe = onSnapshot(
       userRef,
-      async (docSnap) => {
+      (docSnap) => {
         if (!docSnap.exists()) {
           console.warn('[UserDataContext] User document not found:', currentUser.uid)
           return
         }
 
-        let data = docSnap.data()
-
-        // Refresh check-in status to ensure it's current
-        try {
-          data = await ensureFreshCheckInStatus(currentUser.uid, data)
-        } catch (statusError) {
-          console.warn('[UserDataContext] Unable to refresh check-in status:', statusError)
-        }
+        const data = docSnap.data()
 
         console.log('[UserDataContext] Realtime update received:', {
           userId: currentUser.uid,

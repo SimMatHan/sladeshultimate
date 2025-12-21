@@ -720,7 +720,6 @@ export async function addCheckIn(userId, checkInData) {
         ...locationPayload,
         venue: checkInData.venue,
         timestamp,
-        lastActiveAt: serverTimestamp()
       }
       : null,
     activeChannelId: checkInData.channelId || null,

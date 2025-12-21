@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation as useRouteLocation } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
-import { doc, onSnapshot } from 'firebase/firestore'
+import { doc, getDoc, onSnapshot } from 'firebase/firestore'
 import TopBar from './TopBar'
 import TabBar from './TabBar'
 import DonationBanner from './DonationBanner'
@@ -335,8 +335,17 @@ export default function AppShell() {
         return
       }
       try {
-        const userData = await getUser(currentUser.uid)
-        persistCheckedIn(!!userData?.checkInStatus)
+        // Read checkInStatus directly from Firestore without calling getUser()
+        // to avoid the automatic expiration logic in refreshCheckInStatus.
+        // The Cloud Function handles resets at 00:00 and 12:00.
+        const userRef = doc(db, 'users', currentUser.uid)
+        const userSnap = await getDoc(userRef)
+        if (userSnap.exists()) {
+          const userData = userSnap.data()
+          persistCheckedIn(!!userData?.checkInStatus)
+        } else {
+          persistCheckedIn(false)
+        }
       } catch (error) {
         console.error('Error loading check-in status:', error)
       }
@@ -365,6 +374,13 @@ export default function AppShell() {
       const locationPayload = latestLocation || userLocation || null
       const venue = selectedChannel?.name || 'Nuvaerende placering'
 
+      console.log('[AppShell] Starting check-in process', {
+        userId: currentUser.uid,
+        venue,
+        channelId: selectedChannel?.id,
+        hasLocation: !!locationPayload
+      })
+
       await addCheckIn(currentUser.uid, {
         venue,
         channelId: selectedChannel?.id || null,
@@ -376,6 +392,8 @@ export default function AppShell() {
           : null,
       })
 
+      console.log('[AppShell] addCheckIn completed successfully')
+
       if (locationPayload) {
         await updateUserLocation(currentUser.uid, {
           lat: locationPayload.lat,
@@ -386,6 +404,7 @@ export default function AppShell() {
 
       await incrementCheckInCount()
       persistCheckedIn(true)
+      console.log('[AppShell] Check-in complete, localStorage updated')
       setShowSuccessOverlay(true)
       if (successOverlayTimeout.current) {
         clearTimeout(successOverlayTimeout.current)
@@ -395,7 +414,12 @@ export default function AppShell() {
       }, 2500)
       return true
     } catch (error) {
-      console.error('Error saving check-in to Firestore:', error)
+      console.error('[AppShell] Error saving check-in to Firestore:', error)
+      console.error('[AppShell] Error details:', {
+        code: error?.code,
+        message: error?.message,
+        stack: error?.stack
+      })
       return false
     } finally {
       setIsCheckingIn(false)
