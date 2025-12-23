@@ -17,12 +17,24 @@ service cloud.firestore {
 
     // Validate Sladesh challenge payload
     function isValidSladeshChallenge() {
-      return request.resource.data.keys().hasAll(['senderId', 'recipientId', 'status', 'createdAt', 'updatedAt']) &&
-             request.resource.data.senderId is string &&
-             request.resource.data.recipientId is string &&
-             request.resource.data.status is string &&
-             request.resource.data.createdAt is timestamp &&
-             request.resource.data.updatedAt is timestamp;
+      let data = request.resource.data;
+      return data.keys().hasAll(['senderId', 'recipientId', 'venue', 'location', 'deadlineAt', 'status', 'idempotencyKey', 'createdAt', 'updatedAt']) &&
+             data.senderId is string &&
+             data.recipientId is string &&
+             data.venue is string &&
+             data.location is map &&
+             data.location.keys().hasAll(['lat', 'lng']) &&
+             data.location.lat is number &&
+             data.location.lng is number &&
+             data.deadlineAt is timestamp &&
+             data.status is string &&
+             data.idempotencyKey is string &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp &&
+             // Optional fields
+             (data.senderName == null || data.senderName is string) &&
+             (data.recipientName == null || data.recipientName is string) &&
+             (data.channelId == null || data.channelId is string);
     }
     
     match /drinkVariations/{docId} {
@@ -43,10 +55,9 @@ service cloud.firestore {
       
       allow update, delete: if isOwner(userId) ||
         (
-          // Allow narrow update for sladeshReceived counter by others (e.g. sender)
+          // Allow Sladesh challenge creation: sender can update recipient's sladeshReceived and activeSladesh
           isAuthenticated() &&
-          request.resource.data.keys().hasOnly(['sladeshReceived', 'updatedAt']) &&
-          request.resource.data.sladeshReceived == ((resource.data.sladeshReceived == null ? 0 : resource.data.sladeshReceived) + 1)
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sladeshReceived', 'activeSladesh', 'updatedAt', 'lastActiveAt'])
         ) ||
         (
           // Allow admin to update achievements
