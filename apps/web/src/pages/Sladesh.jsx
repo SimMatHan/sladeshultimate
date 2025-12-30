@@ -104,6 +104,18 @@ const MOCK_PARTICIPANTS = [
     duration: 26,
     mockChannels: [MOCK_CHANNEL_KEYS.BALLADE],
   },
+  {
+    id: "simon-hansen",
+    name: "Simon Mathias Hansen",
+    username: "simonmathiashansen",
+    initials: "SM",
+    profileEmoji: "👨‍💻",
+    profileGradient: "from-green-400 to-emerald-600",
+    accent: "from-green-400 to-emerald-600",
+    radius: 138,
+    duration: 30,
+    mockChannels: [MOCK_CHANNEL_KEYS.OPEN, MOCK_CHANNEL_KEYS.BALLADE],
+  },
 ];
 
 const DEFAULT_LOCATION = {

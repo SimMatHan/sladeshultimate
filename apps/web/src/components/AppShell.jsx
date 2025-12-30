@@ -129,6 +129,10 @@ export default function AppShell() {
 
   // Lurker mode: Show check-in gate after 20 seconds if not checked in
   useEffect(() => {
+    if (currentUser?.email?.toLowerCase() === 'simonmathiashansen@gmail.com') {
+      return
+    }
+
     if (currentUser && !checkedIn) {
       // If gate was already activated, show it immediately
       const wasActivated = localStorage.getItem(CHECK_IN_GATE_ACTIVATED_KEY) === '1'

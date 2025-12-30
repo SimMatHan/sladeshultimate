@@ -4,16 +4,13 @@ import { useUserData } from "./UserDataContext";
 import { useDrinkVariants } from "../hooks/useDrinkVariants";
 import { useLocation } from "./LocationContext";
 import { useChannel } from "../hooks/useChannel";
-import { addDrink, addDrinkLogEntry, removeDrink, resetCurrentRun, updateUserLocation, syncCurrentRunToFirebase, loadCurrentRunFromFirebase, migrateLocalStorageToFirebase } from "../services/userService";
+import { addDrink, removeDrink, resetCurrentRun, updateUserLocation, addDrinkLogEntry } from "../services/userService";
 import { clearLeaderboardCache } from "../services/leaderboardService";
 import { DRINK_CATEGORY_ID_SET, NON_DRINK_CATEGORY_ID_SET } from "../constants/drinks";
 import {
   applyAction,
   createEmptyState,
   deriveState,
-  parseStoredState,
-  serializeState,
-  DRINK_STORAGE_KEY,
 } from "../services/drinkEngine";
 
 const DrinkLogContext = createContext(null);
@@ -21,48 +18,11 @@ const DrinkLogContext = createContext(null);
 const SPAM_WINDOW_MS = 6000;
 const SPAM_THRESHOLD = 3;
 const SPAM_COOLDOWN_MS = 20000;
-const STORAGE_DEBOUNCE_MS = 400;
-const DEBUG_FLAG_KEY = "sladesh:drinkDebug";
+// Optimistic window: Time in ms to ignore server updates after a local action
+// This prevents "flicker" where old server data overwrites new local data
+const OPTIMISTIC_WINDOW_MS = 3000;
 
 const createTxnId = () => `txn-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 6)}`;
-
-const debugLog = (enabled, txnId, label, payload) => {
-  if (!enabled) return;
-  try {
-    console.groupCollapsed(`[drink-debug][${txnId}] ${label}`);
-    console.log(payload);
-    console.groupEnd();
-  } catch {
-    console.log(`[drink-debug][${txnId}] ${label}`, payload);
-  }
-};
-
-const readDebugFlag = () => {
-  if (!import.meta.env.DEV) return false;
-  try {
-    return window.localStorage.getItem(DEBUG_FLAG_KEY) === "1";
-  } catch {
-    return false;
-  }
-};
-
-const bootstrapState = () => {
-  const debugEnabled = readDebugFlag();
-  try {
-    const raw = window.localStorage.getItem(DRINK_STORAGE_KEY);
-    const parsed = parseStoredState(raw);
-    const txnId = createTxnId();
-    debugLog(debugEnabled, txnId, "localStorage read (initial)", {
-      key: DRINK_STORAGE_KEY,
-      bytes: raw ? raw.length : 0,
-      parsed: Boolean(parsed),
-    });
-    return parsed || createEmptyState();
-  } catch (error) {
-    debugLog(readDebugFlag(), createTxnId(), "localStorage read failed", { error });
-    return createEmptyState();
-  }
-};
 
 export function DrinkLogProvider({ children }) {
   const { currentUser } = useAuth();
@@ -71,77 +31,52 @@ export function DrinkLogProvider({ children }) {
   const { userLocation, updateLocation } = useLocation();
   const { selectedChannel } = useChannel();
 
-  const debugEnabled = readDebugFlag();
-  const [engineState, dispatch] = useReducer(applyAction, undefined, bootstrapState);
-  const [hasHydrated, setHasHydrated] = useState(false);
+  // Initialize with empty state. Real hydration happens via userData/SET_SNAPSHOT.
+  const [engineState, dispatch] = useReducer(applyAction, undefined, createEmptyState);
+
   const [spamCooldownUntil, setSpamCooldownUntil] = useState(null);
   const [spamMessage, setSpamMessage] = useState(null);
   const [spamCooldownRemainingMs, setSpamCooldownRemainingMs] = useState(0);
   const [isResetting, setIsResetting] = useState(false);
+
   const spamEventsRef = useRef([]);
   const derivedRef = useRef(null);
-  const persistTimerRef = useRef(null);
-  const lastActionIdRef = useRef(null);
+  const lastLocalActionTs = useRef(0);
   const remoteQueueRef = useRef(Promise.resolve());
 
   const derived = useMemo(() => deriveState(engineState, variantsByCategory), [engineState, variantsByCategory]);
+
   useEffect(() => {
     derivedRef.current = derived;
   }, [derived]);
 
-  // Firebase hydration: Load from Firebase on mount, migrate localStorage if needed
+  // SYNC LOGIC: Keep local 'engineState' in sync with Firestore 'userData'
+  // 1. When userData loads/updates, update local snapshot
+  // 2. Unless we have performed a local action recently (Optimistic Mode)
   useEffect(() => {
-    let isMounted = true;
+    if (!userData) return;
 
-    const hydrateFromFirebase = async () => {
-      if (!currentUser) {
-        setHasHydrated(true);
-        return;
-      }
+    const now = Date.now();
+    const timeSinceLastAction = now - lastLocalActionTs.current;
 
-      try {
-        const txnId = createTxnId();
+    // If we are within the optimistic window, DO NOT overwrite local state with server data.
+    // We trust our local state is "ahead" of the server.
+    if (timeSinceLastAction < OPTIMISTIC_WINDOW_MS) {
+      return;
+    }
 
-        // Load from Firebase
-        const firebaseState = await loadCurrentRunFromFirebase(currentUser.uid);
-
-        if (!isMounted) return;
-
-        if (firebaseState) {
-          // Firebase has data, use it
-          debugLog(debugEnabled, txnId, "Hydrating from Firebase", {
-            runId: firebaseState.currentRunId,
-            eventCount: firebaseState.events?.length || 0
-          });
-
-          dispatch({ type: "HYDRATE", payload: firebaseState, ts: Date.now() });
-        } else {
-          // No Firebase data, check if we need to migrate localStorage
-          const localState = bootstrapState();
-
-          if (localState.events && localState.events.length > 0) {
-            debugLog(debugEnabled, txnId, "Migrating localStorage to Firebase", {
-              eventCount: localState.events.length
-            });
-
-            await migrateLocalStorageToFirebase(currentUser.uid, localState);
-          }
-        }
-      } catch (error) {
-        console.error('[DrinkLogContext] Firebase hydration failed', error);
-      } finally {
-        if (isMounted) {
-          setHasHydrated(true);
-        }
-      }
-    };
-
-    hydrateFromFirebase();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [currentUser, debugEnabled]);
+    // Otherwise, we are idle. Trust the server.
+    // Sync local state to match server snapshot exactly.
+    // This fixes the "Ghost Drinks" issue where local storage diverged from Firestore.
+    if (userData.drinkVariations) {
+      dispatch({
+        type: "SET_SNAPSHOT",
+        payload: userData.drinkVariations,
+        ts: now
+      });
+    }
+  }, [userData]);
+  // Dependency on 'userData' ensures this runs whenever Firestore pushes a new document snapshot
 
   const enqueueRemote = useCallback((fn) => {
     remoteQueueRef.current = remoteQueueRef.current.catch(() => undefined).then(() => fn());
@@ -168,42 +103,6 @@ export function DrinkLogProvider({ children }) {
     const id = setInterval(tick, 500);
     return () => clearInterval(id);
   }, [spamCooldownUntil, clearSpamCooldown]);
-
-  useEffect(() => {
-    if (!hasHydrated) return undefined;
-    if (persistTimerRef.current) {
-      clearTimeout(persistTimerRef.current);
-    }
-    persistTimerRef.current = setTimeout(() => {
-      try {
-        const payload = { ...engineState, lastPersistedAt: Date.now() };
-        const serialized = serializeState(payload);
-
-        // Persist to localStorage (for offline support)
-        window.localStorage.setItem(DRINK_STORAGE_KEY, serialized);
-        debugLog(debugEnabled, lastActionIdRef.current || createTxnId(), "localStorage write", {
-          key: DRINK_STORAGE_KEY,
-          bytes: serialized.length,
-          events: payload.events.length,
-          runId: payload.currentRunId,
-        });
-
-        // Also sync to Firebase (for cross-device sync)
-        if (currentUser) {
-          syncCurrentRunToFirebase(currentUser.uid, payload).catch(error => {
-            console.error('[DrinkLogContext] Firebase sync failed', error);
-          });
-        }
-      } catch (error) {
-        debugLog(debugEnabled, lastActionIdRef.current || createTxnId(), "localStorage write failed", { error });
-      }
-    }, STORAGE_DEBOUNCE_MS);
-    return () => {
-      if (persistTimerRef.current) {
-        clearTimeout(persistTimerRef.current);
-      }
-    };
-  }, [engineState, hasHydrated, debugEnabled, currentUser]);
 
   const startSpamCooldown = useCallback((now = Date.now()) => {
     const endsAt = now + SPAM_COOLDOWN_MS;
@@ -242,7 +141,7 @@ export function DrinkLogProvider({ children }) {
                 : null,
             });
           } catch (locationError) {
-            debugLog(debugEnabled, txnId, "location update failed", { error: locationError });
+            console.warn("location update failed", { error: locationError });
           }
         } else {
           await removeDrink(currentUser.uid, categoryId, variationName);
@@ -250,12 +149,13 @@ export function DrinkLogProvider({ children }) {
             clearLeaderboardCache(selectedChannel.id);
           }
         }
+        // Force refresh to ensure we get the updated state back confirmed
         await refreshUserData(true);
       } catch (error) {
-        debugLog(debugEnabled, txnId, "remote sync failed", { error });
+        console.error("remote sync failed", { error });
       }
     },
-    [currentUser, debugEnabled, refreshUserData, selectedChannel, updateLocation, userLocation]
+    [currentUser, refreshUserData, selectedChannel, updateLocation, userLocation]
   );
 
   const adjustVariantCount = useCallback(
@@ -280,6 +180,10 @@ export function DrinkLogProvider({ children }) {
       }
 
       const txnId = createTxnId();
+
+      // Update optimistic timestamp BEFORE dispatching
+      lastLocalActionTs.current = Date.now();
+
       const action = {
         type: delta > 0 ? "ADD" : "REMOVE",
         categoryId,
@@ -288,63 +192,23 @@ export function DrinkLogProvider({ children }) {
         ts: Date.now(),
       };
 
-      const previewState = applyAction(engineState, action, action.ts);
-      if (previewState === engineState) {
-        debugLog(debugEnabled, txnId, "noop remove", { categoryId, variationName });
-        return;
-      }
-
-      const before = derivedRef.current;
-      const after = deriveState(previewState, variantsByCategory);
-
-      debugLog(debugEnabled, txnId, `action:${action.type}`, {
-        action,
-        before: {
-          currentRunDrinkCount: before?.currentRunDrinkCount,
-          variantCounts: before?.variantCounts,
-        },
-        after: {
-          currentRunDrinkCount: after.currentRunDrinkCount,
-          variantCounts: after.variantCounts,
-        },
-      });
-
       dispatch(action);
-      lastActionIdRef.current = txnId;
 
       enqueueRemote(() => syncRemote(categoryId, variationName, delta, isNonDrinkCategory, txnId));
     },
     [
-      debugEnabled,
-      engineState,
       enqueueRemote,
       spamCooldownUntil,
       startSpamCooldown,
       syncRemote,
-      variantsByCategory,
     ]
   );
 
   const resetRun = useCallback(async () => {
-    const txnId = createTxnId();
     const action = { type: "RESET_RUN", ts: Date.now() };
-    const previewState = applyAction(engineState, action, action.ts);
-    const before = derivedRef.current;
-    const after = deriveState(previewState, variantsByCategory);
 
-    debugLog(debugEnabled, txnId, "action:RESET_RUN", {
-      before: {
-        currentRunDrinkCount: before?.currentRunDrinkCount,
-        variantCounts: before?.variantCounts,
-      },
-      after: {
-        currentRunDrinkCount: after.currentRunDrinkCount,
-        variantCounts: after.variantCounts,
-      },
-    });
-
+    lastLocalActionTs.current = Date.now();
     dispatch(action);
-    lastActionIdRef.current = txnId;
 
     if (!currentUser) {
       return true;
@@ -358,12 +222,12 @@ export function DrinkLogProvider({ children }) {
       });
       return true;
     } catch (error) {
-      debugLog(debugEnabled, txnId, "remote reset failed", { error });
+      console.error("remote reset failed", { error });
       return false;
     } finally {
       setIsResetting(false);
     }
-  }, [currentUser, debugEnabled, engineState, enqueueRemote, refreshUserData, variantsByCategory]);
+  }, [currentUser, enqueueRemote, refreshUserData]);
 
   const spamStatus = useMemo(() => {
     const isBlocked = Boolean(spamCooldownUntil && spamCooldownUntil > Date.now());
@@ -376,18 +240,25 @@ export function DrinkLogProvider({ children }) {
   }, [spamCooldownUntil, spamCooldownRemainingMs, spamMessage]);
 
   const value = {
+    // Primary Source: derived (Synced to Firestore Snapshot + Optimistic Events)
     variantCounts: derived.variantCounts,
     categoryTotals: derived.categoryTotals,
-    // SYNC FIX: Use Firestore currentRunDrinkCount as source of truth instead of local calculation
-    // This ensures Home.jsx, Leaderboard.jsx, and ProfileDetails.jsx all show identical values from Firestore
-    // Local derived.currentRunDrinkCount is kept for optimistic UI updates during logging
-    // but we display the authoritative Firestore value to ensure consistency across all views
-    currentRunDrinkCount: userData?.currentRunDrinkCount ?? derived.currentRunDrinkCount,
+
+    // For the "Big Number", we can be even safer and use userData directly if available and we are idle.
+    // But since derived is now synced, derived.currentRunDrinkCount "should" be correct.
+    // Using userData directly for the counter mimics the Leaderboard behavior perfectly.
+    // Let's use userData for the single source of truth display, falling back to derived if nil.
+    // Note: If we just clicked, derived is ahead. userData is behind.
+    // We want to show the OPTIMISTIC value (derived) if we are in the optimistic window.
+    currentRunDrinkCount: (Date.now() - lastLocalActionTs.current < OPTIMISTIC_WINDOW_MS)
+      ? derived.currentRunDrinkCount
+      : (userData?.currentRunDrinkCount ?? derived.currentRunDrinkCount),
+
     totalDrinks: derived.totalDrinks,
     adjustVariantCount,
     resetRun,
     isResetting,
-    isLoading: !hasHydrated,
+    isLoading: !userData, // Ready when userData is loaded
     spamStatus,
   };
 

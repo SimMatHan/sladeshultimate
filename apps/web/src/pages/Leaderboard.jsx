@@ -253,6 +253,31 @@ const leaderboardProfiles = [
     ],
     mockChannels: [MOCK_CHANNEL_KEYS.BALLADE],
   },
+  {
+    id: 'simon-hansen',
+    username: 'simonmathiashansen',
+    name: 'Simon Mathias Hansen',
+    initials: 'SM',
+    profileEmoji: '👨‍💻',
+    profileGradient: 'from-green-400 to-emerald-600',
+    avatarGradient: 'from-green-400 to-emerald-600',
+    totalDrinks: 42,
+    currentRunDrinkCount: 5,
+    weeklyAverage: 12,
+    streakDays: 3,
+    topDrink: 'Gin Hass',
+    favoriteSpot: 'Kontoret',
+    drinkBreakdown: [
+      { id: 'simon-gin', label: 'Gin Hass', count: 12 },
+      { id: 'simon-beer', label: 'Pilsner', count: 10 },
+      { id: 'simon-other', label: 'Vand', count: 20 },
+    ],
+    achievements: {
+      reset_confirmed: { count: 1 },
+    },
+    recentDrinks: [],
+    mockChannels: [MOCK_CHANNEL_KEYS.OPEN, MOCK_CHANNEL_KEYS.BALLADE],
+  },
 ];
 
 const sortOptions = [

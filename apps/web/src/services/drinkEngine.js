@@ -11,6 +11,7 @@ export const createEmptyState = (ts = nowMs()) => ({
   schemaVersion: DRINK_SCHEMA_VERSION,
   currentRunId: createRunId(ts),
   events: [],
+  snapshot: null, // New: support for snapshot-based base state
   lastPersistedAt: null,
 });
 
@@ -21,13 +22,15 @@ export function parseStoredState(rawValue) {
     if (parsed?.schemaVersion !== DRINK_SCHEMA_VERSION) {
       return null;
     }
-    if (!parsed.currentRunId || !Array.isArray(parsed.events)) {
+    // Allow hydration if either currentRunId+events OR snapshot exists
+    if (!parsed.currentRunId || (!Array.isArray(parsed.events) && !parsed.snapshot)) {
       return null;
     }
     return {
       schemaVersion: DRINK_SCHEMA_VERSION,
       currentRunId: parsed.currentRunId,
-      events: parsed.events,
+      events: Array.isArray(parsed.events) ? parsed.events : [],
+      snapshot: parsed.snapshot || null,
       lastPersistedAt: parsed.lastPersistedAt || null,
     };
   } catch {
@@ -90,6 +93,18 @@ export function applyAction(state, action, ts = nowMs()) {
       const next = action.payload || createEmptyState(ts);
       return { ...next, schemaVersion: DRINK_SCHEMA_VERSION };
     }
+    case "SET_SNAPSHOT": {
+      // Re-initialize with a snapshot from Firestore
+      // Clears events because the snapshot represents the 'current' authoritative state
+      // Pending optimistic updates should be re-applied or handled by the caller if needed
+      // (Our strategy: Call SET_SNAPSHOT only when idle, so clearing events is desired)
+      return {
+        ...state,
+        events: [], // Clear events as they are now subsumed by the snapshot
+        snapshot: action.payload, // The new authoritative baseline
+        schemaVersion: DRINK_SCHEMA_VERSION
+      };
+    }
     case "ADD": {
       const evt = {
         id: generateId(),
@@ -103,14 +118,27 @@ export function applyAction(state, action, ts = nowMs()) {
       return { ...state, events: [...state.events, evt] };
     }
     case "REMOVE": {
+      // When working with snapshots, we might not find an 'ADD' event in the event log
+      // because it's baked into the snapshot.
+      // However, the event log logic here specifically looks for *events* to remove.
+      // If we are snapshot-based, pure event-sourcing 'undo' is tricky without virtual events.
+      // BUT: Our UI primarily uses 'ADD' for new drinks. 'REMOVE' is for undoing *recent* actions.
+      // If a user tries to remove a drink that's in the snapshot but not in events,
+      // this logic might fail to decrement if it relies on finding a targetId.
+      // FIX: Allow REMOVE to work even if no target match found in *local events*,
+      // basically treating it as a decrement event.
+      // But `cloneWithCount` logic handles negative if we just record the op.
+      // Let's create the event regardless.
+
       const target = findLastAdd(state.events, {
         runId: state.currentRunId,
         categoryId: action.categoryId,
         variationName: action.variationName,
       });
-      if (!target) {
-        return state;
-      }
+
+      // If we have a target (recent local add), we link to it.
+      // If not, we still record the remove op (it will decrement the snapshot count).
+
       const evt = {
         id: generateId(),
         op: "REMOVE",
@@ -118,14 +146,19 @@ export function applyAction(state, action, ts = nowMs()) {
         categoryId: action.categoryId,
         variationName: action.variationName,
         source: action.source || "unknown",
-        targetId: target.id,
+        targetId: target ? target.id : null,
         ts: stamp,
       };
       return { ...state, events: [...state.events, evt] };
     }
     case "RESET_RUN": {
       const nextRunId = createRunId(stamp);
-      return { ...state, currentRunId: nextRunId };
+      return {
+        ...state,
+        currentRunId: nextRunId,
+        snapshot: null, // Clear snapshot on reset
+        events: []
+      };
     }
     default:
       return state;
@@ -133,11 +166,32 @@ export function applyAction(state, action, ts = nowMs()) {
 }
 
 export function deriveState(state, variantsByCategory = {}) {
+  // Start with empty base counts structure
   const baseCounts = buildBaseCounts(variantsByCategory);
+
+  // If we have a snapshot, merge it into baseCounts
+  // Snapshot format expected: { categoryId: { variantName: count } }
   const variantCounts = { ...baseCounts };
 
+  if (state.snapshot) {
+    Object.entries(state.snapshot).forEach(([catId, variants]) => {
+      // Ensure category exists in variantsStructure
+      if (!variantCounts[catId]) {
+        // Should logically be there if DRINK_CATEGORY_ID_SET matches, but be safe
+        variantCounts[catId] = {};
+      }
+
+      // Merge counts
+      Object.entries(variants || {}).forEach(([name, count]) => {
+        variantCounts[catId][name] = (variantCounts[catId][name] || 0) + count;
+      });
+    });
+  }
+
+  // Apply local events ON TOP of the snapshot
   const currentRunEvents = state.events.filter((evt) => evt.runId === state.currentRunId);
   currentRunEvents.forEach((evt) => {
+    // Determine target map
     const safeTarget = cloneWithCount(variantCounts, evt.categoryId, evt.variationName);
     variantCounts[evt.categoryId] = safeTarget[evt.categoryId];
 
@@ -160,6 +214,13 @@ export function deriveState(state, variantsByCategory = {}) {
   }, 0);
 
   const lifetimeTotals = {};
+  // For lifetime, we can't easily use the snapshot + events without knowing lifetime baseline.
+  // But usage of totalDrinks mostly comes from Firestore (userData.totalDrinks).
+  // The local calculation here is likely for optimistic display.
+  // We'll trust the 'snapshot' implies current run state.
+  // Ideally, totalDrinks should be inputs + delta.
+  // For now, let's keep it event-based or simple.
+  // If we rely on userData for totalDrinks in context, this local value is less critical.
   state.events.forEach((evt) => {
     if (!DRINK_CATEGORY_ID_SET.has(evt.categoryId)) return;
     const prev = lifetimeTotals[evt.categoryId] || 0;
