@@ -1,9 +1,10 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { USE_MOCK_DATA } from '../config/env'
-import { collection, getDocs, query, where } from 'firebase/firestore'
+import { collection, getDocs, query, where, doc, updateDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useChannel } from '../hooks/useChannel'
 import { useAuth } from '../hooks/useAuth'
+import { useUserData } from './UserDataContext'
 import { resolveMockChannelKey, isMemberOfMockChannel, MOCK_CHANNEL_KEYS } from '../utils/mockChannels'
 import { getLatestResetBoundary } from '../services/userService'
 
@@ -135,6 +136,7 @@ export function LocationProvider({ children }) {
   // Only users who are members of the active channel (via joinedChannelIds array) appear in otherUsers.
   const { selectedChannel } = useChannel()
   const { currentUser } = useAuth()
+  const { userData } = useUserData()
   const activeChannelId = selectedChannel?.id || null
   const mockUsersRef = useRef(USE_MOCK_DATA ? generateMockUsers() : null)
   const [userLocation, setUserLocation] = useState(null)
@@ -179,6 +181,17 @@ export function LocationProvider({ children }) {
     if (USE_MOCK_DATA) return
     readPermissionState()
   }, [readPermissionState])
+
+  // FIREBASE FIX: When userData loads and indicates permission was granted,
+  // attempt to fetch location silently. This handles PWA restart race condition.
+  useEffect(() => {
+    if (USE_MOCK_DATA) return
+    if (!userData) return
+    if (!userLocation && userData.locationPermissionGranted === true) {
+      // User previously granted permission, fetch location silently
+      updateLocation({ allowPrompt: false })
+    }
+  }, [userData?.locationPermissionGranted])
 
   // Location permission prompt is handled explicitly in Map.jsx (and the user-triggered toggle in ManageProfile.jsx).
 
@@ -355,17 +368,16 @@ export function LocationProvider({ children }) {
       if (!permissionState || permissionState === 'unknown') {
         const resolved = await readPermissionState()
         permissionState = resolved || permissionState
+
+        // FIREBASE FIX: If permission is unknown (Safari PWA), check Firestore.
+        // This is more reliable than localStorage for PWAs and works across devices.
+        if ((!permissionState || permissionState === 'unknown' || permissionState === 'prompt') && userData?.locationPermissionGranted === true) {
+          permissionState = 'granted'
+        }
       }
 
       // If permission is already granted, get location silently without prompting
       if (permissionState === 'granted') {
-        // Mark that we've seen the permission (it was granted previously)
-        try {
-          localStorage.setItem('hasSeenGeoPermission', 'true')
-        } catch (e) {
-          // Ignore localStorage errors
-        }
-
         setHasRequestedLocation(true)
         return await new Promise((resolve) => {
           navigator.geolocation.getCurrentPosition(
@@ -379,12 +391,27 @@ export function LocationProvider({ children }) {
               setLocationHistory((prev) => [...prev, newLocation].slice(-50))
               setLocationError(null)
               setLocationPermission('granted')
+
+              // FIREBASE: Save permission status to Firestore for persistence
+              if (currentUser?.uid && userData?.locationPermissionGranted !== true) {
+                updateDoc(doc(db, 'users', currentUser.uid), {
+                  locationPermissionGranted: true
+                }).catch(err => console.warn('Failed to update location permission in Firestore:', err))
+              }
+
               resolve(newLocation)
             },
             (error) => {
               console.error('Geolocation error:', error)
               if (error.code === error.PERMISSION_DENIED) {
                 setLocationPermission('denied')
+
+                // FIREBASE: Clear permission status in Firestore
+                if (currentUser?.uid) {
+                  updateDoc(doc(db, 'users', currentUser.uid), {
+                    locationPermissionGranted: false
+                  }).catch(err => console.warn('Failed to update location permission in Firestore:', err))
+                }
               }
               setLocationError(error.message)
               resolve(null)
@@ -414,13 +441,6 @@ export function LocationProvider({ children }) {
         return null
       }
 
-      // Mark that we're about to show the permission prompt
-      try {
-        localStorage.setItem('hasSeenGeoPermission', 'true')
-      } catch (e) {
-        // Ignore localStorage errors
-      }
-
       setHasRequestedLocation(true)
       return await new Promise((resolve) => {
         navigator.geolocation.getCurrentPosition(
@@ -434,12 +454,27 @@ export function LocationProvider({ children }) {
             setLocationHistory((prev) => [...prev, newLocation].slice(-50))
             setLocationError(null)
             setLocationPermission('granted')
+
+            // FIREBASE: Save permission status to Firestore for persistence
+            if (currentUser?.uid) {
+              updateDoc(doc(db, 'users', currentUser.uid), {
+                locationPermissionGranted: true
+              }).catch(err => console.warn('Failed to update location permission in Firestore:', err))
+            }
+
             resolve(newLocation)
           },
           (error) => {
             console.error('Geolocation error:', error)
             if (error.code === error.PERMISSION_DENIED) {
               setLocationPermission('denied')
+
+              // FIREBASE: Clear permission status in Firestore
+              if (currentUser?.uid) {
+                updateDoc(doc(db, 'users', currentUser.uid), {
+                  locationPermissionGranted: false
+                }).catch(err => console.warn('Failed to update location permission in Firestore:', err))
+              }
             }
             setLocationError(error.message)
             resolve(null)
@@ -452,7 +487,7 @@ export function LocationProvider({ children }) {
         )
       })
     },
-    [locationPermission, readPermissionState, userLocation]
+    [locationPermission, readPermissionState, userLocation, userData, currentUser]
   )
 
   const value = {

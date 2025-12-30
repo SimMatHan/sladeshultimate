@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useMemo } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import { useNavigate } from 'react-router-dom'
 import { useLocation } from '../contexts/LocationContext'
+import { useUserData } from '../contexts/UserDataContext'
 import { useChannel } from '../hooks/useChannel'
 import { useAuth } from '../hooks/useAuth'
 import PageTransition from '../components/PageTransition'
@@ -165,6 +166,7 @@ export default function MapPage() {
   const { selectedChannel } = useChannel()
   const { userLocation, otherUsers, updateLocation, locationError, locationPermission, hasRequestedLocation } = useLocation()
   const { currentUser } = useAuth()
+  const { userData } = useUserData()
   const [skipAutoCenter, setSkipAutoCenter] = useState(false)
   const [isRequestingLocation, setIsRequestingLocation] = useState(false)
   const [hasTriedLocation, setHasTriedLocation] = useState(false)
@@ -215,15 +217,17 @@ export default function MapPage() {
     let isMounted = true
     const requestLocation = async () => {
       setIsRequestingLocation(true)
-      setHasTriedLocation(true)
 
-      // Check if permission is already granted
-      // If so, get location silently. Otherwise, prompt the user.
-      const shouldPrompt = locationPermission !== 'granted'
+      // FIX: Changed to allowPrompt: false to prevent automatic popup.
+      // If permission is 'granted', it works silently. If 'prompt'/'denied', it shows the banner.
 
-      await updateLocation({ allowPrompt: shouldPrompt })
+      const result = await updateLocation({ allowPrompt: false })
       if (isMounted) {
         setIsRequestingLocation(false)
+        // Only set this if we failed to get location, so the banner appears only when needed.
+        if (!result) {
+          setHasTriedLocation(true)
+        }
       }
     }
 
@@ -365,7 +369,11 @@ export default function MapPage() {
     setIsRequestingLocation(false)
   }
 
-  const showLocationNotice = !userLocation && (hasTriedLocation || hasRequestedLocation)
+  // FIREBASE FIX: Check Firestore field to prevent banner if permission was previously granted
+  // This handles PWA restarts where browser permission state is 'unknown' but we know user granted it before
+  const showLocationNotice = !userLocation &&
+    (hasTriedLocation || hasRequestedLocation) &&
+    (locationPermission !== 'granted' || !!locationError)
   const locationMessage = locationError
     ? locationError
     : locationPermission === 'denied'

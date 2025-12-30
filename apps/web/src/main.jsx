@@ -91,13 +91,13 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
       <ThemeProvider>
-        <LocationProvider>
-          <UserDataProvider>
+        <UserDataProvider>
+          <LocationProvider>
             <SladeshProvider>
               <App />
             </SladeshProvider>
-          </UserDataProvider>
-        </LocationProvider>
+          </LocationProvider>
+        </UserDataProvider>
       </ThemeProvider>
     </BrowserRouter>
   </React.StrictMode>
